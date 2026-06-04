@@ -16,12 +16,13 @@ import (
 
 // UserHandler handles user-related requests
 type UserHandler struct {
-	userService           *service.UserService
-	authService           *service.AuthService
-	emailService          *service.EmailService
-	emailCache            service.EmailCache
-	affiliateService      *service.AffiliateService
-	userPlatformQuotaRepo service.UserPlatformQuotaRepository
+	userService              *service.UserService
+	authService              *service.AuthService
+	emailService             *service.EmailService
+	emailCache               service.EmailCache
+	affiliateService         *service.AffiliateService
+	userPlatformQuotaRepo    service.UserPlatformQuotaRepository
+	contentModerationService *service.ContentModerationService
 }
 
 // NewUserHandler creates a new UserHandler
@@ -32,14 +33,20 @@ func NewUserHandler(
 	emailCache service.EmailCache,
 	affiliateService *service.AffiliateService,
 	userPlatformQuotaRepo service.UserPlatformQuotaRepository,
+	contentModerationService ...*service.ContentModerationService,
 ) *UserHandler {
+	var moderationSvc *service.ContentModerationService
+	if len(contentModerationService) > 0 {
+		moderationSvc = contentModerationService[0]
+	}
 	return &UserHandler{
-		userService:           userService,
-		authService:           authService,
-		emailService:          emailService,
-		emailCache:            emailCache,
-		affiliateService:      affiliateService,
-		userPlatformQuotaRepo: userPlatformQuotaRepo,
+		userService:              userService,
+		authService:              authService,
+		emailService:             emailService,
+		emailCache:               emailCache,
+		affiliateService:         affiliateService,
+		userPlatformQuotaRepo:    userPlatformQuotaRepo,
+		contentModerationService: moderationSvc,
 	}
 }
 
@@ -67,6 +74,42 @@ func (h *UserHandler) GetMyPlatformQuotas(c *gin.Context) {
 		out = append(out, quotaview.LazyZeroQuotaForResponse(r, now, false))
 	}
 	response.Success(c, map[string]any{"platform_quotas": out})
+}
+
+func (h *UserHandler) GetRiskControlBanStatus(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.contentModerationService == nil {
+		response.Success(c, &service.ContentModerationBanStatus{UserID: subject.UserID})
+		return
+	}
+	result, err := h.contentModerationService.GetUserBanStatus(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *UserHandler) SelfUnbanRiskControl(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.contentModerationService == nil {
+		response.BadRequest(c, "Risk control service unavailable")
+		return
+	}
+	result, err := h.contentModerationService.SelfUnbanUser(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // ChangePasswordRequest represents the change password request payload

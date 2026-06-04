@@ -20,36 +20,42 @@ func NewContentModerationHandler(svc *service.ContentModerationService) *Content
 }
 
 type contentModerationConfigRequest struct {
-	Enabled              *bool                                 `json:"enabled"`
-	Mode                 *string                               `json:"mode"`
-	BaseURL              *string                               `json:"base_url"`
-	Model                *string                               `json:"model"`
-	APIKey               *string                               `json:"api_key"`
-	APIKeys              *[]string                             `json:"api_keys"`
-	APIKeysMode          string                                `json:"api_keys_mode"`
-	DeleteAPIKeyHashes   *[]string                             `json:"delete_api_key_hashes"`
-	ClearAPIKey          bool                                  `json:"clear_api_key"`
-	TimeoutMS            *int                                  `json:"timeout_ms"`
-	SampleRate           *int                                  `json:"sample_rate"`
-	AllGroups            *bool                                 `json:"all_groups"`
-	GroupIDs             *[]int64                              `json:"group_ids"`
-	RecordNonHits        *bool                                 `json:"record_non_hits"`
-	Thresholds           *map[string]float64                   `json:"thresholds"`
-	WorkerCount          *int                                  `json:"worker_count"`
-	QueueSize            *int                                  `json:"queue_size"`
-	BlockStatus          *int                                  `json:"block_status"`
-	BlockMessage         *string                               `json:"block_message"`
-	EmailOnHit           *bool                                 `json:"email_on_hit"`
-	AutoBanEnabled       *bool                                 `json:"auto_ban_enabled"`
-	BanThreshold         *int                                  `json:"ban_threshold"`
-	ViolationWindowHours *int                                  `json:"violation_window_hours"`
-	RetryCount           *int                                  `json:"retry_count"`
-	HitRetentionDays     *int                                  `json:"hit_retention_days"`
-	NonHitRetentionDays  *int                                  `json:"non_hit_retention_days"`
-	PreHashCheckEnabled  *bool                                 `json:"pre_hash_check_enabled"`
-	BlockedKeywords      *[]string                             `json:"blocked_keywords"`
-	KeywordBlockingMode  *string                               `json:"keyword_blocking_mode"`
-	ModelFilter          *service.ContentModerationModelFilter `json:"model_filter"`
+	Enabled              *bool                                        `json:"enabled"`
+	Mode                 *string                                      `json:"mode"`
+	BaseURL              *string                                      `json:"base_url"`
+	Model                *string                                      `json:"model"`
+	APIKey               *string                                      `json:"api_key"`
+	APIKeys              *[]string                                    `json:"api_keys"`
+	APIKeysMode          string                                       `json:"api_keys_mode"`
+	DeleteAPIKeyHashes   *[]string                                    `json:"delete_api_key_hashes"`
+	ClearAPIKey          bool                                         `json:"clear_api_key"`
+	TimeoutMS            *int                                         `json:"timeout_ms"`
+	SampleRate           *int                                         `json:"sample_rate"`
+	AllGroups            *bool                                        `json:"all_groups"`
+	GroupIDs             *[]int64                                     `json:"group_ids"`
+	RecordNonHits        *bool                                        `json:"record_non_hits"`
+	Thresholds           *map[string]float64                          `json:"thresholds"`
+	WorkerCount          *int                                         `json:"worker_count"`
+	QueueSize            *int                                         `json:"queue_size"`
+	BlockStatus          *int                                         `json:"block_status"`
+	BlockMessage         *string                                      `json:"block_message"`
+	EmailOnHit           *bool                                        `json:"email_on_hit"`
+	AutoBanEnabled       *bool                                        `json:"auto_ban_enabled"`
+	BanThreshold         *int                                         `json:"ban_threshold"`
+	BanDurationMinutes   *int                                         `json:"ban_duration_minutes"`
+	ViolationWindowHours *int                                         `json:"violation_window_hours"`
+	RetryCount           *int                                         `json:"retry_count"`
+	HitRetentionDays     *int                                         `json:"hit_retention_days"`
+	NonHitRetentionDays  *int                                         `json:"non_hit_retention_days"`
+	ContextRetentionDays *int                                         `json:"context_retention_days"`
+	PreHashCheckEnabled  *bool                                        `json:"pre_hash_check_enabled"`
+	BlockedKeywords      *[]string                                    `json:"blocked_keywords"`
+	KeywordBlockingMode  *string                                      `json:"keyword_blocking_mode"`
+	KeywordRules         *[]service.ContentModerationKeywordRule      `json:"keyword_rules"`
+	ModelFilter          *service.ContentModerationModelFilter        `json:"model_filter"`
+	AuditModels          *[]service.ContentModerationAuditModelConfig `json:"audit_models"`
+	DecisionRule         *service.ContentModerationDecisionRule       `json:"decision_rule"`
+	SelfUnban            *service.ContentModerationSelfUnbanConfig    `json:"self_unban"`
 }
 
 type contentModerationAPIKeyTestRequest struct {
@@ -103,14 +109,20 @@ func (h *ContentModerationHandler) UpdateConfig(c *gin.Context) {
 		EmailOnHit:           req.EmailOnHit,
 		AutoBanEnabled:       req.AutoBanEnabled,
 		BanThreshold:         req.BanThreshold,
+		BanDurationMinutes:   req.BanDurationMinutes,
 		ViolationWindowHours: req.ViolationWindowHours,
 		RetryCount:           req.RetryCount,
 		HitRetentionDays:     req.HitRetentionDays,
 		NonHitRetentionDays:  req.NonHitRetentionDays,
+		ContextRetentionDays: req.ContextRetentionDays,
 		PreHashCheckEnabled:  req.PreHashCheckEnabled,
 		BlockedKeywords:      req.BlockedKeywords,
 		KeywordBlockingMode:  req.KeywordBlockingMode,
+		KeywordRules:         req.KeywordRules,
 		ModelFilter:          req.ModelFilter,
+		AuditModels:          req.AuditModels,
+		DecisionRule:         req.DecisionRule,
+		SelfUnban:            req.SelfUnban,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -194,6 +206,34 @@ func (h *ContentModerationHandler) ListLogs(c *gin.Context) {
 		return
 	}
 	response.Paginated(c, items, pageResult.Total, pageResult.Page, pageResult.PageSize)
+}
+
+func (h *ContentModerationHandler) GetUserBanStatus(c *gin.Context) {
+	userID, err := strconv.ParseInt(strings.TrimSpace(c.Param("user_id")), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user_id")
+		return
+	}
+	result, err := h.service.GetUserBanStatus(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *ContentModerationHandler) SelfUnban(c *gin.Context) {
+	userID, err := strconv.ParseInt(strings.TrimSpace(c.Param("user_id")), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user_id")
+		return
+	}
+	result, err := h.service.SelfUnbanUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 func (h *ContentModerationHandler) UnbanUser(c *gin.Context) {

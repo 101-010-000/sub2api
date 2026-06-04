@@ -9,6 +9,86 @@ export interface ContentModerationModelFilter {
   models: string[]
 }
 
+export type ContentModerationDecisionRuleType = 'any' | 'all' | 'n_of_m' | 'weight_threshold'
+export type ContentModerationKeywordMatchType = 'contains' | 'regex'
+
+export interface ContentModerationAuditModelConfig {
+  id: string
+  name: string
+  enabled: boolean
+  protocol: 'openai_compatible'
+  base_url: string
+  api_key?: string
+  model: string
+  temperature: number
+  timeout_ms: number
+  prompt_template: string
+  weight: number
+}
+
+export interface ContentModerationDecisionRule {
+  type: ContentModerationDecisionRuleType
+  required_count: number
+  weight_threshold: number
+}
+
+export interface ContentModerationSelfUnbanConfig {
+  enabled: boolean
+  window_minutes: number
+  max_attempts: number
+  second_attempt_wait_minutes: number
+}
+
+export interface ContentModerationKeywordRule {
+  id: string
+  group: string
+  match_type: ContentModerationKeywordMatchType
+  patterns: string[]
+  fields: string[]
+  whitelist: boolean
+  priority: number
+  actions: string[]
+  enabled: boolean
+  ignore_case: boolean
+}
+
+export interface ContentModerationKeywordHit {
+  rule_id: string
+  group: string
+  match_type: ContentModerationKeywordMatchType
+  keyword: string
+  matched_text: string
+  field: string
+  action: string
+  whitelist: boolean
+  priority: number
+}
+
+export interface ContentModerationBanStatus {
+  user_id: number
+  banned: boolean
+  reason: string
+  triggered_at?: string
+  banned_until?: string
+  remaining_seconds: number
+  self_unban_available: boolean
+  self_unban_attempts_used: number
+  self_unban_max_attempts: number
+  self_unban_wait_seconds: number
+  self_unban_window_reset_at?: string
+}
+
+export interface ContentModerationSelfUnbanResponse {
+  user_id: number
+  unbanned: boolean
+  status: string
+  attempts_used: number
+  max_attempts: number
+  wait_seconds: number
+  window_reset_at?: string
+  message: string
+}
+
 export interface ContentModerationConfig {
   enabled: boolean
   mode: ModerationMode
@@ -32,14 +112,20 @@ export interface ContentModerationConfig {
   email_on_hit: boolean
   auto_ban_enabled: boolean
   ban_threshold: number
+  ban_duration_minutes: number
   violation_window_hours: number
   retry_count: number
   hit_retention_days: number
   non_hit_retention_days: number
+  context_retention_days: number
   pre_hash_check_enabled: boolean
   blocked_keywords: string[]
   keyword_blocking_mode: KeywordBlockingMode
+  keyword_rules: ContentModerationKeywordRule[]
   model_filter: ContentModerationModelFilter
+  audit_models: ContentModerationAuditModelConfig[]
+  decision_rule: ContentModerationDecisionRule
+  self_unban: ContentModerationSelfUnbanConfig
 }
 
 export type ContentModerationAPIKeyStatusValue = 'unknown' | 'ok' | 'error' | 'frozen'
@@ -107,14 +193,20 @@ export interface UpdateContentModerationConfig {
   email_on_hit?: boolean
   auto_ban_enabled?: boolean
   ban_threshold?: number
+  ban_duration_minutes?: number
   violation_window_hours?: number
   retry_count?: number
   hit_retention_days?: number
   non_hit_retention_days?: number
+  context_retention_days?: number
   pre_hash_check_enabled?: boolean
   blocked_keywords?: string[]
   keyword_blocking_mode?: KeywordBlockingMode
+  keyword_rules?: ContentModerationKeywordRule[]
   model_filter?: ContentModerationModelFilter
+  audit_models?: ContentModerationAuditModelConfig[]
+  decision_rule?: ContentModerationDecisionRule
+  self_unban?: ContentModerationSelfUnbanConfig
 }
 
 export interface ContentModerationRuntimeStatus {
@@ -183,6 +275,8 @@ export interface ContentModerationLog {
   category_scores: Record<string, number>
   threshold_snapshot: Record<string, number>
   input_excerpt: string
+  keyword_hits?: ContentModerationKeywordHit[]
+  audit_context?: unknown
   upstream_latency_ms: number | null
   error: string
   violation_count: number
@@ -259,6 +353,20 @@ export async function listLogs(
   return data
 }
 
+export async function getUserBanStatus(userID: number): Promise<ContentModerationBanStatus> {
+  const { data } = await apiClient.get<ContentModerationBanStatus>(
+    `/admin/risk-control/users/${userID}/ban-status`
+  )
+  return data
+}
+
+export async function selfUnbanUser(userID: number): Promise<ContentModerationSelfUnbanResponse> {
+  const { data } = await apiClient.post<ContentModerationSelfUnbanResponse>(
+    `/admin/risk-control/users/${userID}/self-unban`
+  )
+  return data
+}
+
 export async function unbanUser(userID: number): Promise<ContentModerationUnbanUserResponse> {
   const { data } = await apiClient.post<ContentModerationUnbanUserResponse>(
     `/admin/risk-control/users/${userID}/unban`
@@ -284,6 +392,8 @@ export const riskControlAPI = {
   getStatus,
   testAPIKeys,
   listLogs,
+  getUserBanStatus,
+  selfUnbanUser,
   unbanUser,
   deleteFlaggedHash,
   clearFlaggedHashes,

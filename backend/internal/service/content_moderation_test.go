@@ -112,6 +112,26 @@ func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitB
 	return &ContentModerationCleanupResult{}, nil
 }
 
+func (r *contentModerationTestRepo) UpsertUserBan(ctx context.Context, ban *ContentModerationUserBan) error {
+	return nil
+}
+
+func (r *contentModerationTestRepo) GetActiveUserBan(ctx context.Context, userID int64, now time.Time) (*ContentModerationUserBan, error) {
+	return nil, nil
+}
+
+func (r *contentModerationTestRepo) ClearUserBan(ctx context.Context, userID int64, now time.Time) error {
+	return nil
+}
+
+func (r *contentModerationTestRepo) CountSelfUnbanAttempts(ctx context.Context, userID int64, since time.Time) (int, error) {
+	return 0, nil
+}
+
+func (r *contentModerationTestRepo) CreateSelfUnbanRecord(ctx context.Context, record *ContentModerationSelfUnbanRecord) error {
+	return nil
+}
+
 func (r *contentModerationTestRepo) snapshotLogs() []ContentModerationLog {
 	r.mu.Lock()
 	defer r.mu.Unlock()

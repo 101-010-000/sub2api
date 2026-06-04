@@ -32,6 +32,14 @@ func (r *contentModerationRepository) CreateLog(ctx context.Context, log *servic
 	if err != nil {
 		return fmt.Errorf("marshal moderation thresholds: %w", err)
 	}
+	keywordHits, err := json.Marshal(log.KeywordHits)
+	if err != nil {
+		return fmt.Errorf("marshal moderation keyword hits: %w", err)
+	}
+	auditContext, err := json.Marshal(log.AuditContext)
+	if err != nil {
+		return fmt.Errorf("marshal moderation audit context: %w", err)
+	}
 	var userID any
 	if log.UserID != nil {
 		userID = *log.UserID
@@ -52,17 +60,17 @@ func (r *contentModerationRepository) CreateLog(ctx context.Context, log *servic
 INSERT INTO content_moderation_logs (
     request_id, user_id, user_email, api_key_id, api_key_name, group_id, group_name,
     endpoint, provider, model, mode, action, flagged, highest_category, highest_score,
-    category_scores, threshold_snapshot, input_excerpt, upstream_latency_ms, error,
+    category_scores, threshold_snapshot, input_excerpt, keyword_hits, audit_context, upstream_latency_ms, error,
     violation_count, auto_banned, email_sent, queue_delay_ms
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7,
     $8, $9, $10, $11, $12, $13, $14, $15,
-    $16::jsonb, $17::jsonb, $18, $19, $20,
-    $21, $22, $23, $24
+    $16::jsonb, $17::jsonb, $18, $19::jsonb, $20::jsonb, $21, $22,
+    $23, $24, $25, $26
 ) RETURNING id, created_at`,
 		log.RequestID, userID, log.UserEmail, apiKeyID, log.APIKeyName, groupID, log.GroupName,
 		log.Endpoint, log.Provider, log.Model, log.Mode, log.Action, log.Flagged, log.HighestCategory, log.HighestScore,
-		string(categoryScores), string(thresholdSnapshot), log.InputExcerpt, latency, log.Error,
+		string(categoryScores), string(thresholdSnapshot), log.InputExcerpt, string(keywordHits), string(auditContext), latency, log.Error,
 		log.ViolationCount, log.AutoBanned, log.EmailSent, nullableIntPtr(log.QueueDelayMS),
 	).Scan(&log.ID, &log.CreatedAt)
 	if err != nil {
@@ -96,7 +104,7 @@ func (r *contentModerationRepository) ListLogs(ctx context.Context, filter servi
 SELECT
     l.id, l.request_id, l.user_id, l.user_email, l.api_key_id, l.api_key_name, l.group_id, l.group_name,
     l.endpoint, l.provider, l.model, l.mode, l.action, l.flagged, l.highest_category, l.highest_score,
-    l.category_scores, l.threshold_snapshot, l.input_excerpt, l.upstream_latency_ms, l.error,
+    l.category_scores, l.threshold_snapshot, l.input_excerpt, COALESCE(l.keyword_hits, '[]'::jsonb), l.audit_context, l.upstream_latency_ms, l.error,
     l.violation_count, l.auto_banned, l.email_sent, COALESCE(u.status, ''), l.queue_delay_ms, l.created_at
 FROM content_moderation_logs l
 LEFT JOIN users u ON u.id = l.user_id `+whereSQL+`
@@ -113,7 +121,8 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 	for rows.Next() {
 		var item service.ContentModerationLog
 		var userID, apiKeyID, groupID, latency, queueDelay sql.NullInt64
-		var scoresRaw, thresholdsRaw []byte
+		var scoresRaw, thresholdsRaw, keywordHitsRaw []byte
+		var auditContextRaw sql.NullString
 		if err := rows.Scan(
 			&item.ID,
 			&item.RequestID,
@@ -134,6 +143,8 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 			&scoresRaw,
 			&thresholdsRaw,
 			&item.InputExcerpt,
+			&keywordHitsRaw,
+			&auditContextRaw,
 			&latency,
 			&item.Error,
 			&item.ViolationCount,
@@ -169,6 +180,13 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 		_ = json.Unmarshal(scoresRaw, &item.CategoryScores)
 		item.ThresholdSnapshot = map[string]float64{}
 		_ = json.Unmarshal(thresholdsRaw, &item.ThresholdSnapshot)
+		_ = json.Unmarshal(keywordHitsRaw, &item.KeywordHits)
+		if auditContextRaw.Valid && strings.TrimSpace(auditContextRaw.String) != "" {
+			var auditCtx service.ContentModerationAuditContext
+			if err := json.Unmarshal([]byte(auditContextRaw.String), &auditCtx); err == nil {
+				item.AuditContext = &auditCtx
+			}
+		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -227,6 +245,108 @@ WHERE flagged = FALSE AND created_at < $1
 
 	result.FinishedAt = time.Now()
 	return result, nil
+}
+
+func (r *contentModerationRepository) UpsertUserBan(ctx context.Context, ban *service.ContentModerationUserBan) error {
+	if ban == nil || ban.UserID <= 0 {
+		return nil
+	}
+	triggeredAt := ban.TriggeredAt
+	if triggeredAt.IsZero() {
+		triggeredAt = time.Now()
+	}
+	bannedUntil := ban.BannedUntil
+	if bannedUntil.IsZero() {
+		bannedUntil = triggeredAt.Add(time.Hour)
+	}
+	_, err := r.db.ExecContext(ctx, `
+INSERT INTO content_moderation_user_bans (user_id, reason, triggered_at, banned_until, created_at, updated_at)
+VALUES ($1, $2, $3, $4, NOW(), NOW())
+ON CONFLICT (user_id) DO UPDATE SET
+    reason = EXCLUDED.reason,
+    triggered_at = EXCLUDED.triggered_at,
+    banned_until = EXCLUDED.banned_until,
+    updated_at = NOW()
+`, ban.UserID, ban.Reason, triggeredAt, bannedUntil)
+	if err != nil {
+		return fmt.Errorf("upsert content moderation user ban: %w", err)
+	}
+	return nil
+}
+
+func (r *contentModerationRepository) GetActiveUserBan(ctx context.Context, userID int64, now time.Time) (*service.ContentModerationUserBan, error) {
+	if userID <= 0 {
+		return nil, nil
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	var ban service.ContentModerationUserBan
+	err := r.db.QueryRowContext(ctx, `
+SELECT user_id, reason, triggered_at, banned_until, created_at, updated_at
+FROM content_moderation_user_bans
+WHERE user_id = $1 AND banned_until > $2
+`, userID, now).Scan(&ban.UserID, &ban.Reason, &ban.TriggeredAt, &ban.BannedUntil, &ban.CreatedAt, &ban.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get active content moderation user ban: %w", err)
+	}
+	return &ban, nil
+}
+
+func (r *contentModerationRepository) ClearUserBan(ctx context.Context, userID int64, now time.Time) error {
+	if userID <= 0 {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	_, err := r.db.ExecContext(ctx, `
+UPDATE content_moderation_user_bans
+SET banned_until = $2, updated_at = NOW()
+WHERE user_id = $1 AND banned_until > $2
+`, userID, now)
+	if err != nil {
+		return fmt.Errorf("clear content moderation user ban: %w", err)
+	}
+	return nil
+}
+
+func (r *contentModerationRepository) CountSelfUnbanAttempts(ctx context.Context, userID int64, since time.Time) (int, error) {
+	if userID <= 0 {
+		return 0, nil
+	}
+	var count int
+	err := r.db.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM content_moderation_self_unban_records
+WHERE user_id = $1 AND allowed = TRUE AND created_at >= $2
+`, userID, since).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count content moderation self unban attempts: %w", err)
+	}
+	return count, nil
+}
+
+func (r *contentModerationRepository) CreateSelfUnbanRecord(ctx context.Context, record *service.ContentModerationSelfUnbanRecord) error {
+	if record == nil || record.UserID <= 0 {
+		return nil
+	}
+	banTriggeredAt := record.BanTriggeredAt
+	if banTriggeredAt.IsZero() {
+		banTriggeredAt = time.Now()
+	}
+	err := r.db.QueryRowContext(ctx, `
+INSERT INTO content_moderation_self_unban_records (user_id, ban_triggered_at, attempt_no, allowed, reason, created_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
+RETURNING id, created_at
+`, record.UserID, banTriggeredAt, record.AttemptNo, record.Allowed, record.Reason).Scan(&record.ID, &record.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("create content moderation self unban record: %w", err)
+	}
+	return nil
 }
 
 func nullableIntPtr(value *int) any {

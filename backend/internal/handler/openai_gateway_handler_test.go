@@ -778,6 +778,26 @@ func (r *contentModerationHandlerTestRepo) CleanupExpiredLogs(ctx context.Contex
 	return &service.ContentModerationCleanupResult{}, nil
 }
 
+func (r *contentModerationHandlerTestRepo) UpsertUserBan(ctx context.Context, ban *service.ContentModerationUserBan) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) GetActiveUserBan(ctx context.Context, userID int64, now time.Time) (*service.ContentModerationUserBan, error) {
+	return nil, nil
+}
+
+func (r *contentModerationHandlerTestRepo) ClearUserBan(ctx context.Context, userID int64, now time.Time) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) CountSelfUnbanAttempts(ctx context.Context, userID int64, since time.Time) (int, error) {
+	return 0, nil
+}
+
+func (r *contentModerationHandlerTestRepo) CreateSelfUnbanRecord(ctx context.Context, record *service.ContentModerationSelfUnbanRecord) error {
+	return nil
+}
+
 func TestOpenAIResponsesWebSocket_ContentModerationBlocksFirstFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
