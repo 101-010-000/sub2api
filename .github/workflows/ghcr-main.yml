@@ -3,7 +3,7 @@ name: Publish Docker image to GHCR
 on:
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: ghcr-master-${{ github.ref }}
+  group: ghcr-main-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -52,7 +52,7 @@ jobs:
           images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=latest
-            type=raw,value=master
+            type=raw,value=main
             type=sha,prefix=sha-,format=short
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -67,7 +67,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=master-${{ github.run_number }}
+            VERSION=main-${{ github.run_number }}
             COMMIT=${{ github.sha }}
             DATE=${{ steps.date.outputs.date }}
           cache-from: type=gha
