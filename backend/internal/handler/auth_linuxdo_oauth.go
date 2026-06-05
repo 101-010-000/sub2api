@@ -46,8 +46,8 @@ const (
 	linuxDoOAuthMaxFragmentValueLen = 512
 	linuxDoOAuthMaxSubjectLen       = 64 - len("linuxdo-")
 
-	oauthIntentLogin           = "login"
-	oauthIntentBindCurrentUser = "bind_current_user"
+	oauthIntentLogin            = "login"
+	oauthIntentBindCurrentUser  = "bind_current_user"
 	oauthIntentFeishuNotifyBind = "feishu_notify_bind"
 )
 

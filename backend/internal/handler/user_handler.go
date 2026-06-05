@@ -16,13 +16,13 @@ import (
 
 // UserHandler handles user-related requests
 type UserHandler struct {
-	userService              *service.UserService
-	authService              *service.AuthService
-	emailService             *service.EmailService
-	emailCache               service.EmailCache
-	affiliateService         *service.AffiliateService
-	userPlatformQuotaRepo    service.UserPlatformQuotaRepository
-	contentModerationService *service.ContentModerationService
+	userService               *service.UserService
+	authService               *service.AuthService
+	emailService              *service.EmailService
+	emailCache                service.EmailCache
+	affiliateService          *service.AffiliateService
+	userPlatformQuotaRepo     service.UserPlatformQuotaRepository
+	contentModerationService  *service.ContentModerationService
 	feishuNotificationService *service.FeishuNotificationService
 }
 
