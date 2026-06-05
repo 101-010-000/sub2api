@@ -48,6 +48,9 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetQuota(key.Quota).
 		SetQuotaUsed(key.QuotaUsed).
 		SetNillableExpiresAt(key.ExpiresAt).
+		SetMaxActiveIps(key.MaxActiveIPs).
+		SetIPIdleTimeoutSeconds(key.IPIdleTimeoutSeconds).
+		SetMaxConcurrency(key.MaxConcurrency).
 		SetRateLimit5h(key.RateLimit5h).
 		SetRateLimit1d(key.RateLimit1d).
 		SetRateLimit7d(key.RateLimit7d)
@@ -65,7 +68,6 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		key.LastUsedAt = created.LastUsedAt
 		key.CreatedAt = created.CreatedAt
 		key.UpdatedAt = created.UpdatedAt
-		err = r.updateRuntimeLimits(ctx, r.sql, key.ID, key.MaxActiveIPs, key.IPIdleTimeoutSeconds, key.MaxConcurrency)
 	}
 	return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
 }
@@ -130,7 +132,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldStatus,
 			apikey.FieldIPWhitelist,
 			apikey.FieldIPBlacklist,
-			apikey.FieldMaxActiveIPs,
+			apikey.FieldMaxActiveIps,
 			apikey.FieldIPIdleTimeoutSeconds,
 			apikey.FieldMaxConcurrency,
 			apikey.FieldQuota,
@@ -263,6 +265,9 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 	} else {
 		builder.ClearIPBlacklist()
 	}
+	builder.SetMaxActiveIps(key.MaxActiveIPs)
+	builder.SetIPIdleTimeoutSeconds(key.IPIdleTimeoutSeconds)
+	builder.SetMaxConcurrency(key.MaxConcurrency)
 
 	affected, err := builder.Save(ctx)
 	if err != nil {
@@ -272,35 +277,10 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 		// 更新影响行数为 0，说明记录不存在或已被软删除。
 		return service.ErrAPIKeyNotFound
 	}
-	if err := r.updateRuntimeLimits(ctx, r.runtimeLimitExecutor(ctx), key.ID, key.MaxActiveIPs, key.IPIdleTimeoutSeconds, key.MaxConcurrency); err != nil {
-		return err
-	}
 
 	// 使用同一时间戳回填，避免并发删除导致二次查询失败。
 	key.UpdatedAt = now
 	return nil
-}
-
-func (r *apiKeyRepository) runtimeLimitExecutor(ctx context.Context) sqlExecutor {
-	if tx := dbent.TxFromContext(ctx); tx != nil {
-		return tx
-	}
-	return r.sql
-}
-
-func (r *apiKeyRepository) updateRuntimeLimits(ctx context.Context, exec sqlExecutor, id int64, maxActiveIPs, ipIdleTimeoutSeconds, maxConcurrency int) error {
-	if exec == nil {
-		return fmt.Errorf("api key runtime limit sql executor is not configured")
-	}
-	_, err := exec.ExecContext(ctx, `
-		UPDATE api_keys
-		SET max_active_ips = $1,
-		    ip_idle_timeout_seconds = $2,
-		    max_concurrency = $3,
-		    updated_at = NOW()
-		WHERE id = $4 AND deleted_at IS NULL`,
-		maxActiveIPs, ipIdleTimeoutSeconds, maxConcurrency, id)
-	return err
 }
 
 func (r *apiKeyRepository) Delete(ctx context.Context, id int64) error {
@@ -648,32 +628,32 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:            m.ID,
-		UserID:        m.UserID,
-		Key:           m.Key,
-		Name:          m.Name,
-		Status:        m.Status,
-		IPWhitelist:   m.IPWhitelist,
-		IPBlacklist:   m.IPBlacklist,
-		MaxActiveIPs:         m.MaxActiveIPs,
+		ID:                   m.ID,
+		UserID:               m.UserID,
+		Key:                  m.Key,
+		Name:                 m.Name,
+		Status:               m.Status,
+		IPWhitelist:          m.IPWhitelist,
+		IPBlacklist:          m.IPBlacklist,
+		MaxActiveIPs:         m.MaxActiveIps,
 		IPIdleTimeoutSeconds: m.IPIdleTimeoutSeconds,
 		MaxConcurrency:       m.MaxConcurrency,
-		LastUsedAt:    m.LastUsedAt,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		GroupID:       m.GroupID,
-		Quota:         m.Quota,
-		QuotaUsed:     m.QuotaUsed,
-		ExpiresAt:     m.ExpiresAt,
-		RateLimit5h:   m.RateLimit5h,
-		RateLimit1d:   m.RateLimit1d,
-		RateLimit7d:   m.RateLimit7d,
-		Usage5h:       m.Usage5h,
-		Usage1d:       m.Usage1d,
-		Usage7d:       m.Usage7d,
-		Window5hStart: m.Window5hStart,
-		Window1dStart: m.Window1dStart,
-		Window7dStart: m.Window7dStart,
+		LastUsedAt:           m.LastUsedAt,
+		CreatedAt:            m.CreatedAt,
+		UpdatedAt:            m.UpdatedAt,
+		GroupID:              m.GroupID,
+		Quota:                m.Quota,
+		QuotaUsed:            m.QuotaUsed,
+		ExpiresAt:            m.ExpiresAt,
+		RateLimit5h:          m.RateLimit5h,
+		RateLimit1d:          m.RateLimit1d,
+		RateLimit7d:          m.RateLimit7d,
+		Usage5h:              m.Usage5h,
+		Usage1d:              m.Usage1d,
+		Usage7d:              m.Usage7d,
+		Window5hStart:        m.Window5hStart,
+		Window1dStart:        m.Window1dStart,
+		Window7dStart:        m.Window7dStart,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)
