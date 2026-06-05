@@ -837,6 +837,96 @@ func TestContentModerationUpdateConfig_ReplacesAPIKeysWhenRequested(t *testing.T
 	require.Equal(t, []string{"sk-new-only"}, saved.apiKeys())
 }
 
+func TestContentModerationUpdateConfig_PreservesMaskedAuditModelAPIKeys(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.AuditModels = []ContentModerationAuditModelConfig{
+		{
+			ID:             "model_a",
+			Name:           "Model A",
+			Enabled:        true,
+			Protocol:       ContentModerationAuditProtocolOpenAICompatible,
+			BaseURL:        "https://audit-a.example.com",
+			APIKey:         "sk-audit-a",
+			Model:          "audit-a",
+			PromptTemplate: "audit {{input}}",
+			Weight:         1,
+			TimeoutMS:      3000,
+		},
+		{
+			ID:             "model_b",
+			Name:           "Model B",
+			Enabled:        true,
+			Protocol:       ContentModerationAuditProtocolOpenAICompatible,
+			BaseURL:        "https://audit-b.example.com",
+			APIKey:         "sk-audit-b",
+			Model:          "audit-b",
+			PromptTemplate: "audit {{input}}",
+			Weight:         1,
+			TimeoutMS:      3000,
+		},
+	}
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	repo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyContentModerationConfig: string(rawCfg),
+	}}
+	svc := NewContentModerationService(repo, nil, nil, nil, nil, nil, nil)
+	incoming := []ContentModerationAuditModelConfig{
+		{
+			ID:             "model_a",
+			Name:           "Model A Updated",
+			Enabled:        true,
+			Protocol:       ContentModerationAuditProtocolOpenAICompatible,
+			BaseURL:        "https://audit-a.example.com",
+			APIKey:         maskSecretTail("sk-audit-a"),
+			Model:          "audit-a",
+			PromptTemplate: "audit {{input}}",
+			Weight:         2,
+			TimeoutMS:      3000,
+		},
+		{
+			ID:             "model_b",
+			Name:           "Model B Updated",
+			Enabled:        true,
+			Protocol:       ContentModerationAuditProtocolOpenAICompatible,
+			BaseURL:        "https://audit-b.example.com",
+			Model:          "audit-b",
+			PromptTemplate: "audit {{input}}",
+			Weight:         1,
+			TimeoutMS:      3000,
+		},
+		{
+			ID:             "model_c",
+			Name:           "Model C",
+			Enabled:        true,
+			Protocol:       ContentModerationAuditProtocolOpenAICompatible,
+			BaseURL:        "https://audit-c.example.com",
+			APIKey:         "sk-audit-c",
+			Model:          "audit-c",
+			PromptTemplate: "audit {{input}}",
+			Weight:         1,
+			TimeoutMS:      3000,
+		},
+	}
+
+	view, err := svc.UpdateConfig(context.Background(), UpdateContentModerationConfigInput{
+		AuditModels: &incoming,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, view.AuditModels, 3)
+	require.Equal(t, maskSecretTail("sk-audit-a"), view.AuditModels[0].APIKey)
+	require.Equal(t, maskSecretTail("sk-audit-b"), view.AuditModels[1].APIKey)
+	require.Equal(t, maskSecretTail("sk-audit-c"), view.AuditModels[2].APIKey)
+
+	var saved ContentModerationConfig
+	require.NoError(t, json.Unmarshal([]byte(repo.values[SettingKeyContentModerationConfig]), &saved))
+	require.Equal(t, "sk-audit-a", saved.AuditModels[0].APIKey)
+	require.Equal(t, "sk-audit-b", saved.AuditModels[1].APIKey)
+	require.Equal(t, "sk-audit-c", saved.AuditModels[2].APIKey)
+}
+
 func TestContentModerationUpdateConfig_SavesCustomThresholds(t *testing.T) {
 	cfg := defaultContentModerationConfig()
 	rawCfg, err := json.Marshal(cfg)

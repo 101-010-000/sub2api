@@ -844,7 +844,7 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 		cfg.ModelFilter = *input.ModelFilter
 	}
 	if input.AuditModels != nil {
-		cfg.AuditModels = append([]ContentModerationAuditModelConfig(nil), (*input.AuditModels)...)
+		cfg.AuditModels = mergeContentModerationAuditModelSecrets(cfg.AuditModels, *input.AuditModels)
 	}
 	if input.DecisionRule != nil {
 		cfg.DecisionRule = *input.DecisionRule
@@ -2615,6 +2615,29 @@ func maskedContentModerationAuditModels(models []ContentModerationAuditModelConf
 	for i := range out {
 		if strings.TrimSpace(out[i].APIKey) != "" {
 			out[i].APIKey = maskSecretTail(out[i].APIKey)
+		}
+	}
+	return out
+}
+
+func mergeContentModerationAuditModelSecrets(existing []ContentModerationAuditModelConfig, incoming []ContentModerationAuditModelConfig) []ContentModerationAuditModelConfig {
+	current := normalizeContentModerationAuditModels(existing)
+	byID := make(map[string]ContentModerationAuditModelConfig, len(current))
+	for _, model := range current {
+		if strings.TrimSpace(model.ID) == "" {
+			continue
+		}
+		byID[model.ID] = model
+	}
+	out := normalizeContentModerationAuditModels(incoming)
+	for i := range out {
+		previous, ok := byID[out[i].ID]
+		if !ok || strings.TrimSpace(previous.APIKey) == "" {
+			continue
+		}
+		submitted := strings.TrimSpace(out[i].APIKey)
+		if submitted == "" || submitted == maskSecretTail(previous.APIKey) {
+			out[i].APIKey = previous.APIKey
 		}
 	}
 	return out

@@ -886,8 +886,185 @@
                 <input v-model.number="configForm.ban_threshold" type="number" min="1" max="1000" class="input" />
               </div>
               <div>
+                <label class="input-label">{{ t('admin.riskControl.banDurationMinutes') }}</label>
+                <input v-model.number="configForm.ban_duration_minutes" type="number" min="1" max="525600" class="input" />
+              </div>
+              <div>
                 <label class="input-label">{{ t('admin.riskControl.violationWindowHours') }}</label>
                 <input v-model.number="configForm.violation_window_hours" type="number" min="1" max="8760" class="input" />
+              </div>
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.selfUnbanEnabled') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.selfUnbanEnabledHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.self_unban.enabled" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.selfUnbanWindowMinutes') }}</label>
+                <input v-model.number="configForm.self_unban.window_minutes" type="number" min="1" max="525600" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.selfUnbanMaxAttempts') }}</label>
+                <input v-model.number="configForm.self_unban.max_attempts" type="number" min="1" max="100" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.selfUnbanSecondWaitMinutes') }}</label>
+                <input v-model.number="configForm.self_unban.second_attempt_wait_minutes" type="number" min="1" max="525600" class="input" />
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="activeSettingsTab === 'auditModels'" class="space-y-5">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.auditModels') }}</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.auditModelsHint') }}</p>
+              </div>
+              <button type="button" class="btn btn-secondary inline-flex items-center justify-center gap-2" @click="addAuditModel">
+                <Icon name="plus" size="sm" />
+                {{ t('admin.riskControl.addAuditModel') }}
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div class="space-y-4">
+                <div
+                  v-if="auditModelCount === 0"
+                  class="rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+                >
+                  {{ t('admin.riskControl.auditModelsEmpty') }}
+                </div>
+
+                <div
+                  v-for="(model, index) in configForm.audit_models"
+                  :key="model.id"
+                  class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-900/30"
+                >
+                  <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white font-mono text-xs font-semibold text-gray-600 shadow-sm dark:bg-dark-800 dark:text-gray-300">
+                          {{ index + 1 }}
+                        </span>
+                        <input
+                          v-model.trim="model.name"
+                          type="text"
+                          class="input h-9 min-w-[220px] max-w-sm flex-1"
+                          :placeholder="t('admin.riskControl.auditModelName')"
+                        />
+                      </div>
+                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.auditModelProtocolHint') }}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <Toggle v-model="model.enabled" />
+                      <button type="button" class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-300" @click="removeAuditModel(index)">
+                        <Icon name="trash" size="sm" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div>
+                      <label class="input-label">{{ t('admin.riskControl.auditModelBaseUrl') }}</label>
+                      <input v-model.trim="model.base_url" type="url" class="input" placeholder="https://api.example.com" />
+                    </div>
+                    <div>
+                      <label class="input-label">{{ t('admin.riskControl.auditModelModel') }}</label>
+                      <input v-model.trim="model.model" type="text" class="input" placeholder="qwen-moderation" />
+                    </div>
+                    <div>
+                      <label class="input-label">{{ t('admin.riskControl.auditModelApiKey') }}</label>
+                      <input
+                        v-model.trim="model.api_key_input"
+                        type="password"
+                        class="input"
+                        :placeholder="model.api_key_masked || t('admin.riskControl.auditModelApiKeyPlaceholder')"
+                        autocomplete="new-password"
+                      />
+                      <p v-if="model.api_key_masked" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {{ t('admin.riskControl.auditModelApiKeyConfigured', { key: model.api_key_masked }) }}
+                      </p>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                      <div>
+                        <label class="input-label">{{ t('admin.riskControl.auditModelWeight') }}</label>
+                        <input v-model.number="model.weight" type="number" min="0.01" step="0.1" class="input" />
+                      </div>
+                      <div>
+                        <label class="input-label">{{ t('admin.riskControl.auditModelTemperature') }}</label>
+                        <input v-model.number="model.temperature" type="number" min="0" max="2" step="0.1" class="input" />
+                      </div>
+                      <div>
+                        <label class="input-label">{{ t('admin.riskControl.auditModelTimeoutMs') }}</label>
+                        <input v-model.number="model.timeout_ms" type="number" min="500" max="30000" class="input" />
+                      </div>
+                    </div>
+                    <div class="lg:col-span-2">
+                      <label class="input-label">{{ t('admin.riskControl.auditModelPromptTemplate') }}</label>
+                      <textarea
+                        v-model="model.prompt_template"
+                        class="input min-h-36 resize-y font-mono text-sm"
+                        :placeholder="defaultAuditModelPrompt"
+                      ></textarea>
+                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        {{ t('admin.riskControl.auditModelPromptHint') }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.decisionRule') }}</h4>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.decisionRuleHint') }}</p>
+                </div>
+
+                <div class="space-y-2">
+                  <button
+                    v-for="option in decisionRuleOptions"
+                    :key="option.value"
+                    type="button"
+                    class="w-full rounded-lg border p-3 text-left transition-colors"
+                    :class="configForm.decision_rule.type === option.value
+                      ? 'border-primary-300 bg-primary-50 text-primary-900 shadow-sm dark:border-primary-700 dark:bg-primary-900/20 dark:text-primary-100'
+                      : 'border-gray-100 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-700/60'"
+                    @click="configForm.decision_rule.type = option.value"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-sm font-semibold">{{ option.label }}</span>
+                      <span
+                        class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border"
+                        :class="configForm.decision_rule.type === option.value
+                          ? 'border-primary-500 bg-primary-500 text-white'
+                          : 'border-gray-300 text-transparent dark:border-dark-500'"
+                      >
+                        <Icon name="check" size="xs" :stroke-width="2" />
+                      </span>
+                    </div>
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ option.description }}</p>
+                  </button>
+                </div>
+
+                <div v-if="configForm.decision_rule.type === 'n_of_m'">
+                  <label class="input-label">{{ t('admin.riskControl.decisionRequiredCount') }}</label>
+                  <input
+                    v-model.number="configForm.decision_rule.required_count"
+                    type="number"
+                    min="1"
+                    :max="maxDecisionRequiredCount"
+                    class="input"
+                  />
+                </div>
+                <div v-if="configForm.decision_rule.type === 'weight_threshold'">
+                  <label class="input-label">{{ t('admin.riskControl.decisionWeightThreshold') }}</label>
+                  <input v-model.number="configForm.decision_rule.weight_threshold" type="number" min="0.01" step="0.1" class="input" />
+                </div>
+
+                <div class="rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-500 dark:bg-dark-900/40 dark:text-gray-400">
+                  {{ t('admin.riskControl.auditModelSummary', { enabled: enabledAuditModelCount, total: auditModelCount }) }}
+                </div>
               </div>
             </div>
           </div>
@@ -1113,10 +1290,14 @@ import { adminAPI } from '@/api/admin'
 import type {
   ContentModerationAPIKeyLoad,
   ContentModerationAPIKeyStatus,
+  ContentModerationAuditModelConfig,
   ContentModerationConfig,
+  ContentModerationDecisionRule,
+  ContentModerationDecisionRuleType,
   ContentModerationLog,
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
+  ContentModerationSelfUnbanConfig,
   ContentModerationRuntimeStatus,
   ContentModerationTestAuditResult,
   KeywordBlockingMode,
@@ -1128,10 +1309,14 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
 
-type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'retention' | 'keywords'
+type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'auditModels' | 'riskThresholds' | 'retention' | 'keywords'
 type WorkerSlotState = 'active' | 'idle' | 'disabled'
 type APIKeysWriteMode = 'append' | 'replace'
 type OverviewIcon = 'shield' | 'key' | 'users' | 'document'
+type AuditModelForm = Omit<ContentModerationAuditModelConfig, 'api_key'> & {
+  api_key_masked: string
+  api_key_input: string
+}
 type OverviewItem = {
   key: string
   label: string
@@ -1158,6 +1343,7 @@ const maxModerationTestImages = 1
 const maxModerationTestImageSize = 8 * 1024 * 1024
 const maxVisibleApiKeyRows: number = 3
 const blockedKeywordMax = 10000
+const defaultAuditModelPrompt = '请审核以下用户请求是否违规。只输出 JSON：{"violation":boolean,"risk_score":0-1,"reason":"...","categories":["..."]}\n用户输入：{{input}}\n关键词命中：{{keyword_hits}}'
 const riskThresholdDefaults: Record<string, number> = {
   harassment: 98,
   'harassment/threatening': 90,
@@ -1227,7 +1413,14 @@ const configForm = reactive({
   email_on_hit: true,
   auto_ban_enabled: true,
   ban_threshold: 10,
+  ban_duration_minutes: 60,
   violation_window_hours: 720,
+  self_unban: {
+    enabled: true,
+    window_minutes: 300,
+    max_attempts: 2,
+    second_attempt_wait_minutes: 15,
+  } as ContentModerationSelfUnbanConfig,
   hit_retention_days: 180,
   non_hit_retention_days: 3,
   pre_hash_check_enabled: false,
@@ -1236,6 +1429,12 @@ const configForm = reactive({
   keyword_blocking_mode: 'keyword_and_api' as KeywordBlockingMode,
   model_filter_type: 'all' as ContentModerationModelFilterType,
   model_filter_models: [] as string[],
+  audit_models: [] as AuditModelForm[],
+  decision_rule: {
+    type: 'any',
+    required_count: 1,
+    weight_threshold: 1,
+  } as ContentModerationDecisionRule,
 })
 
 const pagination = reactive({
@@ -1259,6 +1458,7 @@ const settingsTabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'scope', label: t('admin.riskControl.tabs.scope') },
   { id: 'runtime', label: t('admin.riskControl.tabs.runtime') },
   { id: 'response', label: t('admin.riskControl.tabs.response') },
+  { id: 'auditModels', label: t('admin.riskControl.tabs.auditModels') },
   { id: 'riskThresholds', label: t('admin.riskControl.tabs.riskThresholds') },
   { id: 'keywords', label: t('admin.riskControl.tabs.keywords') },
   { id: 'retention', label: t('admin.riskControl.tabs.retention') },
@@ -1303,6 +1503,29 @@ const modelFilterOptions = computed<Array<{ value: ContentModerationModelFilterT
     value: 'exclude',
     label: t('admin.riskControl.modelFilterExclude'),
     description: t('admin.riskControl.modelFilterExcludeDesc'),
+  },
+])
+
+const decisionRuleOptions = computed<Array<{ value: ContentModerationDecisionRuleType; label: string; description: string }>>(() => [
+  {
+    value: 'any',
+    label: t('admin.riskControl.decisionRuleAny'),
+    description: t('admin.riskControl.decisionRuleAnyDesc'),
+  },
+  {
+    value: 'all',
+    label: t('admin.riskControl.decisionRuleAll'),
+    description: t('admin.riskControl.decisionRuleAllDesc'),
+  },
+  {
+    value: 'n_of_m',
+    label: t('admin.riskControl.decisionRuleNOfM'),
+    description: t('admin.riskControl.decisionRuleNOfMDesc'),
+  },
+  {
+    value: 'weight_threshold',
+    label: t('admin.riskControl.decisionRuleWeightThreshold'),
+    description: t('admin.riskControl.decisionRuleWeightThresholdDesc'),
   },
 ])
 
@@ -1417,6 +1640,12 @@ const inputApiKeyCount = computed(() => parseApiKeys(configForm.api_keys_text).l
 const blockedKeywordList = computed(() => parseBlockedKeywords(configForm.blocked_keywords_text))
 
 const blockedKeywordCount = computed(() => blockedKeywordList.value.length)
+
+const auditModelCount = computed(() => configForm.audit_models.length)
+
+const enabledAuditModelCount = computed(() => configForm.audit_models.filter((model) => model.enabled).length)
+
+const maxDecisionRequiredCount = computed(() => Math.max(1, enabledAuditModelCount.value || auditModelCount.value || 1))
 
 const pendingDeletedApiKeyCount = computed(() => pendingDeleteApiKeyHashes.value.length)
 
@@ -1703,7 +1932,9 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.email_on_hit = config.email_on_hit ?? true
   configForm.auto_ban_enabled = config.auto_ban_enabled ?? true
   configForm.ban_threshold = config.ban_threshold || 10
+  configForm.ban_duration_minutes = config.ban_duration_minutes || 60
   configForm.violation_window_hours = config.violation_window_hours || 720
+  configForm.self_unban = normalizeSelfUnbanConfig(config.self_unban)
   configForm.hit_retention_days = config.hit_retention_days || 180
   configForm.non_hit_retention_days = Math.min(Math.max(config.non_hit_retention_days || 3, 1), 3)
   configForm.pre_hash_check_enabled = config.pre_hash_check_enabled ?? false
@@ -1713,6 +1944,8 @@ function applyConfig(config: ContentModerationConfig) {
   const modelFilter = normalizeModelFilter(config.model_filter)
   configForm.model_filter_type = modelFilter.type
   configForm.model_filter_models = modelFilter.models
+  configForm.audit_models = auditModelsFromConfig(config.audit_models)
+  configForm.decision_rule = normalizeDecisionRule(config.decision_rule)
 }
 
 async function loadAll() {
@@ -1783,7 +2016,9 @@ async function saveConfig() {
       email_on_hit: configForm.email_on_hit,
       auto_ban_enabled: configForm.auto_ban_enabled,
       ban_threshold: Number(configForm.ban_threshold) || 10,
+      ban_duration_minutes: Number(configForm.ban_duration_minutes) || 60,
       violation_window_hours: Number(configForm.violation_window_hours) || 720,
+      self_unban: buildSelfUnbanPayload(),
       hit_retention_days: Number(configForm.hit_retention_days) || 180,
       non_hit_retention_days: Math.min(Math.max(Number(configForm.non_hit_retention_days) || 3, 1), 3),
       pre_hash_check_enabled: configForm.pre_hash_check_enabled,
@@ -1791,6 +2026,8 @@ async function saveConfig() {
       blocked_keywords: blockedKeywordList.value,
       keyword_blocking_mode: configForm.keyword_blocking_mode,
       model_filter: modelFilterPayload,
+      audit_models: buildAuditModelsPayload(),
+      decision_rule: buildDecisionRulePayload(),
     }
     const keys = parseApiKeys(configForm.api_keys_text)
     if (!payload.clear_api_key && configForm.api_keys_mode === 'replace' && keys.length === 0) {
@@ -1951,6 +2188,19 @@ function setModelFilterType(type: ContentModerationModelFilterType) {
   if (type === 'all') {
     configForm.model_filter_models = []
   }
+}
+
+function addAuditModel() {
+  const index = configForm.audit_models.length + 1
+  configForm.audit_models.push(createAuditModelForm(index))
+}
+
+function removeAuditModel(index: number) {
+  configForm.audit_models.splice(index, 1)
+  configForm.decision_rule.required_count = Math.min(
+    Number(configForm.decision_rule.required_count) || 1,
+    maxDecisionRequiredCount.value
+  )
 }
 
 async function testApiKeys(useInputKeys: boolean) {
@@ -2241,6 +2491,66 @@ function normalizeModelNames(models: unknown): string[] {
   return out
 }
 
+function createAuditModelForm(index: number): AuditModelForm {
+  return {
+    id: `model_${Date.now()}_${index}`,
+    name: t('admin.riskControl.auditModelDefaultName', { index }),
+    enabled: true,
+    protocol: 'openai_compatible',
+    base_url: '',
+    api_key_masked: '',
+    api_key_input: '',
+    model: '',
+    temperature: 0,
+    timeout_ms: 3000,
+    prompt_template: defaultAuditModelPrompt,
+    weight: 1,
+  }
+}
+
+function auditModelsFromConfig(models: ContentModerationAuditModelConfig[] | null | undefined): AuditModelForm[] {
+  if (!Array.isArray(models)) return []
+  return models.map((model, index) => ({
+    id: String(model.id || `model_${index + 1}`),
+    name: String(model.name || t('admin.riskControl.auditModelDefaultName', { index: index + 1 })),
+    enabled: model.enabled ?? true,
+    protocol: 'openai_compatible',
+    base_url: model.base_url || '',
+    api_key_masked: model.api_key || '',
+    api_key_input: '',
+    model: model.model || '',
+    temperature: Number.isFinite(model.temperature) ? Number(model.temperature) : 0,
+    timeout_ms: Number(model.timeout_ms) || 3000,
+    prompt_template: model.prompt_template || defaultAuditModelPrompt,
+    weight: Number(model.weight) || 1,
+  }))
+}
+
+function normalizeDecisionRule(rule: ContentModerationDecisionRule | null | undefined): ContentModerationDecisionRule {
+  const type = normalizeDecisionRuleType(rule?.type)
+  return {
+    type,
+    required_count: Math.max(1, Number(rule?.required_count) || 1),
+    weight_threshold: Math.max(0.01, Number(rule?.weight_threshold) || 1),
+  }
+}
+
+function normalizeDecisionRuleType(value: unknown): ContentModerationDecisionRuleType {
+  if (value === 'all' || value === 'n_of_m' || value === 'weight_threshold' || value === 'any') {
+    return value
+  }
+  return 'any'
+}
+
+function normalizeSelfUnbanConfig(config: ContentModerationSelfUnbanConfig | null | undefined): ContentModerationSelfUnbanConfig {
+  return {
+    enabled: config?.enabled ?? true,
+    window_minutes: Number(config?.window_minutes) || 300,
+    max_attempts: Number(config?.max_attempts) || 2,
+    second_attempt_wait_minutes: Number(config?.second_attempt_wait_minutes) || 15,
+  }
+}
+
 function buildModelFilterPayload(): ContentModerationModelFilter {
   const type = normalizeModelFilterType(configForm.model_filter_type)
   if (type === 'all') {
@@ -2249,6 +2559,46 @@ function buildModelFilterPayload(): ContentModerationModelFilter {
   return {
     type,
     models: normalizeModelNames(configForm.model_filter_models),
+  }
+}
+
+function buildAuditModelsPayload(): ContentModerationAuditModelConfig[] {
+  return configForm.audit_models.map((model, index) => {
+    const payload: ContentModerationAuditModelConfig = {
+      id: model.id.trim() || `model_${index + 1}`,
+      name: model.name.trim(),
+      enabled: model.enabled,
+      protocol: 'openai_compatible',
+      base_url: model.base_url.trim(),
+      model: model.model.trim(),
+      temperature: Number(model.temperature) || 0,
+      timeout_ms: Number(model.timeout_ms) || 3000,
+      prompt_template: model.prompt_template.trim() || defaultAuditModelPrompt,
+      weight: Number(model.weight) || 1,
+    }
+    const apiKey = model.api_key_input.trim()
+    if (apiKey) {
+      payload.api_key = apiKey
+    }
+    return payload
+  })
+}
+
+function buildDecisionRulePayload(): ContentModerationDecisionRule {
+  const type = normalizeDecisionRuleType(configForm.decision_rule.type)
+  return {
+    type,
+    required_count: Math.max(1, Math.min(Number(configForm.decision_rule.required_count) || 1, maxDecisionRequiredCount.value)),
+    weight_threshold: Math.max(0.01, Number(configForm.decision_rule.weight_threshold) || 1),
+  }
+}
+
+function buildSelfUnbanPayload(): ContentModerationSelfUnbanConfig {
+  return {
+    enabled: configForm.self_unban.enabled,
+    window_minutes: Number(configForm.self_unban.window_minutes) || 300,
+    max_attempts: Number(configForm.self_unban.max_attempts) || 2,
+    second_attempt_wait_minutes: Number(configForm.self_unban.second_attempt_wait_minutes) || 15,
   }
 }
 
