@@ -27,6 +27,7 @@ type AuthHandler struct {
 	redeemService        *service.RedeemService
 	totpService          *service.TotpService
 	userAttributeService *service.UserAttributeService
+	feishuNotificationService *service.FeishuNotificationService
 
 	dingTalkClientInstance *DingTalkClient
 	dingTalkClientMu       sync.Mutex
@@ -44,6 +45,10 @@ func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userSe
 		totpService:          totpService,
 		userAttributeService: userAttributeService,
 	}
+}
+
+func (h *AuthHandler) SetFeishuNotificationService(feishuNotificationService *service.FeishuNotificationService) {
+	h.feishuNotificationService = feishuNotificationService
 }
 
 // RegisterRequest represents the registration request payload

@@ -36,6 +36,15 @@ type APIKey struct {
 	Status      string
 	IPWhitelist []string
 	IPBlacklist []string
+	// MaxActiveIPs limits the number of dynamically bound active client IPs.
+	// 0 means unlimited.
+	MaxActiveIPs int
+	// IPIdleTimeoutSeconds controls dynamic IP auto-unbind idle timeout.
+	// 0 means use the runtime default.
+	IPIdleTimeoutSeconds int
+	// MaxConcurrency limits concurrent requests using this API key.
+	// 0 means unlimited.
+	MaxConcurrency int
 	// 预编译的 IP 规则，用于认证热路径避免重复 ParseIP/ParseCIDR。
 	CompiledIPWhitelist *ip.CompiledIPRules `json:"-"`
 	CompiledIPBlacklist *ip.CompiledIPRules `json:"-"`

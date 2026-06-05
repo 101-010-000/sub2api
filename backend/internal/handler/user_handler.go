@@ -23,6 +23,7 @@ type UserHandler struct {
 	affiliateService         *service.AffiliateService
 	userPlatformQuotaRepo    service.UserPlatformQuotaRepository
 	contentModerationService *service.ContentModerationService
+	feishuNotificationService *service.FeishuNotificationService
 }
 
 // NewUserHandler creates a new UserHandler
@@ -48,6 +49,10 @@ func NewUserHandler(
 		userPlatformQuotaRepo:    userPlatformQuotaRepo,
 		contentModerationService: moderationSvc,
 	}
+}
+
+func (h *UserHandler) SetFeishuNotificationService(feishuNotificationService *service.FeishuNotificationService) {
+	h.feishuNotificationService = feishuNotificationService
 }
 
 // GetMyPlatformQuotas GET /user/platform-quotas
@@ -142,11 +147,20 @@ type userProfileResponse struct {
 	OIDCBound         bool                                   `json:"oidc_bound"`
 	WeChatBound       bool                                   `json:"wechat_bound"`
 	DingTalkBound     bool                                   `json:"dingtalk_bound"`
+	FeishuBound       bool                                   `json:"feishu_bound"`
 }
 
 type userProfileSourceContext struct {
 	Provider string `json:"provider,omitempty"`
 	Source   string `json:"source,omitempty"`
+}
+
+type userNotificationSettingsResponse struct {
+	Feishu service.FeishuNotificationStatus `json:"feishu"`
+}
+
+type updateUserNotificationSettingsRequest struct {
+	FeishuNotificationEnabled *bool `json:"feishu_notification_enabled"`
 }
 
 // GetProfile handles getting user profile
@@ -235,6 +249,55 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	response.Success(c, profileResp)
+}
+
+// GetNotificationSettings handles current user's notification channel settings.
+// GET /api/v1/user/notification-settings
+func (h *UserHandler) GetNotificationSettings(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	status := service.FeishuNotificationStatus{}
+	if h.feishuNotificationService != nil {
+		var err error
+		status, err = h.feishuNotificationService.GetStatus(c.Request.Context(), subject.UserID)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	response.Success(c, userNotificationSettingsResponse{Feishu: status})
+}
+
+// UpdateNotificationSettings updates current user's notification channel settings.
+// PATCH /api/v1/user/notification-settings
+func (h *UserHandler) UpdateNotificationSettings(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	var req updateUserNotificationSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	status := service.FeishuNotificationStatus{}
+	if h.feishuNotificationService != nil {
+		var err error
+		if req.FeishuNotificationEnabled != nil {
+			status, err = h.feishuNotificationService.SetEnabled(c.Request.Context(), subject.UserID, *req.FeishuNotificationEnabled)
+		} else {
+			status, err = h.feishuNotificationService.GetStatus(c.Request.Context(), subject.UserID)
+		}
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	response.Success(c, userNotificationSettingsResponse{Feishu: status})
 }
 
 // GetAffiliate returns the current user's affiliate details.
@@ -604,6 +667,7 @@ func userProfileResponseFromService(user *service.User, identities service.UserI
 		OIDCBound:         identities.OIDC.Bound,
 		WeChatBound:       identities.WeChat.Bound,
 		DingTalkBound:     identities.DingTalk.Bound,
+		FeishuBound:       identities.Feishu.Bound,
 	}
 }
 
@@ -614,6 +678,7 @@ func userProfileBindingMap(identities service.UserIdentitySummarySet) map[string
 		"oidc":     identities.OIDC,
 		"wechat":   identities.WeChat,
 		"dingtalk": identities.DingTalk,
+		"feishu":   identities.Feishu,
 	}
 }
 
@@ -661,8 +726,8 @@ func inferUserProfileSources(user *service.User, identities service.UserIdentity
 }
 
 func thirdPartyIdentityProviders(identities service.UserIdentitySummarySet) []service.UserIdentitySummary {
-	out := make([]service.UserIdentitySummary, 0, 3)
-	for _, summary := range []service.UserIdentitySummary{identities.LinuxDo, identities.OIDC, identities.WeChat, identities.DingTalk} {
+	out := make([]service.UserIdentitySummary, 0, 5)
+	for _, summary := range []service.UserIdentitySummary{identities.LinuxDo, identities.OIDC, identities.WeChat, identities.DingTalk, identities.Feishu} {
 		if summary.Bound {
 			out = append(out, summary)
 		}

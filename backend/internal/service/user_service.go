@@ -151,6 +151,7 @@ type UserIdentitySummarySet struct {
 	OIDC     UserIdentitySummary `json:"oidc"`
 	WeChat   UserIdentitySummary `json:"wechat"`
 	DingTalk UserIdentitySummary `json:"dingtalk"`
+	Feishu   UserIdentitySummary `json:"feishu"`
 }
 
 type StartUserIdentityBindingRequest struct {
@@ -271,6 +272,7 @@ func (s *UserService) GetProfileIdentitySummaries(ctx context.Context, userID in
 		OIDC:     s.buildProviderIdentitySummary("oidc", user, records),
 		WeChat:   s.buildProviderIdentitySummary("wechat", user, records),
 		DingTalk: s.buildProviderIdentitySummary("dingtalk", user, records),
+		Feishu:   s.buildFeishuIdentitySummary(user, records),
 	}
 
 	s.applyExplicitProviderAvailability(ctx, &summaries)
@@ -291,6 +293,7 @@ func (s *UserService) applyExplicitProviderAvailability(ctx context.Context, sum
 		SettingKeyWeChatConnectMobileEnabled,
 		SettingKeyWeChatConnectMode,
 		SettingKeyDingTalkConnectEnabled,
+		SettingKeyFeishuConnectEnabled,
 	})
 	if err != nil {
 		return
@@ -301,6 +304,9 @@ func (s *UserService) applyExplicitProviderAvailability(ctx context.Context, sum
 	}
 	if raw, ok := settings[SettingKeyDingTalkConnectEnabled]; ok && strings.TrimSpace(raw) != "" && raw != "true" {
 		disableIdentityBindAction(&summaries.DingTalk)
+	}
+	if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok && strings.TrimSpace(raw) != "" && raw != "true" {
+		disableIdentityBindAction(&summaries.Feishu)
 	}
 	if raw, ok := settings[SettingKeyOIDCConnectEnabled]; ok && strings.TrimSpace(raw) != "" && raw != "true" {
 		disableIdentityBindAction(&summaries.OIDC)
@@ -698,6 +704,77 @@ func (s *UserService) buildProviderIdentitySummary(provider string, user *User, 
 	return summary
 }
 
+func (s *UserService) buildFeishuIdentitySummary(user *User, records []UserAuthIdentityRecord) UserIdentitySummary {
+	summary := s.buildProviderIdentitySummary("feishu", user, records)
+	if summary.Bound {
+		return summary
+	}
+
+	compatRecords := filterFeishuCompatOIDCIdentities(records)
+	if len(compatRecords) == 0 {
+		return summary
+	}
+
+	primary := selectPrimaryUserAuthIdentity(compatRecords)
+	openID := extractFeishuOpenIDFromIdentity(primary)
+	if openID == "" {
+		return summary
+	}
+
+	summary.Bound = true
+	summary.BoundCount = len(compatRecords)
+	summary.DisplayName = userAuthIdentityDisplayName(primary)
+	if strings.TrimSpace(summary.DisplayName) == "" {
+		summary.DisplayName = "飞书"
+	}
+	summary.AvatarURL = strings.TrimSpace(firstStringIdentityValue(primary.Metadata, "avatar_url", "avatar", "avatar_thumb", "avatar_middle", "avatar_big", "picture"))
+	summary.SubjectHint = maskOpaqueIdentity(openID)
+	summary.ProviderKey = "oidc:lark"
+	summary.VerifiedAt = primary.VerifiedAt
+	summary.CanUnbind = false
+	summary.NoteKey = userIdentityNoteBindAnotherBeforeUnbind
+	summary.Note = "Feishu identity is currently linked through an upstream OIDC provider."
+	return summary
+}
+
+func filterFeishuCompatOIDCIdentities(records []UserAuthIdentityRecord) []UserAuthIdentityRecord {
+	filtered := make([]UserAuthIdentityRecord, 0)
+	for _, record := range filterUserAuthIdentities(records, "oidc") {
+		if extractFeishuOpenIDFromIdentity(record) != "" {
+			filtered = append(filtered, record)
+		}
+	}
+	return filtered
+}
+
+func extractFeishuOpenIDFromIdentity(record UserAuthIdentityRecord) string {
+	return firstNonEmpty(
+		firstStringIdentityValue(record.Metadata,
+			"oauth_Lark_id",
+			"oauth_lark_id",
+			"lark",
+			"lark_id",
+			"lark_open_id",
+			"feishu",
+			"feishu_id",
+			"feishu_open_id",
+			"open_id",
+			"openId",
+			"user.open_id",
+			"data.open_id",
+		),
+		feishuOpenIDLike(record.ProviderSubject),
+	)
+}
+
+func feishuOpenIDLike(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "ou_") || strings.HasPrefix(value, "on_") || strings.HasPrefix(value, "union_") {
+		return value
+	}
+	return ""
+}
+
 func (s *UserService) canUnbindProvider(provider string, user *User, records []UserAuthIdentityRecord) bool {
 	if provider == "" || provider == "email" || len(filterUserAuthIdentities(records, provider)) == 0 {
 		return false
@@ -707,7 +784,7 @@ func (s *UserService) canUnbindProvider(provider string, user *User, records []U
 		return true
 	}
 
-	for _, candidate := range []string{"linuxdo", "oidc", "wechat", "dingtalk"} {
+	for _, candidate := range []string{"linuxdo", "oidc", "wechat", "dingtalk", "feishu"} {
 		if candidate == provider {
 			continue
 		}
@@ -785,6 +862,8 @@ func buildUserIdentityBindAuthorizeURL(provider, redirectTo string) (string, err
 		path = "/api/v1/auth/oauth/wechat/bind/start"
 	case "dingtalk":
 		path = "/api/v1/auth/oauth/dingtalk/bind/start"
+	case "feishu":
+		path = "/api/v1/auth/oauth/feishu/bind/start"
 	default:
 		return "", ErrIdentityProviderInvalid
 	}
@@ -805,6 +884,8 @@ func normalizeUserIdentityProvider(provider string) string {
 		return "wechat"
 	case "dingtalk":
 		return "dingtalk"
+	case "feishu":
+		return "feishu"
 	case "email":
 		return "email"
 	default:
@@ -883,7 +964,7 @@ func userAuthIdentityDisplayName(record UserAuthIdentityRecord) string {
 
 func firstStringIdentityValue(values map[string]any, keys ...string) string {
 	for _, key := range keys {
-		raw, ok := values[key]
+		raw, ok := identityValueByPath(values, key)
 		if !ok {
 			continue
 		}
@@ -899,6 +980,37 @@ func firstStringIdentityValue(values map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func identityValueByPath(values map[string]any, key string) (any, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, false
+	}
+	if raw, ok := values[key]; ok {
+		return raw, true
+	}
+	if !strings.Contains(key, ".") {
+		return nil, false
+	}
+
+	var current any = values
+	for _, part := range strings.Split(key, ".") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, false
+		}
+		nested, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		raw, ok := nested[part]
+		if !ok {
+			return nil, false
+		}
+		current = raw
+	}
+	return current, true
 }
 
 func maskEmailIdentity(email string) string {

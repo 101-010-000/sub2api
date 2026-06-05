@@ -31,6 +31,8 @@ func RegisterUserRoutes(
 			user.POST("/account-bindings/email", h.User.BindEmailIdentity)
 			user.DELETE("/account-bindings/:provider", h.User.UnbindIdentity)
 			user.POST("/auth-identities/bind/start", h.User.StartIdentityBinding)
+			user.GET("/notification-settings", h.User.GetNotificationSettings)
+			user.PATCH("/notification-settings", h.User.UpdateNotificationSettings)
 			user.GET("/api-keys/:id/usage/daily", h.Usage.GetMyAPIKeyDailyUsage)
 			user.GET("/platform-quotas", h.User.GetMyPlatformQuotas)
 			user.GET("/risk-control/ban-status", h.User.GetRiskControlBanStatus)
@@ -62,8 +64,11 @@ func RegisterUserRoutes(
 		{
 			keys.GET("", h.APIKey.List)
 			keys.GET("/:id", h.APIKey.GetByID)
+			keys.GET("/:id/runtime", h.APIKey.GetRuntime)
 			keys.POST("", h.APIKey.Create)
 			keys.PUT("/:id", h.APIKey.Update)
+			keys.POST("/:id/runtime/ips/remove", h.APIKey.RemoveRuntimeIP)
+			keys.POST("/:id/runtime/ips/clear", h.APIKey.ClearRuntimeIPs)
 			keys.DELETE("/:id", h.APIKey.Delete)
 		}
 

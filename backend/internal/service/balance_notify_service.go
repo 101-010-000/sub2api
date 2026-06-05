@@ -43,6 +43,7 @@ type BalanceNotifyService struct {
 	settingRepo              SettingRepository
 	accountRepo              AccountQuotaReader
 	notificationEmailService *NotificationEmailService
+	feishuNotificationService *FeishuNotificationService
 }
 
 // NewBalanceNotifyService creates a new BalanceNotifyService.
@@ -56,6 +57,10 @@ func NewBalanceNotifyService(emailService *EmailService, settingRepo SettingRepo
 
 func (s *BalanceNotifyService) SetNotificationEmailService(notificationEmailService *NotificationEmailService) {
 	s.notificationEmailService = notificationEmailService
+}
+
+func (s *BalanceNotifyService) SetFeishuNotificationService(feishuNotificationService *FeishuNotificationService) {
+	s.feishuNotificationService = feishuNotificationService
 }
 
 // resolveBalanceThreshold returns the effective balance threshold.
@@ -81,7 +86,7 @@ func (s *BalanceNotifyService) CheckBalanceAfterDeduction(ctx context.Context, u
 	if !crossedDownward(oldBalance, newBalance, effectiveThreshold) {
 		return
 	}
-	s.dispatchBalanceLowEmail(ctx, user, newBalance, effectiveThreshold, rechargeURL)
+	s.dispatchBalanceLowNotification(ctx, user, newBalance, effectiveThreshold, rechargeURL)
 }
 
 // canNotifyBalance checks nil guards and user-level toggle.
@@ -118,8 +123,8 @@ func crossedDownward(oldV, newV, threshold float64) bool {
 	return oldV >= threshold && newV < threshold
 }
 
-// dispatchBalanceLowEmail collects recipients and sends the alert in a goroutine.
-func (s *BalanceNotifyService) dispatchBalanceLowEmail(ctx context.Context, user *User, newBalance, threshold float64, rechargeURL string) {
+// dispatchBalanceLowNotification sends a user-facing low balance notification.
+func (s *BalanceNotifyService) dispatchBalanceLowNotification(ctx context.Context, user *User, newBalance, threshold float64, rechargeURL string) {
 	siteName := s.getSiteName(ctx)
 	recipients := s.collectBalanceNotifyRecipients(user)
 	slog.Info("CheckBalanceAfterDeduction: sending notification",
@@ -130,8 +135,33 @@ func (s *BalanceNotifyService) dispatchBalanceLowEmail(ctx context.Context, user
 				slog.Error("panic in balance notification", "recover", r)
 			}
 		}()
+		if s.trySendBalanceLowFeishu(user, newBalance, threshold, siteName, rechargeURL) {
+			return
+		}
 		s.sendBalanceLowEmails(recipients, user.ID, user.Username, user.Email, newBalance, threshold, siteName, rechargeURL)
 	}()
+}
+
+func (s *BalanceNotifyService) trySendBalanceLowFeishu(user *User, newBalance, threshold float64, siteName, rechargeURL string) bool {
+	if s == nil || s.feishuNotificationService == nil || user == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), emailSendTimeout)
+	defer cancel()
+	err := s.feishuNotificationService.SendBalanceLow(ctx, FeishuBalanceLowNotification{
+		UserID:      user.ID,
+		UserName:    user.Username,
+		UserEmail:   user.Email,
+		Balance:     newBalance,
+		Threshold:   threshold,
+		SiteName:    siteName,
+		RechargeURL: rechargeURL,
+	})
+	if err == nil {
+		return true
+	}
+	slog.Warn("feishu balance low notification failed; falling back to email", "user_id", user.ID, "error", err)
+	return false
 }
 
 // quotaDim describes one quota dimension for notification checking.

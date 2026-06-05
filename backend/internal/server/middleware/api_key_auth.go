@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
@@ -15,7 +17,11 @@ import (
 
 // NewAPIKeyAuthMiddleware 创建 API Key 认证中间件
 func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) APIKeyAuthMiddleware {
-	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, cfg))
+	return NewAPIKeyAuthMiddlewareWithRuntime(apiKeyService, subscriptionService, nil, cfg)
+}
+
+func NewAPIKeyAuthMiddlewareWithRuntime(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, apiKeyRuntimeService *service.APIKeyRuntimeService, cfg *config.Config) APIKeyAuthMiddleware {
+	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, apiKeyRuntimeService, cfg))
 }
 
 // apiKeyAuthWithSubscription API Key认证中间件（支持订阅验证）
@@ -25,7 +31,7 @@ func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionS
 //   - 计费执行（Billing Enforcement）：过期/配额/订阅/余额检查 —— skipBilling 时整块跳过
 //
 // /v1/usage 端点只需鉴权，不需要计费执行（允许过期/配额耗尽的 Key 查询自身用量）。
-func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, apiKeyRuntimeService *service.APIKeyRuntimeService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ── 1. 提取 API Key ──────────────────────────────────────────
 
@@ -98,6 +104,39 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonIPRestriction)
 				AbortWithError(c, 403, "ACCESS_DENIED", "Access denied")
 				return
+			}
+		}
+		clientIP := ip.GetTrustedClientIP(c)
+		if cfg.TrustForwardedIPForAPIKeyACL() {
+			clientIP = ip.GetClientIP(c)
+		}
+		if apiKeyRuntimeService == nil {
+			if apiKey.MaxActiveIPs > 0 || apiKey.MaxConcurrency > 0 {
+				AbortWithError(c, 503, "API_KEY_RUNTIME_UNAVAILABLE", "API key runtime limit service unavailable")
+				return
+			}
+		} else {
+			if err := apiKeyRuntimeService.EnforceActiveIP(c.Request.Context(), apiKey, clientIP); err != nil {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonIPRestriction)
+				if errors.Is(err, service.ErrAPIKeyActiveIPLimitExceeded) {
+					AbortWithError(c, 403, "ACCESS_DENIED", "Access denied")
+					return
+				}
+				AbortWithError(c, 503, "API_KEY_RUNTIME_UNAVAILABLE", "API key runtime limit service unavailable")
+				return
+			}
+			apiKeySlot, err := apiKeyRuntimeService.AcquireConcurrency(c.Request.Context(), apiKey)
+			if err != nil {
+				if errors.Is(err, service.ErrAPIKeyConcurrencyExceeded) {
+					AbortWithError(c, 429, "API_KEY_CONCURRENCY_EXCEEDED", "Too many requests for this API key")
+					return
+				}
+				AbortWithError(c, 503, "API_KEY_RUNTIME_UNAVAILABLE", "API key runtime limit service unavailable")
+				return
+			}
+			releaseAPIKeySlot := wrapAPIKeyRuntimeSlotRelease(c.Request.Context(), apiKeySlot)
+			if releaseAPIKeySlot != nil {
+				defer releaseAPIKeySlot()
 			}
 		}
 
@@ -225,6 +264,26 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 
 		c.Next()
 	}
+}
+
+func wrapAPIKeyRuntimeSlotRelease(ctx context.Context, slot *service.APIKeySlot) func() {
+	if slot == nil || !slot.Acquired() {
+		return nil
+	}
+	var once sync.Once
+	var stop func() bool
+	release := func() {
+		once.Do(func() {
+			if stop != nil {
+				_ = stop()
+			}
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = slot.Release(bgCtx)
+		})
+	}
+	stop = context.AfterFunc(ctx, release)
+	return release
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key

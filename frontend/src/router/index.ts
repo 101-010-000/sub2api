@@ -85,7 +85,19 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: false,
       title: 'LinuxDo OAuth Callback',
-      titleKey: 'auth.linuxdoCallbackPageTitle'
+      titleKey: 'auth.linuxdoCallbackPageTitle',
+      pendingOAuthProvider: 'linuxdo'
+    }
+  },
+  {
+    path: '/auth/feishu/callback',
+    name: 'FeishuOAuthCallback',
+    component: () => import('@/views/auth/LinuxDoCallbackView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Feishu OAuth Callback',
+      titleKey: 'auth.feishuCallbackPageTitle',
+      pendingOAuthProvider: 'feishu'
     }
   },
   {
@@ -262,6 +274,16 @@ const routes: RouteRecordRaw[] = [
       title: 'Profile',
       titleKey: 'profile.title',
       descriptionKey: 'profile.description'
+    }
+  },
+  {
+    path: '/feishu/panel',
+    name: 'FeishuPanel',
+    component: () => import('@/views/user/FeishuPanelView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Feishu Panel'
     }
   },
   {
@@ -693,6 +715,7 @@ const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',
+  '/auth/feishu/callback',
   '/auth/dingtalk/callback',
   '/auth/dingtalk/email-completion',
   '/auth/oidc/callback',

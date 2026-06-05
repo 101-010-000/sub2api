@@ -17,6 +17,8 @@ import type {
   UserAffiliateDetail,
   AffiliateTransferResponse,
   PlatformQuotasResponse,
+  UserNotificationSettings,
+  UpdateUserNotificationSettingsRequest,
 } from '@/types'
 
 /**
@@ -94,6 +96,18 @@ export async function removeNotifyEmail(email: string): Promise<void> {
  */
 export async function toggleNotifyEmail(email: string, disabled: boolean): Promise<User> {
   const { data } = await apiClient.put<User>('/user/notify-email/toggle', { email, disabled })
+  return data
+}
+
+export async function getNotificationSettings(): Promise<UserNotificationSettings> {
+  const { data } = await apiClient.get<UserNotificationSettings>('/user/notification-settings')
+  return data
+}
+
+export async function updateNotificationSettings(
+  payload: UpdateUserNotificationSettingsRequest
+): Promise<UserNotificationSettings> {
+  const { data } = await apiClient.patch<UserNotificationSettings>('/user/notification-settings', payload)
   return data
 }
 
@@ -186,6 +200,28 @@ export function buildOAuthBindingStartURL(
   return `${normalized}/auth/oauth/${provider}/bind/start?${params.toString()}`
 }
 
+export function buildFeishuNotifyBindStartURL(
+  redirectTo = '/profile',
+  bindStartPath = '/api/v1/auth/oauth/feishu/notify/bind/start'
+): string {
+  const redirect = redirectTo.trim() || '/profile'
+  const path = bindStartPath.trim() || '/api/v1/auth/oauth/feishu/notify/bind/start'
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api/v1'
+  const normalizedApiBase = apiBase.replace(/\/$/, '')
+  let normalizedPath: string
+  if (/^https?:\/\//i.test(path)) {
+    normalizedPath = path
+  } else if (path.startsWith('/api/') && /^https?:\/\//i.test(normalizedApiBase)) {
+    normalizedPath = `${new URL(normalizedApiBase).origin}${path}`
+  } else if (path.startsWith('/api/')) {
+    normalizedPath = path
+  } else {
+    normalizedPath = `${normalizedApiBase}/${path.replace(/^\//, '')}`
+  }
+  const separator = normalizedPath.includes('?') ? '&' : '?'
+  return `${normalizedPath}${separator}${new URLSearchParams({ redirect }).toString()}`
+}
+
 export async function startOAuthBinding(
   provider: BindableOAuthProvider,
   options: BuildOAuthBindingStartURLOptions = {}
@@ -199,6 +235,17 @@ export async function startOAuthBinding(
   }
   await prepareOAuthBindAccessTokenCookie()
   window.location.href = startURL
+}
+
+export async function startFeishuNotifyBinding(
+  redirectTo = '/profile',
+  bindStartPath?: string
+): Promise<void> {
+  if (typeof window === 'undefined') {
+    return
+  }
+  await prepareOAuthBindAccessTokenCookie()
+  window.location.href = buildFeishuNotifyBindStartURL(redirectTo, bindStartPath)
 }
 
 export async function getAffiliateDetail(): Promise<UserAffiliateDetail> {
@@ -239,11 +286,15 @@ export const userAPI = {
   verifyNotifyEmail,
   removeNotifyEmail,
   toggleNotifyEmail,
+  getNotificationSettings,
+  updateNotificationSettings,
   sendEmailBindingCode,
   bindEmailIdentity,
   unbindAuthIdentity,
   buildOAuthBindingStartURL,
+  buildFeishuNotifyBindStartURL,
   startOAuthBinding,
+  startFeishuNotifyBinding,
   getAffiliateDetail,
   transferAffiliateQuota,
   getMyPlatformQuotas,

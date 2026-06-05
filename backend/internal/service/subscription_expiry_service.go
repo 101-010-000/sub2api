@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,7 @@ type SubscriptionExpiryService struct {
 	userSubRepo              UserSubscriptionRepository
 	settingRepo              SettingRepository
 	notificationEmailService *NotificationEmailService
+	feishuNotificationService *FeishuNotificationService
 	interval                 time.Duration
 	stopCh                   chan struct{}
 	stopOnce                 sync.Once
@@ -37,6 +39,10 @@ func (s *SubscriptionExpiryService) SetSettingRepository(settingRepo SettingRepo
 
 func (s *SubscriptionExpiryService) SetNotificationEmailService(notificationEmailService *NotificationEmailService) {
 	s.notificationEmailService = notificationEmailService
+}
+
+func (s *SubscriptionExpiryService) SetFeishuNotificationService(feishuNotificationService *FeishuNotificationService) {
+	s.feishuNotificationService = feishuNotificationService
 }
 
 func (s *SubscriptionExpiryService) Start() {
@@ -87,7 +93,10 @@ func (s *SubscriptionExpiryService) runOnce() {
 }
 
 func (s *SubscriptionExpiryService) sendExpiryReminders(ctx context.Context) {
-	if s == nil || s.userSubRepo == nil || s.notificationEmailService == nil {
+	if s == nil || s.userSubRepo == nil {
+		return
+	}
+	if s.notificationEmailService == nil && s.feishuNotificationService == nil {
 		return
 	}
 	if !s.expiryReminderEnabled(ctx) {
@@ -124,11 +133,17 @@ func (s *SubscriptionExpiryService) expiryReminderEnabled(ctx context.Context) b
 }
 
 func (s *SubscriptionExpiryService) sendExpiryReminderIfDue(ctx context.Context, sub *UserSubscription) {
-	if sub == nil || sub.User == nil || sub.Group == nil || sub.User.Email == "" {
+	if sub == nil || sub.User == nil || sub.Group == nil {
 		return
 	}
 	daysRemaining := sub.DaysRemaining()
 	if daysRemaining != 7 && daysRemaining != 3 && daysRemaining != 1 {
+		return
+	}
+	if s.trySendSubscriptionExpiryFeishu(ctx, sub, daysRemaining) {
+		return
+	}
+	if s.notificationEmailService == nil || strings.TrimSpace(sub.User.Email) == "" {
 		return
 	}
 	if err := s.notificationEmailService.Send(ctx, NotificationEmailSendInput{
@@ -147,4 +162,24 @@ func (s *SubscriptionExpiryService) sendExpiryReminderIfDue(ctx context.Context,
 	}); err != nil {
 		log.Printf("[SubscriptionExpiry] Send expiry reminder failed: subscription=%d user=%d err=%v", sub.ID, sub.UserID, err)
 	}
+}
+
+func (s *SubscriptionExpiryService) trySendSubscriptionExpiryFeishu(ctx context.Context, sub *UserSubscription, daysRemaining int) bool {
+	if s == nil || s.feishuNotificationService == nil || sub == nil || sub.User == nil || sub.Group == nil {
+		return false
+	}
+	err := s.feishuNotificationService.SendSubscriptionExpiryReminder(ctx, FeishuSubscriptionExpiryNotification{
+		UserID:           sub.UserID,
+		SubscriptionID:   sub.ID,
+		RecipientName:    firstNonEmpty(sub.User.Username, sub.User.Email),
+		GroupName:        sub.Group.Name,
+		ExpiresAt:        sub.ExpiresAt,
+		DaysRemaining:    daysRemaining,
+		SourceReminderKey: fmt.Sprintf("%dd", daysRemaining),
+	})
+	if err == nil {
+		return true
+	}
+	log.Printf("[SubscriptionExpiry] Send Feishu expiry reminder failed, fallback to email: subscription=%d user=%d err=%v", sub.ID, sub.UserID, err)
+	return false
 }

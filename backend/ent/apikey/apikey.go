@@ -37,6 +37,12 @@ const (
 	FieldIPWhitelist = "ip_whitelist"
 	// FieldIPBlacklist holds the string denoting the ip_blacklist field in the database.
 	FieldIPBlacklist = "ip_blacklist"
+	// FieldMaxActiveIPs holds the string denoting the max_active_ips field in the database.
+	FieldMaxActiveIPs = "max_active_ips"
+	// FieldIPIdleTimeoutSeconds holds the string denoting the ip_idle_timeout_seconds field in the database.
+	FieldIPIdleTimeoutSeconds = "ip_idle_timeout_seconds"
+	// FieldMaxConcurrency holds the string denoting the max_concurrency field in the database.
+	FieldMaxConcurrency = "max_concurrency"
 	// FieldQuota holds the string denoting the quota field in the database.
 	FieldQuota = "quota"
 	// FieldQuotaUsed holds the string denoting the quota_used field in the database.
@@ -106,6 +112,9 @@ var Columns = []string{
 	FieldLastUsedAt,
 	FieldIPWhitelist,
 	FieldIPBlacklist,
+	FieldMaxActiveIPs,
+	FieldIPIdleTimeoutSeconds,
+	FieldMaxConcurrency,
 	FieldQuota,
 	FieldQuotaUsed,
 	FieldExpiresAt,

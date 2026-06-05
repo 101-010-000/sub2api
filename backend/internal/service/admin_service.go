@@ -67,6 +67,7 @@ type AdminService interface {
 
 	// API Key management (admin)
 	AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error)
+	AdminUpdateAPIKeyRuntimeLimits(ctx context.Context, keyID int64, input AdminUpdateAPIKeyRuntimeLimitsInput) (*APIKey, error)
 	AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error)
 
 	// ReplaceUserGroup 替换用户的专属分组：授予新分组权限、迁移 Key、移除旧分组权限
@@ -351,6 +352,12 @@ type AdminUpdateAPIKeyGroupIDResult struct {
 	AutoGrantedGroupAccess bool   // true if a new exclusive group permission was auto-added
 	GrantedGroupID         *int64 // the group ID that was auto-granted
 	GrantedGroupName       string // the group name that was auto-granted
+}
+
+type AdminUpdateAPIKeyRuntimeLimitsInput struct {
+	MaxActiveIPs         *int
+	IPIdleTimeoutSeconds *int
+	MaxConcurrency       *int
 }
 
 // ReplaceUserGroupResult 分组替换操作的结果
@@ -1521,6 +1528,8 @@ func normalizeAdminAuthIdentityProviderType(input string) string {
 		return "wechat"
 	case "dingtalk":
 		return "dingtalk"
+	case "feishu":
+		return "feishu"
 	default:
 		return ""
 	}
@@ -2337,6 +2346,32 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 
 	result.APIKey = apiKey
 	return result, nil
+}
+
+func (s *adminServiceImpl) AdminUpdateAPIKeyRuntimeLimits(ctx context.Context, keyID int64, input AdminUpdateAPIKeyRuntimeLimitsInput) (*APIKey, error) {
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
+	if err != nil {
+		return nil, err
+	}
+	if input.MaxActiveIPs != nil {
+		apiKey.MaxActiveIPs = *input.MaxActiveIPs
+	}
+	if input.IPIdleTimeoutSeconds != nil {
+		apiKey.IPIdleTimeoutSeconds = *input.IPIdleTimeoutSeconds
+	}
+	if input.MaxConcurrency != nil {
+		apiKey.MaxConcurrency = *input.MaxConcurrency
+	}
+	if err := validateAPIKeyRuntimeLimits(apiKey.MaxActiveIPs, apiKey.IPIdleTimeoutSeconds, apiKey.MaxConcurrency); err != nil {
+		return nil, err
+	}
+	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
+		return nil, fmt.Errorf("update api key runtime limits: %w", err)
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	}
+	return apiKey, nil
 }
 
 // AdminResetAPIKeyRateLimitUsage resets all API key rate-limit usage windows.

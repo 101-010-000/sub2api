@@ -163,6 +163,21 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		DingTalkConnectSyncCorpEmailAttrName:   settings.DingTalkConnectSyncCorpEmailAttrName,
 		DingTalkConnectSyncDisplayNameAttrName: settings.DingTalkConnectSyncDisplayNameAttrName,
 		DingTalkConnectSyncDeptAttrName:        settings.DingTalkConnectSyncDeptAttrName,
+		FeishuConnectEnabled:                   settings.FeishuConnectEnabled,
+		FeishuConnectAppID:                     settings.FeishuConnectAppID,
+		FeishuConnectAppSecretConfigured:       settings.FeishuConnectAppSecretConfigured,
+		FeishuConnectAuthorizeURL:              settings.FeishuConnectAuthorizeURL,
+		FeishuConnectTokenURL:                  settings.FeishuConnectTokenURL,
+		FeishuConnectUserInfoURL:               settings.FeishuConnectUserInfoURL,
+		FeishuConnectScopes:                    settings.FeishuConnectScopes,
+		FeishuConnectRedirectURL:               settings.FeishuConnectRedirectURL,
+		FeishuConnectFrontendRedirectURL:       settings.FeishuConnectFrontendRedirectURL,
+		FeishuNotifyEnabled:                    settings.FeishuNotifyEnabled,
+		FeishuNotifyAppID:                      settings.FeishuNotifyAppID,
+		FeishuNotifyAppSecretConfigured:        settings.FeishuNotifyAppSecretConfigured,
+		FeishuNotifyTokenURL:                   settings.FeishuNotifyTokenURL,
+		FeishuNotifyMessageURL:                 settings.FeishuNotifyMessageURL,
+		FeishuNotifyPanelURL:                   settings.FeishuNotifyPanelURL,
 		WeChatConnectEnabled:                   settings.WeChatConnectEnabled,
 		WeChatConnectAppID:                     settings.WeChatConnectAppID,
 		WeChatConnectAppSecretConfigured:       settings.WeChatConnectAppSecretConfigured,
@@ -436,6 +451,25 @@ type UpdateSettingsRequest struct {
 	DingTalkConnectSyncDisplayNameAttrName string `json:"dingtalk_connect_sync_display_name_attr_name"`
 	DingTalkConnectSyncDeptAttrName        string `json:"dingtalk_connect_sync_dept_attr_name"`
 
+	// Feishu Connect OAuth 登录
+	FeishuConnectEnabled             bool   `json:"feishu_connect_enabled"`
+	FeishuConnectAppID               string `json:"feishu_connect_app_id"`
+	FeishuConnectAppSecret           string `json:"feishu_connect_app_secret"`
+	FeishuConnectAuthorizeURL        string `json:"feishu_connect_authorize_url"`
+	FeishuConnectTokenURL            string `json:"feishu_connect_token_url"`
+	FeishuConnectUserInfoURL         string `json:"feishu_connect_userinfo_url"`
+	FeishuConnectScopes              string `json:"feishu_connect_scopes"`
+	FeishuConnectRedirectURL         string `json:"feishu_connect_redirect_url"`
+	FeishuConnectFrontendRedirectURL string `json:"feishu_connect_frontend_redirect_url"`
+
+	// Feishu Notification App
+	FeishuNotifyEnabled    bool   `json:"feishu_notify_enabled"`
+	FeishuNotifyAppID      string `json:"feishu_notify_app_id"`
+	FeishuNotifyAppSecret  string `json:"feishu_notify_app_secret"`
+	FeishuNotifyTokenURL   string `json:"feishu_notify_token_url"`
+	FeishuNotifyMessageURL string `json:"feishu_notify_message_url"`
+	FeishuNotifyPanelURL   string `json:"feishu_notify_panel_url"`
+
 	// WeChat Connect OAuth 登录
 	WeChatConnectEnabled             bool   `json:"wechat_connect_enabled"`
 	WeChatConnectAppID               string `json:"wechat_connect_app_id"`
@@ -549,6 +583,11 @@ type UpdateSettingsRequest struct {
 	AuthSourceDefaultDingTalkSubscriptions    *[]dto.DefaultSubscriptionSetting `json:"auth_source_default_dingtalk_subscriptions"`
 	AuthSourceDefaultDingTalkGrantOnSignup    *bool                             `json:"auth_source_default_dingtalk_grant_on_signup"`
 	AuthSourceDefaultDingTalkGrantOnFirstBind *bool                             `json:"auth_source_default_dingtalk_grant_on_first_bind"`
+	AuthSourceDefaultFeishuBalance            *float64                          `json:"auth_source_default_feishu_balance"`
+	AuthSourceDefaultFeishuConcurrency        *int                              `json:"auth_source_default_feishu_concurrency"`
+	AuthSourceDefaultFeishuSubscriptions      *[]dto.DefaultSubscriptionSetting `json:"auth_source_default_feishu_subscriptions"`
+	AuthSourceDefaultFeishuGrantOnSignup      *bool                             `json:"auth_source_default_feishu_grant_on_signup"`
+	AuthSourceDefaultFeishuGrantOnFirstBind   *bool                             `json:"auth_source_default_feishu_grant_on_first_bind"`
 	ForceEmailOnThirdPartySignup              *bool                             `json:"force_email_on_third_party_signup"`
 
 	// Model fallback configuration
@@ -658,7 +697,8 @@ type UpdateSettingsRequest struct {
 	AuthSourceGitHubPlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_github_platform_quotas"`
 	AuthSourceGooglePlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_google_platform_quotas"`
 	AuthSourceDingTalkPlatformQuotas map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_dingtalk_platform_quotas"`
-}
+	AuthSourceFeishuPlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_feishu_platform_quotas"`
+	}
 
 // UpdateSettings 更新系统设置
 // PUT /api/v1/admin/settings
@@ -745,6 +785,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	req.AuthSourceDefaultOIDCSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultOIDCSubscriptions)
 	req.AuthSourceDefaultWeChatSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultWeChatSubscriptions)
 	req.AuthSourceDefaultDingTalkSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultDingTalkSubscriptions)
+	req.AuthSourceDefaultFeishuSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultFeishuSubscriptions)
 
 	// SMTP 配置保护：如果请求中 smtp_host 为空但数据库中已有配置，则保留已有 SMTP 配置
 	// 防止前端加载设置失败时空表单覆盖已保存的 SMTP 配置
@@ -952,6 +993,105 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.DingTalkConnectSyncDeptAttrName = strings.TrimSpace(req.DingTalkConnectSyncDeptAttrName)
 		if req.DingTalkConnectSyncDeptAttrName == "" {
 			req.DingTalkConnectSyncDeptAttrName = "钉钉部门"
+		}
+	}
+
+	// Feishu Connect 参数验证
+	req.FeishuConnectAppID = strings.TrimSpace(req.FeishuConnectAppID)
+	req.FeishuConnectAppSecret = strings.TrimSpace(req.FeishuConnectAppSecret)
+	req.FeishuConnectAuthorizeURL = strings.TrimSpace(req.FeishuConnectAuthorizeURL)
+	if req.FeishuConnectAuthorizeURL == "" {
+		req.FeishuConnectAuthorizeURL = firstNonEmpty(previousSettings.FeishuConnectAuthorizeURL, "https://accounts.feishu.cn/open-apis/authen/v1/authorize")
+	}
+	req.FeishuConnectTokenURL = strings.TrimSpace(req.FeishuConnectTokenURL)
+	if req.FeishuConnectTokenURL == "" {
+		req.FeishuConnectTokenURL = firstNonEmpty(previousSettings.FeishuConnectTokenURL, "https://open.feishu.cn/open-apis/authen/v2/oauth/token")
+	}
+	req.FeishuConnectUserInfoURL = strings.TrimSpace(req.FeishuConnectUserInfoURL)
+	if req.FeishuConnectUserInfoURL == "" {
+		req.FeishuConnectUserInfoURL = firstNonEmpty(previousSettings.FeishuConnectUserInfoURL, "https://open.feishu.cn/open-apis/authen/v1/user_info")
+	}
+	req.FeishuConnectScopes = strings.TrimSpace(req.FeishuConnectScopes)
+	req.FeishuConnectRedirectURL = strings.TrimSpace(req.FeishuConnectRedirectURL)
+	req.FeishuConnectFrontendRedirectURL = strings.TrimSpace(req.FeishuConnectFrontendRedirectURL)
+	if req.FeishuConnectFrontendRedirectURL == "" {
+		req.FeishuConnectFrontendRedirectURL = firstNonEmpty(previousSettings.FeishuConnectFrontendRedirectURL, "/auth/feishu/callback")
+	}
+	if req.FeishuConnectEnabled {
+		req.FeishuConnectAppID = firstNonEmpty(req.FeishuConnectAppID, previousSettings.FeishuConnectAppID)
+		req.FeishuConnectRedirectURL = firstNonEmpty(req.FeishuConnectRedirectURL, previousSettings.FeishuConnectRedirectURL)
+		if req.FeishuConnectAppID == "" {
+			response.BadRequest(c, "Feishu App ID is required when enabled")
+			return
+		}
+		if req.FeishuConnectAppSecret == "" {
+			if previousSettings.FeishuConnectAppSecret == "" {
+				response.BadRequest(c, "Feishu App Secret is required when enabled")
+				return
+			}
+			req.FeishuConnectAppSecret = previousSettings.FeishuConnectAppSecret
+		}
+		if req.FeishuConnectRedirectURL == "" {
+			response.BadRequest(c, "Feishu Redirect URL is required when enabled")
+			return
+		}
+		for label, rawURL := range map[string]string{
+			"Feishu Authorize URL": req.FeishuConnectAuthorizeURL,
+			"Feishu Token URL":     req.FeishuConnectTokenURL,
+			"Feishu UserInfo URL":  req.FeishuConnectUserInfoURL,
+			"Feishu Redirect URL":  req.FeishuConnectRedirectURL,
+		} {
+			if err := config.ValidateAbsoluteHTTPURL(rawURL); err != nil {
+				response.BadRequest(c, label+" must be an absolute http(s) URL")
+				return
+			}
+		}
+		if err := config.ValidateFrontendRedirectURL(req.FeishuConnectFrontendRedirectURL); err != nil {
+			response.BadRequest(c, "Feishu Frontend Redirect URL is invalid")
+			return
+		}
+	}
+
+	// Feishu Notification App 参数验证
+	req.FeishuNotifyAppID = strings.TrimSpace(req.FeishuNotifyAppID)
+	req.FeishuNotifyAppSecret = strings.TrimSpace(req.FeishuNotifyAppSecret)
+	req.FeishuNotifyTokenURL = strings.TrimSpace(req.FeishuNotifyTokenURL)
+	if req.FeishuNotifyTokenURL == "" {
+		req.FeishuNotifyTokenURL = firstNonEmpty(previousSettings.FeishuNotifyTokenURL, "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal")
+	}
+	req.FeishuNotifyMessageURL = strings.TrimSpace(req.FeishuNotifyMessageURL)
+	if req.FeishuNotifyMessageURL == "" {
+		req.FeishuNotifyMessageURL = firstNonEmpty(previousSettings.FeishuNotifyMessageURL, "https://open.feishu.cn/open-apis/im/v1/messages")
+	}
+	req.FeishuNotifyPanelURL = strings.TrimSpace(req.FeishuNotifyPanelURL)
+	if req.FeishuNotifyPanelURL == "" {
+		req.FeishuNotifyPanelURL = firstNonEmpty(previousSettings.FeishuNotifyPanelURL, "/feishu/panel")
+	}
+	if req.FeishuNotifyEnabled {
+		req.FeishuNotifyAppID = firstNonEmpty(req.FeishuNotifyAppID, previousSettings.FeishuNotifyAppID)
+		if req.FeishuNotifyAppID == "" {
+			response.BadRequest(c, "Feishu notification App ID is required when enabled")
+			return
+		}
+		if req.FeishuNotifyAppSecret == "" {
+			if previousSettings.FeishuNotifyAppSecret == "" {
+				response.BadRequest(c, "Feishu notification App Secret is required when enabled")
+				return
+			}
+			req.FeishuNotifyAppSecret = previousSettings.FeishuNotifyAppSecret
+		}
+		for label, rawURL := range map[string]string{
+			"Feishu notification Token URL":   req.FeishuNotifyTokenURL,
+			"Feishu notification Message URL": req.FeishuNotifyMessageURL,
+		} {
+			if err := config.ValidateAbsoluteHTTPURL(rawURL); err != nil {
+				response.BadRequest(c, label+" must be an absolute http(s) URL")
+				return
+			}
+		}
+		if err := config.ValidateFrontendRedirectURL(req.FeishuNotifyPanelURL); err != nil {
+			response.BadRequest(c, "Feishu notification Panel URL is invalid")
+			return
 		}
 	}
 
@@ -1510,6 +1650,21 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DingTalkConnectSyncCorpEmailAttrName:   req.DingTalkConnectSyncCorpEmailAttrName,
 		DingTalkConnectSyncDisplayNameAttrName: req.DingTalkConnectSyncDisplayNameAttrName,
 		DingTalkConnectSyncDeptAttrName:        req.DingTalkConnectSyncDeptAttrName,
+		FeishuConnectEnabled:                   req.FeishuConnectEnabled,
+		FeishuConnectAppID:                     req.FeishuConnectAppID,
+		FeishuConnectAppSecret:                 req.FeishuConnectAppSecret,
+		FeishuConnectAuthorizeURL:              req.FeishuConnectAuthorizeURL,
+		FeishuConnectTokenURL:                  req.FeishuConnectTokenURL,
+		FeishuConnectUserInfoURL:               req.FeishuConnectUserInfoURL,
+		FeishuConnectScopes:                    req.FeishuConnectScopes,
+		FeishuConnectRedirectURL:               req.FeishuConnectRedirectURL,
+		FeishuConnectFrontendRedirectURL:       req.FeishuConnectFrontendRedirectURL,
+		FeishuNotifyEnabled:                    req.FeishuNotifyEnabled,
+		FeishuNotifyAppID:                      req.FeishuNotifyAppID,
+		FeishuNotifyAppSecret:                  req.FeishuNotifyAppSecret,
+		FeishuNotifyTokenURL:                   req.FeishuNotifyTokenURL,
+		FeishuNotifyMessageURL:                 req.FeishuNotifyMessageURL,
+		FeishuNotifyPanelURL:                   req.FeishuNotifyPanelURL,
 		WeChatConnectEnabled:                   req.WeChatConnectEnabled,
 		WeChatConnectAppID:                     req.WeChatConnectAppID,
 		WeChatConnectAppSecret:                 req.WeChatConnectAppSecret,
@@ -1820,6 +1975,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			GrantOnFirstBind: boolValueOrDefault(req.AuthSourceDefaultDingTalkGrantOnFirstBind, previousAuthSourceDefaults.DingTalk.GrantOnFirstBind),
 			PlatformQuotas:   platformQuotasValueOrDefault(req.AuthSourceDingTalkPlatformQuotas, previousAuthSourceDefaults.DingTalk.PlatformQuotas),
 		},
+		Feishu: service.ProviderDefaultGrantSettings{
+			Balance:          float64ValueOrDefault(req.AuthSourceDefaultFeishuBalance, previousAuthSourceDefaults.Feishu.Balance),
+			Concurrency:      intValueOrDefault(req.AuthSourceDefaultFeishuConcurrency, previousAuthSourceDefaults.Feishu.Concurrency),
+			Subscriptions:    defaultSubscriptionsValueOrDefault(req.AuthSourceDefaultFeishuSubscriptions, previousAuthSourceDefaults.Feishu.Subscriptions),
+			GrantOnSignup:    boolValueOrDefault(req.AuthSourceDefaultFeishuGrantOnSignup, previousAuthSourceDefaults.Feishu.GrantOnSignup),
+			GrantOnFirstBind: boolValueOrDefault(req.AuthSourceDefaultFeishuGrantOnFirstBind, previousAuthSourceDefaults.Feishu.GrantOnFirstBind),
+			PlatformQuotas:   platformQuotasValueOrDefault(req.AuthSourceFeishuPlatformQuotas, previousAuthSourceDefaults.Feishu.PlatformQuotas),
+		},
 		ForceEmailOnThirdPartySignup: boolValueOrDefault(req.ForceEmailOnThirdPartySignup, previousAuthSourceDefaults.ForceEmailOnThirdPartySignup),
 	}
 	if err := h.settingService.UpdateSettingsWithAuthSourceDefaults(c.Request.Context(), settings, authSourceDefaults); err != nil {
@@ -1947,6 +2110,21 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DingTalkConnectSyncCorpEmailAttrName:   updatedSettings.DingTalkConnectSyncCorpEmailAttrName,
 		DingTalkConnectSyncDisplayNameAttrName: updatedSettings.DingTalkConnectSyncDisplayNameAttrName,
 		DingTalkConnectSyncDeptAttrName:        updatedSettings.DingTalkConnectSyncDeptAttrName,
+		FeishuConnectEnabled:                   updatedSettings.FeishuConnectEnabled,
+		FeishuConnectAppID:                     updatedSettings.FeishuConnectAppID,
+		FeishuConnectAppSecretConfigured:       updatedSettings.FeishuConnectAppSecretConfigured,
+		FeishuConnectAuthorizeURL:              updatedSettings.FeishuConnectAuthorizeURL,
+		FeishuConnectTokenURL:                  updatedSettings.FeishuConnectTokenURL,
+		FeishuConnectUserInfoURL:               updatedSettings.FeishuConnectUserInfoURL,
+		FeishuConnectScopes:                    updatedSettings.FeishuConnectScopes,
+		FeishuConnectRedirectURL:               updatedSettings.FeishuConnectRedirectURL,
+		FeishuConnectFrontendRedirectURL:       updatedSettings.FeishuConnectFrontendRedirectURL,
+		FeishuNotifyEnabled:                    updatedSettings.FeishuNotifyEnabled,
+		FeishuNotifyAppID:                      updatedSettings.FeishuNotifyAppID,
+		FeishuNotifyAppSecretConfigured:        updatedSettings.FeishuNotifyAppSecretConfigured,
+		FeishuNotifyTokenURL:                   updatedSettings.FeishuNotifyTokenURL,
+		FeishuNotifyMessageURL:                 updatedSettings.FeishuNotifyMessageURL,
+		FeishuNotifyPanelURL:                   updatedSettings.FeishuNotifyPanelURL,
 		WeChatConnectEnabled:                   updatedSettings.WeChatConnectEnabled,
 		WeChatConnectAppID:                     updatedSettings.WeChatConnectAppID,
 		WeChatConnectAppSecretConfigured:       updatedSettings.WeChatConnectAppSecretConfigured,
@@ -2265,6 +2443,51 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.DingTalkConnectSyncDeptAttrKey != after.DingTalkConnectSyncDeptAttrKey {
 		changed = append(changed, "dingtalk_connect_sync_dept_attr_key")
+	}
+	if before.FeishuConnectEnabled != after.FeishuConnectEnabled {
+		changed = append(changed, "feishu_connect_enabled")
+	}
+	if before.FeishuConnectAppID != after.FeishuConnectAppID {
+		changed = append(changed, "feishu_connect_app_id")
+	}
+	if req.FeishuConnectAppSecret != "" {
+		changed = append(changed, "feishu_connect_app_secret")
+	}
+	if before.FeishuConnectAuthorizeURL != after.FeishuConnectAuthorizeURL {
+		changed = append(changed, "feishu_connect_authorize_url")
+	}
+	if before.FeishuConnectTokenURL != after.FeishuConnectTokenURL {
+		changed = append(changed, "feishu_connect_token_url")
+	}
+	if before.FeishuConnectUserInfoURL != after.FeishuConnectUserInfoURL {
+		changed = append(changed, "feishu_connect_userinfo_url")
+	}
+	if before.FeishuConnectScopes != after.FeishuConnectScopes {
+		changed = append(changed, "feishu_connect_scopes")
+	}
+	if before.FeishuConnectRedirectURL != after.FeishuConnectRedirectURL {
+		changed = append(changed, "feishu_connect_redirect_url")
+	}
+	if before.FeishuConnectFrontendRedirectURL != after.FeishuConnectFrontendRedirectURL {
+		changed = append(changed, "feishu_connect_frontend_redirect_url")
+	}
+	if before.FeishuNotifyEnabled != after.FeishuNotifyEnabled {
+		changed = append(changed, "feishu_notify_enabled")
+	}
+	if before.FeishuNotifyAppID != after.FeishuNotifyAppID {
+		changed = append(changed, "feishu_notify_app_id")
+	}
+	if req.FeishuNotifyAppSecret != "" {
+		changed = append(changed, "feishu_notify_app_secret")
+	}
+	if before.FeishuNotifyTokenURL != after.FeishuNotifyTokenURL {
+		changed = append(changed, "feishu_notify_token_url")
+	}
+	if before.FeishuNotifyMessageURL != after.FeishuNotifyMessageURL {
+		changed = append(changed, "feishu_notify_message_url")
+	}
+	if before.FeishuNotifyPanelURL != after.FeishuNotifyPanelURL {
+		changed = append(changed, "feishu_notify_panel_url")
 	}
 	if before.WeChatConnectEnabled != after.WeChatConnectEnabled {
 		changed = append(changed, "wechat_connect_enabled")
@@ -2591,6 +2814,7 @@ func appendAuthSourceDefaultChanges(changed []string, before *service.AuthSource
 		{name: "github", before: before.GitHub, after: after.GitHub},
 		{name: "google", before: before.Google, after: after.Google},
 		{name: "dingtalk", before: before.DingTalk, after: after.DingTalk},
+		{name: "feishu", before: before.Feishu, after: after.Feishu},
 	}
 	for _, field := range fields {
 		if field.before.Balance != field.after.Balance {
@@ -2715,6 +2939,11 @@ func systemSettingsResponseData(settings dto.SystemSettings, authSourceDefaults 
 	data["auth_source_default_dingtalk_subscriptions"] = authSourceDefaults.DingTalk.Subscriptions
 	data["auth_source_default_dingtalk_grant_on_signup"] = authSourceDefaults.DingTalk.GrantOnSignup
 	data["auth_source_default_dingtalk_grant_on_first_bind"] = authSourceDefaults.DingTalk.GrantOnFirstBind
+	data["auth_source_default_feishu_balance"] = authSourceDefaults.Feishu.Balance
+	data["auth_source_default_feishu_concurrency"] = authSourceDefaults.Feishu.Concurrency
+	data["auth_source_default_feishu_subscriptions"] = authSourceDefaults.Feishu.Subscriptions
+	data["auth_source_default_feishu_grant_on_signup"] = authSourceDefaults.Feishu.GrantOnSignup
+	data["auth_source_default_feishu_grant_on_first_bind"] = authSourceDefaults.Feishu.GrantOnFirstBind
 	data["auth_source_default_oidc_balance"] = authSourceDefaults.OIDC.Balance
 	data["auth_source_default_oidc_concurrency"] = authSourceDefaults.OIDC.Concurrency
 	data["auth_source_default_oidc_subscriptions"] = authSourceDefaults.OIDC.Subscriptions
@@ -2742,6 +2971,7 @@ func systemSettingsResponseData(settings dto.SystemSettings, authSourceDefaults 
 	data["auth_source_default_github_platform_quotas"] = authSourceDefaults.GitHub.PlatformQuotas
 	data["auth_source_default_google_platform_quotas"] = authSourceDefaults.Google.PlatformQuotas
 	data["auth_source_default_dingtalk_platform_quotas"] = authSourceDefaults.DingTalk.PlatformQuotas
+	data["auth_source_default_feishu_platform_quotas"] = authSourceDefaults.Feishu.PlatformQuotas
 	data["force_email_on_third_party_signup"] = authSourceDefaults.ForceEmailOnThirdPartySignup
 
 	return data

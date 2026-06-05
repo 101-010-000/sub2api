@@ -120,6 +120,9 @@ func registerAdminAPIKeyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	apiKeys := admin.Group("/api-keys")
 	{
 		apiKeys.PUT("/:id", h.Admin.APIKey.UpdateGroup)
+		apiKeys.GET("/:id/runtime", h.Admin.APIKey.GetRuntime)
+		apiKeys.POST("/:id/runtime/ips/remove", h.Admin.APIKey.RemoveRuntimeIP)
+		apiKeys.POST("/:id/runtime/ips/clear", h.Admin.APIKey.ClearRuntimeIPs)
 	}
 }
 

@@ -27,6 +27,10 @@ var (
 	ErrAPIKeyInvalidChars = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
 	ErrAPIKeyRateLimited  = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
 	ErrInvalidIPPattern   = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrInvalidRuntimeLimit = infraerrors.BadRequest("INVALID_API_KEY_RUNTIME_LIMIT", "invalid api key runtime limit")
+	ErrAPIKeyRuntimeUnavailable = infraerrors.ServiceUnavailable("API_KEY_RUNTIME_UNAVAILABLE", "api key runtime limit service unavailable")
+	ErrAPIKeyActiveIPLimitExceeded = infraerrors.Forbidden("API_KEY_ACTIVE_IP_LIMIT_EXCEEDED", "api key active IP limit exceeded")
+	ErrAPIKeyConcurrencyExceeded = infraerrors.TooManyRequests("API_KEY_CONCURRENCY_EXCEEDED", "api key concurrency limit exceeded")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
@@ -43,6 +47,9 @@ const (
 	apiKeyLastUsedMinTouch = 30 * time.Second
 	// DB 写失败后的短退避，避免请求路径持续同步重试造成写风暴与高延迟。
 	apiKeyLastUsedFailBackoff = 5 * time.Second
+	defaultAPIKeyIPIdleTimeoutSeconds = 600
+	minAPIKeyIPIdleTimeoutSeconds     = 60
+	maxAPIKeyIPIdleTimeoutSeconds     = 86400
 )
 
 type APIKeyRepository interface {
@@ -154,6 +161,9 @@ type CreateAPIKeyRequest struct {
 	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
 	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
+	MaxActiveIPs         int `json:"max_active_ips"`
+	IPIdleTimeoutSeconds int `json:"ip_idle_timeout_seconds"`
+	MaxConcurrency       int `json:"max_concurrency"`
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -172,6 +182,9 @@ type UpdateAPIKeyRequest struct {
 	Status      *string  `json:"status"`
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单（空数组清空）
 	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单（空数组清空）
+	MaxActiveIPs         *int `json:"max_active_ips"`
+	IPIdleTimeoutSeconds *int `json:"ip_idle_timeout_seconds"`
+	MaxConcurrency       *int `json:"max_concurrency"`
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -243,6 +256,23 @@ func (s *APIKeyService) compileAPIKeyIPRules(apiKey *APIKey) {
 	}
 	apiKey.CompiledIPWhitelist = ip.CompileIPRules(apiKey.IPWhitelist)
 	apiKey.CompiledIPBlacklist = ip.CompileIPRules(apiKey.IPBlacklist)
+}
+
+func validateAPIKeyRuntimeLimits(maxActiveIPs, ipIdleTimeoutSeconds, maxConcurrency int) error {
+	if maxActiveIPs < 0 || ipIdleTimeoutSeconds < 0 || maxConcurrency < 0 {
+		return ErrInvalidRuntimeLimit
+	}
+	if ipIdleTimeoutSeconds > 0 && (ipIdleTimeoutSeconds < minAPIKeyIPIdleTimeoutSeconds || ipIdleTimeoutSeconds > maxAPIKeyIPIdleTimeoutSeconds) {
+		return ErrInvalidRuntimeLimit
+	}
+	return nil
+}
+
+func EffectiveAPIKeyIPIdleTimeoutSeconds(configured int) int {
+	if configured <= 0 {
+		return defaultAPIKeyIPIdleTimeoutSeconds
+	}
+	return configured
 }
 
 // GenerateKey 生成随机API Key
@@ -333,6 +363,10 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
+	if err := validateAPIKeyRuntimeLimits(req.MaxActiveIPs, req.IPIdleTimeoutSeconds, req.MaxConcurrency); err != nil {
+		return nil, err
+	}
+
 	// 验证 IP 白名单格式
 	if len(req.IPWhitelist) > 0 {
 		if invalid := ip.ValidateIPPatterns(req.IPWhitelist); len(invalid) > 0 {
@@ -404,6 +438,9 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		Status:      StatusActive,
 		IPWhitelist: req.IPWhitelist,
 		IPBlacklist: req.IPBlacklist,
+		MaxActiveIPs:         req.MaxActiveIPs,
+		IPIdleTimeoutSeconds: req.IPIdleTimeoutSeconds,
+		MaxConcurrency:       req.MaxConcurrency,
 		Quota:       req.Quota,
 		QuotaUsed:   0,
 		RateLimit5h: req.RateLimit5h,
@@ -600,6 +637,25 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	// 更新 IP 限制（空数组会清空设置）
 	apiKey.IPWhitelist = req.IPWhitelist
 	apiKey.IPBlacklist = req.IPBlacklist
+
+	if req.MaxActiveIPs != nil {
+		if err := validateAPIKeyRuntimeLimits(*req.MaxActiveIPs, apiKey.IPIdleTimeoutSeconds, apiKey.MaxConcurrency); err != nil {
+			return nil, err
+		}
+		apiKey.MaxActiveIPs = *req.MaxActiveIPs
+	}
+	if req.IPIdleTimeoutSeconds != nil {
+		if err := validateAPIKeyRuntimeLimits(apiKey.MaxActiveIPs, *req.IPIdleTimeoutSeconds, apiKey.MaxConcurrency); err != nil {
+			return nil, err
+		}
+		apiKey.IPIdleTimeoutSeconds = *req.IPIdleTimeoutSeconds
+	}
+	if req.MaxConcurrency != nil {
+		if err := validateAPIKeyRuntimeLimits(apiKey.MaxActiveIPs, apiKey.IPIdleTimeoutSeconds, *req.MaxConcurrency); err != nil {
+			return nil, err
+		}
+		apiKey.MaxConcurrency = *req.MaxConcurrency
+	}
 
 	// Update rate limit configuration
 	if req.RateLimit5h != nil {

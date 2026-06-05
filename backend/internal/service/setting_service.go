@@ -222,6 +222,7 @@ type AuthSourceDefaultSettings struct {
 	GitHub                       ProviderDefaultGrantSettings
 	Google                       ProviderDefaultGrantSettings
 	DingTalk                     ProviderDefaultGrantSettings
+	Feishu                       ProviderDefaultGrantSettings
 	ForceEmailOnThirdPartySignup bool
 }
 
@@ -301,6 +302,15 @@ var (
 		grantOnFirstBind: SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind,
 		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("dingtalk"),
 	}
+	feishuAuthSourceDefaultKeys = authSourceDefaultKeySet{
+		source:           "feishu",
+		balance:          SettingKeyAuthSourceDefaultFeishuBalance,
+		concurrency:      SettingKeyAuthSourceDefaultFeishuConcurrency,
+		subscriptions:    SettingKeyAuthSourceDefaultFeishuSubscriptions,
+		grantOnSignup:    SettingKeyAuthSourceDefaultFeishuGrantOnSignup,
+		grantOnFirstBind: SettingKeyAuthSourceDefaultFeishuGrantOnFirstBind,
+		platformQuotas:   SettingKeyAuthSourcePlatformQuotas("feishu"),
+	}
 )
 
 const (
@@ -320,6 +330,10 @@ const (
 	defaultGoogleOAuthUserInfo   = "https://openidconnect.googleapis.com/v1/userinfo"
 	defaultGoogleOAuthScopes     = "openid email profile"
 	defaultGoogleOAuthFrontend   = "/auth/oauth/callback"
+	defaultFeishuOAuthAuthorize  = "https://accounts.feishu.cn/open-apis/authen/v1/authorize"
+	defaultFeishuOAuthToken      = "https://open.feishu.cn/open-apis/authen/v2/oauth/token"
+	defaultFeishuOAuthUserInfo   = "https://open.feishu.cn/open-apis/authen/v1/user_info"
+	defaultFeishuOAuthFrontend   = "/auth/feishu/callback"
 	defaultLoginAgreementMode    = "modal"
 	defaultLoginAgreementDate    = "2026-03-31"
 )
@@ -724,9 +738,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyTablePageSizeOptions,
 		SettingKeyCustomMenuItems,
 		SettingKeyCustomEndpoints,
-		SettingKeyLinuxDoConnectEnabled,
-		SettingKeyDingTalkConnectEnabled,
-		SettingKeyWeChatConnectEnabled,
+			SettingKeyLinuxDoConnectEnabled,
+			SettingKeyDingTalkConnectEnabled,
+			SettingKeyFeishuConnectEnabled,
+			SettingKeyWeChatConnectEnabled,
 		SettingKeyWeChatConnectAppID,
 		SettingKeyWeChatConnectAppSecret,
 		SettingKeyWeChatConnectOpenAppID,
@@ -779,6 +794,12 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		dingTalkEnabled = raw == "true"
 	} else {
 		dingTalkEnabled = s.cfg != nil && s.cfg.DingTalk.Enabled
+	}
+	feishuEnabled := false
+	if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok {
+		feishuEnabled = raw == "true"
+	} else {
+		feishuEnabled = s.cfg != nil && s.cfg.Feishu.Enabled
 	}
 	oidcEnabled := false
 	if raw, ok := settings[SettingKeyOIDCConnectEnabled]; ok {
@@ -848,9 +869,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		TablePageSizeOptions:             tablePageSizeOptions,
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
-		LinuxDoOAuthEnabled:              linuxDoEnabled,
-		DingTalkOAuthEnabled:             dingTalkEnabled,
-		WeChatOAuthEnabled:               weChatEnabled,
+			LinuxDoOAuthEnabled:              linuxDoEnabled,
+			DingTalkOAuthEnabled:             dingTalkEnabled,
+			FeishuOAuthEnabled:               feishuEnabled,
+			WeChatOAuthEnabled:               weChatEnabled,
 		WeChatOAuthOpenEnabled:           weChatOpenEnabled,
 		WeChatOAuthMPEnabled:             weChatMPEnabled,
 		WeChatOAuthMobileEnabled:         weChatMobileEnabled,
@@ -1151,6 +1173,7 @@ type PublicSettingsInjectionPayload struct {
 	CustomEndpoints                  json.RawMessage          `json:"custom_endpoints"`
 	LinuxDoOAuthEnabled              bool                     `json:"linuxdo_oauth_enabled"`
 	DingTalkOAuthEnabled             bool                     `json:"dingtalk_oauth_enabled"`
+	FeishuOAuthEnabled               bool                     `json:"feishu_oauth_enabled"`
 	WeChatOAuthEnabled               bool                     `json:"wechat_oauth_enabled"`
 	WeChatOAuthOpenEnabled           bool                     `json:"wechat_oauth_open_enabled"`
 	WeChatOAuthMPEnabled             bool                     `json:"wechat_oauth_mp_enabled"`
@@ -1216,6 +1239,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		CustomEndpoints:                  safeRawJSONArray(settings.CustomEndpoints),
 		LinuxDoOAuthEnabled:              settings.LinuxDoOAuthEnabled,
 		DingTalkOAuthEnabled:             settings.DingTalkOAuthEnabled,
+		FeishuOAuthEnabled:               settings.FeishuOAuthEnabled,
 		WeChatOAuthEnabled:               settings.WeChatOAuthEnabled,
 		WeChatOAuthOpenEnabled:           settings.WeChatOAuthOpenEnabled,
 		WeChatOAuthMPEnabled:             settings.WeChatOAuthMPEnabled,
@@ -1636,6 +1660,31 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	if settings.WeChatConnectFrontendRedirectURL == "" {
 		settings.WeChatConnectFrontendRedirectURL = defaultWeChatConnectFrontend
 	}
+	settings.FeishuConnectAppID = strings.TrimSpace(settings.FeishuConnectAppID)
+	settings.FeishuConnectAppSecret = strings.TrimSpace(settings.FeishuConnectAppSecret)
+	settings.FeishuConnectAuthorizeURL = strings.TrimSpace(settings.FeishuConnectAuthorizeURL)
+	if settings.FeishuConnectAuthorizeURL == "" {
+		settings.FeishuConnectAuthorizeURL = defaultFeishuOAuthAuthorize
+	}
+	settings.FeishuConnectTokenURL = strings.TrimSpace(settings.FeishuConnectTokenURL)
+	if settings.FeishuConnectTokenURL == "" {
+		settings.FeishuConnectTokenURL = defaultFeishuOAuthToken
+	}
+	settings.FeishuConnectUserInfoURL = strings.TrimSpace(settings.FeishuConnectUserInfoURL)
+	if settings.FeishuConnectUserInfoURL == "" {
+		settings.FeishuConnectUserInfoURL = defaultFeishuOAuthUserInfo
+	}
+	settings.FeishuConnectScopes = strings.TrimSpace(settings.FeishuConnectScopes)
+	settings.FeishuConnectRedirectURL = strings.TrimSpace(settings.FeishuConnectRedirectURL)
+	settings.FeishuConnectFrontendRedirectURL = strings.TrimSpace(settings.FeishuConnectFrontendRedirectURL)
+	if settings.FeishuConnectFrontendRedirectURL == "" {
+		settings.FeishuConnectFrontendRedirectURL = defaultFeishuOAuthFrontend
+	}
+	settings.FeishuNotifyAppID = strings.TrimSpace(settings.FeishuNotifyAppID)
+	settings.FeishuNotifyAppSecret = strings.TrimSpace(settings.FeishuNotifyAppSecret)
+	settings.FeishuNotifyTokenURL = firstNonEmpty(settings.FeishuNotifyTokenURL, defaultFeishuNotifyTokenURL)
+	settings.FeishuNotifyMessageURL = firstNonEmpty(settings.FeishuNotifyMessageURL, defaultFeishuNotifyMessageURL)
+	settings.FeishuNotifyPanelURL = firstNonEmpty(settings.FeishuNotifyPanelURL, defaultFeishuPanelPath)
 	settings.GitHubOAuthRedirectURL = strings.TrimSpace(settings.GitHubOAuthRedirectURL)
 	settings.GitHubOAuthFrontendRedirectURL = strings.TrimSpace(settings.GitHubOAuthFrontendRedirectURL)
 	if settings.GitHubOAuthFrontendRedirectURL == "" {
@@ -1722,6 +1771,29 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyDingTalkConnectSyncCorpEmailAttrName] = settings.DingTalkConnectSyncCorpEmailAttrName
 	updates[SettingKeyDingTalkConnectSyncDisplayNameAttrName] = settings.DingTalkConnectSyncDisplayNameAttrName
 	updates[SettingKeyDingTalkConnectSyncDeptAttrName] = settings.DingTalkConnectSyncDeptAttrName
+
+	// Feishu Connect OAuth 登录
+	updates[SettingKeyFeishuConnectEnabled] = strconv.FormatBool(settings.FeishuConnectEnabled)
+	updates[SettingKeyFeishuConnectAppID] = settings.FeishuConnectAppID
+	updates[SettingKeyFeishuConnectAuthorizeURL] = settings.FeishuConnectAuthorizeURL
+	updates[SettingKeyFeishuConnectTokenURL] = settings.FeishuConnectTokenURL
+	updates[SettingKeyFeishuConnectUserInfoURL] = settings.FeishuConnectUserInfoURL
+	updates[SettingKeyFeishuConnectScopes] = settings.FeishuConnectScopes
+	updates[SettingKeyFeishuConnectRedirectURL] = settings.FeishuConnectRedirectURL
+	updates[SettingKeyFeishuConnectFrontendRedirectURL] = settings.FeishuConnectFrontendRedirectURL
+	if settings.FeishuConnectAppSecret != "" {
+		updates[SettingKeyFeishuConnectAppSecret] = settings.FeishuConnectAppSecret
+	}
+
+	// Feishu Notification App 设置
+	updates[SettingKeyFeishuNotifyEnabled] = strconv.FormatBool(settings.FeishuNotifyEnabled)
+	updates[SettingKeyFeishuNotifyAppID] = settings.FeishuNotifyAppID
+	updates[SettingKeyFeishuNotifyTokenURL] = settings.FeishuNotifyTokenURL
+	updates[SettingKeyFeishuNotifyMessageURL] = settings.FeishuNotifyMessageURL
+	updates[SettingKeyFeishuNotifyPanelURL] = settings.FeishuNotifyPanelURL
+	if settings.FeishuNotifyAppSecret != "" {
+		updates[SettingKeyFeishuNotifyAppSecret] = settings.FeishuNotifyAppSecret
+	}
 
 	// Generic OIDC OAuth 登录
 	updates[SettingKeyOIDCConnectEnabled] = strconv.FormatBool(settings.OIDCConnectEnabled)
@@ -1960,6 +2032,7 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 		settings.GitHub.Subscriptions,
 		settings.Google.Subscriptions,
 		settings.DingTalk.Subscriptions,
+		settings.Feishu.Subscriptions,
 	} {
 		if err := s.validateDefaultSubscriptionGroups(ctx, subscriptions); err != nil {
 			return nil, err
@@ -1978,6 +2051,7 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 		{"github", settings.GitHub.PlatformQuotas},
 		{"google", settings.Google.PlatformQuotas},
 		{"dingtalk", settings.DingTalk.PlatformQuotas},
+		{"feishu", settings.Feishu.PlatformQuotas},
 	} {
 		if pgs.pq != nil {
 			if err := validateDefaultPlatformQuotaMap(pgs.pq); err != nil {
@@ -1994,6 +2068,7 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 	writeProviderDefaultGrantUpdates(updates, gitHubAuthSourceDefaultKeys, settings.GitHub)
 	writeProviderDefaultGrantUpdates(updates, googleAuthSourceDefaultKeys, settings.Google)
 	writeProviderDefaultGrantUpdates(updates, dingTalkAuthSourceDefaultKeys, settings.DingTalk)
+	writeProviderDefaultGrantUpdates(updates, feishuAuthSourceDefaultKeys, settings.Feishu)
 	updates[SettingKeyForceEmailOnThirdPartySignup] = strconv.FormatBool(settings.ForceEmailOnThirdPartySignup)
 	return updates, nil
 }
@@ -2562,6 +2637,11 @@ func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*Aut
 		SettingKeyAuthSourceDefaultDingTalkSubscriptions,
 		SettingKeyAuthSourceDefaultDingTalkGrantOnSignup,
 		SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind,
+		SettingKeyAuthSourceDefaultFeishuBalance,
+		SettingKeyAuthSourceDefaultFeishuConcurrency,
+		SettingKeyAuthSourceDefaultFeishuSubscriptions,
+		SettingKeyAuthSourceDefaultFeishuGrantOnSignup,
+		SettingKeyAuthSourceDefaultFeishuGrantOnFirstBind,
 		SettingKeyAuthSourcePlatformQuotas("email"),
 		SettingKeyAuthSourcePlatformQuotas("linuxdo"),
 		SettingKeyAuthSourcePlatformQuotas("oidc"),
@@ -2569,6 +2649,7 @@ func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*Aut
 		SettingKeyAuthSourcePlatformQuotas("github"),
 		SettingKeyAuthSourcePlatformQuotas("google"),
 		SettingKeyAuthSourcePlatformQuotas("dingtalk"),
+		SettingKeyAuthSourcePlatformQuotas("feishu"),
 		SettingKeyForceEmailOnThirdPartySignup,
 	}
 
@@ -2585,6 +2666,7 @@ func (s *SettingService) GetAuthSourceDefaultSettings(ctx context.Context) (*Aut
 		GitHub:                       parseProviderDefaultGrantSettings(settings, gitHubAuthSourceDefaultKeys),
 		Google:                       parseProviderDefaultGrantSettings(settings, googleAuthSourceDefaultKeys),
 		DingTalk:                     parseProviderDefaultGrantSettings(settings, dingTalkAuthSourceDefaultKeys),
+		Feishu:                       parseProviderDefaultGrantSettings(settings, feishuAuthSourceDefaultKeys),
 		ForceEmailOnThirdPartySignup: settings[SettingKeyForceEmailOnThirdPartySignup] == "true",
 	}, nil
 }
@@ -2694,6 +2776,21 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyWeChatConnectScopes:                       "snsapi_login",
 		SettingKeyWeChatConnectRedirectURL:                  "",
 		SettingKeyWeChatConnectFrontendRedirectURL:          defaultWeChatConnectFrontend,
+		SettingKeyFeishuConnectEnabled:                      "false",
+		SettingKeyFeishuConnectAppID:                        "",
+		SettingKeyFeishuConnectAppSecret:                    "",
+		SettingKeyFeishuConnectAuthorizeURL:                 defaultFeishuOAuthAuthorize,
+		SettingKeyFeishuConnectTokenURL:                     defaultFeishuOAuthToken,
+		SettingKeyFeishuConnectUserInfoURL:                  defaultFeishuOAuthUserInfo,
+		SettingKeyFeishuConnectScopes:                       "",
+		SettingKeyFeishuConnectRedirectURL:                  "",
+		SettingKeyFeishuConnectFrontendRedirectURL:          defaultFeishuOAuthFrontend,
+		SettingKeyFeishuNotifyEnabled:                       "false",
+		SettingKeyFeishuNotifyAppID:                         "",
+		SettingKeyFeishuNotifyAppSecret:                     "",
+		SettingKeyFeishuNotifyTokenURL:                      defaultFeishuNotifyTokenURL,
+		SettingKeyFeishuNotifyMessageURL:                    defaultFeishuNotifyMessageURL,
+		SettingKeyFeishuNotifyPanelURL:                      defaultFeishuPanelPath,
 		SettingKeyGitHubOAuthEnabled:                        "false",
 		SettingKeyGitHubOAuthClientID:                       "",
 		SettingKeyGitHubOAuthClientSecret:                   "",
@@ -2764,11 +2861,16 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAuthSourceDefaultGoogleSubscriptions:      "[]",
 		SettingKeyAuthSourceDefaultGoogleGrantOnSignup:      "false",
 		SettingKeyAuthSourceDefaultGoogleGrantOnFirstBind:   "false",
-		SettingKeyAuthSourceDefaultDingTalkBalance:          "0",
+			SettingKeyAuthSourceDefaultDingTalkBalance:          "0",
 		SettingKeyAuthSourceDefaultDingTalkConcurrency:      "5",
 		SettingKeyAuthSourceDefaultDingTalkSubscriptions:    "[]",
 		SettingKeyAuthSourceDefaultDingTalkGrantOnSignup:    "false",
 		SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind: "false",
+		SettingKeyAuthSourceDefaultFeishuBalance:            "0",
+		SettingKeyAuthSourceDefaultFeishuConcurrency:        "5",
+		SettingKeyAuthSourceDefaultFeishuSubscriptions:      "[]",
+		SettingKeyAuthSourceDefaultFeishuGrantOnSignup:      "false",
+		SettingKeyAuthSourceDefaultFeishuGrantOnFirstBind:   "false",
 		SettingKeyForceEmailOnThirdPartySignup:              "false",
 		SettingKeySMTPPort:                                  "587",
 		SettingKeySMTPUseTLS:                                "false",
@@ -3080,15 +3182,76 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		}
 	}
 	result.DingTalkConnectSyncDeptAttrName = strings.TrimSpace(settings[SettingKeyDingTalkConnectSyncDeptAttrName])
-	if result.DingTalkConnectSyncDeptAttrName == "" {
-		if v := strings.TrimSpace(dingTalkBase.SyncDeptAttrName); v != "" {
-			result.DingTalkConnectSyncDeptAttrName = v
-		} else {
-			result.DingTalkConnectSyncDeptAttrName = "钉钉部门"
+		if result.DingTalkConnectSyncDeptAttrName == "" {
+			if v := strings.TrimSpace(dingTalkBase.SyncDeptAttrName); v != "" {
+				result.DingTalkConnectSyncDeptAttrName = v
+			} else {
+				result.DingTalkConnectSyncDeptAttrName = "钉钉部门"
+			}
 		}
-	}
 
-	// Generic OIDC 设置：
+		// Feishu Connect 设置：
+		// - 兼容 config.yaml/env
+		// - 支持后台系统设置覆盖并持久化（存储于 DB）
+		feishuBase := config.FeishuConnectConfig{}
+		if s.cfg != nil {
+			feishuBase = s.cfg.Feishu
+		}
+		if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok {
+			result.FeishuConnectEnabled = raw == "true"
+		} else {
+			result.FeishuConnectEnabled = feishuBase.Enabled
+		}
+		if v, ok := settings[SettingKeyFeishuConnectAppID]; ok && strings.TrimSpace(v) != "" {
+			result.FeishuConnectAppID = strings.TrimSpace(v)
+		} else {
+			result.FeishuConnectAppID = strings.TrimSpace(feishuBase.AppID)
+		}
+		result.FeishuConnectAppSecret = strings.TrimSpace(settings[SettingKeyFeishuConnectAppSecret])
+		if result.FeishuConnectAppSecret == "" {
+			result.FeishuConnectAppSecret = strings.TrimSpace(feishuBase.AppSecret)
+		}
+		result.FeishuConnectAppSecretConfigured = result.FeishuConnectAppSecret != ""
+		if v, ok := settings[SettingKeyFeishuConnectAuthorizeURL]; ok && strings.TrimSpace(v) != "" {
+			result.FeishuConnectAuthorizeURL = strings.TrimSpace(v)
+		} else {
+			result.FeishuConnectAuthorizeURL = strings.TrimSpace(firstNonEmpty(feishuBase.AuthorizeURL, defaultFeishuOAuthAuthorize))
+		}
+		if v, ok := settings[SettingKeyFeishuConnectTokenURL]; ok && strings.TrimSpace(v) != "" {
+			result.FeishuConnectTokenURL = strings.TrimSpace(v)
+		} else {
+			result.FeishuConnectTokenURL = strings.TrimSpace(firstNonEmpty(feishuBase.TokenURL, defaultFeishuOAuthToken))
+		}
+		if v, ok := settings[SettingKeyFeishuConnectUserInfoURL]; ok && strings.TrimSpace(v) != "" {
+			result.FeishuConnectUserInfoURL = strings.TrimSpace(v)
+		} else {
+			result.FeishuConnectUserInfoURL = strings.TrimSpace(firstNonEmpty(feishuBase.UserInfoURL, defaultFeishuOAuthUserInfo))
+		}
+		if v, ok := settings[SettingKeyFeishuConnectScopes]; ok {
+			result.FeishuConnectScopes = strings.TrimSpace(v)
+		} else {
+			result.FeishuConnectScopes = strings.TrimSpace(feishuBase.Scopes)
+		}
+		if v, ok := settings[SettingKeyFeishuConnectRedirectURL]; ok && strings.TrimSpace(v) != "" {
+			result.FeishuConnectRedirectURL = strings.TrimSpace(v)
+		} else {
+			result.FeishuConnectRedirectURL = strings.TrimSpace(feishuBase.RedirectURL)
+		}
+		if v, ok := settings[SettingKeyFeishuConnectFrontendRedirectURL]; ok && strings.TrimSpace(v) != "" {
+			result.FeishuConnectFrontendRedirectURL = strings.TrimSpace(v)
+		} else {
+			result.FeishuConnectFrontendRedirectURL = strings.TrimSpace(firstNonEmpty(feishuBase.FrontendRedirectURL, defaultFeishuOAuthFrontend))
+		}
+
+		result.FeishuNotifyEnabled = strings.TrimSpace(settings[SettingKeyFeishuNotifyEnabled]) == "true"
+		result.FeishuNotifyAppID = strings.TrimSpace(settings[SettingKeyFeishuNotifyAppID])
+		result.FeishuNotifyAppSecret = strings.TrimSpace(settings[SettingKeyFeishuNotifyAppSecret])
+		result.FeishuNotifyAppSecretConfigured = result.FeishuNotifyAppSecret != ""
+		result.FeishuNotifyTokenURL = firstNonEmpty(settings[SettingKeyFeishuNotifyTokenURL], defaultFeishuNotifyTokenURL)
+		result.FeishuNotifyMessageURL = firstNonEmpty(settings[SettingKeyFeishuNotifyMessageURL], defaultFeishuNotifyMessageURL)
+		result.FeishuNotifyPanelURL = firstNonEmpty(settings[SettingKeyFeishuNotifyPanelURL], defaultFeishuPanelPath)
+
+		// Generic OIDC 设置：
 	// - 兼容 config.yaml/env
 	// - 支持后台系统设置覆盖并持久化（存储于 DB）
 	oidcBase := config.OIDCConnectConfig{}
@@ -3955,6 +4118,109 @@ func (s *SettingService) GetDingTalkConnectOAuthConfig(ctx context.Context) (con
 		return config.DingTalkConnectConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", err.Error())
 	}
 
+	return effective, nil
+}
+
+// GetFeishuConnectOAuthConfig 返回用于登录的最终生效 Feishu Connect 配置。
+func (s *SettingService) GetFeishuConnectOAuthConfig(ctx context.Context) (FeishuConnectOAuthConfig, error) {
+	if s == nil || s.cfg == nil {
+		return FeishuConnectOAuthConfig{}, infraerrors.ServiceUnavailable("CONFIG_NOT_READY", "config not loaded")
+	}
+
+	base := s.cfg.Feishu
+	settings, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyFeishuConnectEnabled,
+		SettingKeyFeishuConnectAppID,
+		SettingKeyFeishuConnectAppSecret,
+		SettingKeyFeishuConnectAuthorizeURL,
+		SettingKeyFeishuConnectTokenURL,
+		SettingKeyFeishuConnectUserInfoURL,
+		SettingKeyFeishuConnectScopes,
+		SettingKeyFeishuConnectRedirectURL,
+		SettingKeyFeishuConnectFrontendRedirectURL,
+	})
+	if err != nil {
+		return FeishuConnectOAuthConfig{}, fmt.Errorf("get feishu connect settings: %w", err)
+	}
+
+	effective := FeishuConnectOAuthConfig{
+		Enabled:             base.Enabled,
+		AppID:               strings.TrimSpace(base.AppID),
+		AppSecret:           strings.TrimSpace(base.AppSecret),
+		AuthorizeURL:        strings.TrimSpace(firstNonEmpty(base.AuthorizeURL, defaultFeishuOAuthAuthorize)),
+		TokenURL:            strings.TrimSpace(firstNonEmpty(base.TokenURL, defaultFeishuOAuthToken)),
+		UserInfoURL:         strings.TrimSpace(firstNonEmpty(base.UserInfoURL, defaultFeishuOAuthUserInfo)),
+		Scopes:              strings.TrimSpace(base.Scopes),
+		RedirectURL:         strings.TrimSpace(base.RedirectURL),
+		FrontendRedirectURL: strings.TrimSpace(firstNonEmpty(base.FrontendRedirectURL, defaultFeishuOAuthFrontend)),
+	}
+	if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok {
+		effective.Enabled = raw == "true"
+	}
+	if v, ok := settings[SettingKeyFeishuConnectAppID]; ok && strings.TrimSpace(v) != "" {
+		effective.AppID = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectAppSecret]; ok && strings.TrimSpace(v) != "" {
+		effective.AppSecret = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectAuthorizeURL]; ok && strings.TrimSpace(v) != "" {
+		effective.AuthorizeURL = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectTokenURL]; ok && strings.TrimSpace(v) != "" {
+		effective.TokenURL = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectUserInfoURL]; ok && strings.TrimSpace(v) != "" {
+		effective.UserInfoURL = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectScopes]; ok {
+		effective.Scopes = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectRedirectURL]; ok && strings.TrimSpace(v) != "" {
+		effective.RedirectURL = strings.TrimSpace(v)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectFrontendRedirectURL]; ok && strings.TrimSpace(v) != "" {
+		effective.FrontendRedirectURL = strings.TrimSpace(v)
+	}
+
+	if !effective.Enabled {
+		return FeishuConnectOAuthConfig{}, infraerrors.NotFound("OAUTH_DISABLED", "feishu oauth login is disabled")
+	}
+	if effective.AppID == "" {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth app id not configured")
+	}
+	if effective.AppSecret == "" {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth app secret not configured")
+	}
+	if effective.AuthorizeURL == "" {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth authorize url not configured")
+	}
+	if effective.TokenURL == "" {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth token url not configured")
+	}
+	if effective.UserInfoURL == "" {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth userinfo url not configured")
+	}
+	if effective.RedirectURL == "" {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth redirect url not configured")
+	}
+	if effective.FrontendRedirectURL == "" {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth frontend redirect url not configured")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.AuthorizeURL); err != nil {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth authorize url invalid")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.TokenURL); err != nil {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth token url invalid")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.UserInfoURL); err != nil {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth userinfo url invalid")
+	}
+	if err := config.ValidateAbsoluteHTTPURL(effective.RedirectURL); err != nil {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth redirect url invalid")
+	}
+	if err := config.ValidateFrontendRedirectURL(effective.FrontendRedirectURL); err != nil {
+		return FeishuConnectOAuthConfig{}, infraerrors.InternalServer("OAUTH_CONFIG_INVALID", "feishu oauth frontend redirect url invalid")
+	}
 	return effective, nil
 }
 

@@ -276,6 +276,25 @@
             <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
           </template>
 
+          <template #cell-runtime_limits="{ row }">
+            <button
+              v-if="hasRuntimeLimits(row)"
+              @click="openRuntimeModal(row)"
+              class="min-w-[128px] rounded-lg px-2 py-1 text-left text-xs transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
+              :title="t('keys.runtimeStatus')"
+            >
+              <div class="flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
+                <Icon name="shield" size="xs" class="text-blue-500" />
+                <span>{{ t('keys.runtimeActiveIPsShort') }} {{ runtimeActiveIPSummary(row) }}</span>
+              </div>
+              <div class="mt-0.5 flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                <Icon name="server" size="xs" />
+                <span>{{ t('keys.runtimeConcurrencyShort') }} {{ runtimeConcurrencySummary(row) }}</span>
+              </div>
+            </button>
+            <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
+          </template>
+
           <template #cell-expires_at="{ value }">
             <span v-if="value" :class="[
               'text-sm',
@@ -349,6 +368,14 @@
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit') }}</span>
+              </button>
+              <!-- Runtime Status Button -->
+              <button
+                @click="openRuntimeModal(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+              >
+                <Icon name="server" size="sm" />
+                <span class="text-xs">{{ t('keys.runtimeStatus') }}</span>
               </button>
               <!-- Delete Button -->
               <button
@@ -523,6 +550,70 @@
                 :placeholder="t('keys.ipBlacklistPlaceholder')"
               />
               <p class="input-hint">{{ t('keys.ipBlacklistHint') }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Runtime Limits Section -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="input-label mb-0">{{ t('keys.runtimeLimits') }}</label>
+            <button
+              type="button"
+              @click="formData.enable_runtime_limits = !formData.enable_runtime_limits"
+              :class="[
+                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                formData.enable_runtime_limits ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  formData.enable_runtime_limits ? 'translate-x-4' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
+
+          <div v-if="formData.enable_runtime_limits" class="space-y-4 pt-2">
+            <p class="input-hint -mt-2">{{ t('keys.runtimeLimitsHint') }}</p>
+            <div class="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label class="input-label">{{ t('keys.maxActiveIPs') }}</label>
+                <input
+                  v-model.number="formData.max_active_ips"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="input"
+                  placeholder="0"
+                />
+                <p class="input-hint">{{ t('keys.maxActiveIPsHint') }}</p>
+              </div>
+              <div>
+                <label class="input-label">{{ t('keys.ipIdleTimeout') }}</label>
+                <input
+                  v-model.number="formData.ip_idle_timeout_seconds"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="input"
+                  placeholder="600"
+                />
+                <p class="input-hint">{{ t('keys.ipIdleTimeoutHint') }}</p>
+              </div>
+              <div>
+                <label class="input-label">{{ t('keys.maxConcurrency') }}</label>
+                <input
+                  v-model.number="formData.max_concurrency"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="input"
+                  placeholder="0"
+                />
+                <p class="input-hint">{{ t('keys.maxConcurrencyHint') }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -920,6 +1011,114 @@
       @cancel="showResetRateLimitDialog = false"
     />
 
+    <!-- Runtime Status Modal -->
+    <BaseDialog
+      :show="showRuntimeModal"
+      :title="t('keys.runtimeStatusTitle', { name: selectedKey?.name || '' })"
+      width="wide"
+      @close="closeRuntimeModal"
+    >
+      <div class="space-y-5">
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.maxActiveIPs') }}</div>
+            <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+              {{ runtimeStatus?.max_active_ips || t('keys.runtimeUnlimited') }}
+            </div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('keys.activeIPCount') }}: {{ runtimeStatus?.active_ip_count ?? 0 }}
+            </div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.ipIdleTimeout') }}</div>
+            <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+              {{ runtimeStatus ? `${effectiveIdleTimeout(runtimeStatus.ip_idle_timeout_seconds)}s` : '-' }}
+            </div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ runtimeStatus?.ip_idle_timeout_seconds ? t('keys.runtimeConfigured') : t('keys.runtimeDefault') }}
+            </div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.maxConcurrency') }}</div>
+            <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+              {{ runtimeStatus?.max_concurrency || t('keys.runtimeUnlimited') }}
+            </div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('keys.currentConcurrency') }}: {{ runtimeStatus?.current_concurrency ?? 0 }}
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h4 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('keys.activeIPs') }}</h4>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="btn btn-secondary text-sm"
+              :disabled="runtimeLoading"
+              @click="loadRuntimeStatus()"
+            >
+              <Icon name="refresh" size="sm" :class="runtimeLoading ? 'animate-spin' : ''" />
+              {{ t('common.refresh') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary text-sm"
+              :disabled="runtimeActionLoading || !runtimeStatus?.active_ip_count"
+              @click="clearRuntimeIPs"
+            >
+              {{ t('keys.clearActiveIPs') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="runtimeLoading" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+          {{ t('common.loading') }}
+        </div>
+        <div
+          v-else-if="!runtimeStatus?.active_ips?.length"
+          class="rounded-lg border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400 dark:border-dark-600 dark:text-dark-500"
+        >
+          {{ t('keys.noActiveIPs') }}
+        </div>
+        <div v-else class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-700">
+          <div
+            v-for="activeIP in runtimeStatus.active_ips"
+            :key="activeIP.ip"
+            class="grid gap-3 border-b border-gray-100 p-3 text-sm last:border-0 dark:border-dark-700 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto]"
+          >
+            <div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.activeIP') }}</div>
+              <code class="mt-1 block break-all text-gray-900 dark:text-white">{{ activeIP.ip }}</code>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.lastSeen') }}</div>
+              <div class="mt-1 text-gray-700 dark:text-gray-300">{{ formatDateTime(activeIP.last_seen_at) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.expiresAt') }}</div>
+              <div class="mt-1 text-gray-700 dark:text-gray-300">
+                {{ formatDateTime(activeIP.expires_at) }}
+                <span class="ml-1 text-xs text-gray-400">
+                  ({{ formatRuntimeSeconds(activeIP.remaining_idle_seconds) }})
+                </span>
+              </div>
+            </div>
+            <div class="flex items-center justify-end">
+              <button
+                type="button"
+                class="btn btn-secondary text-sm"
+                :disabled="runtimeActionLoading"
+                @click="removeRuntimeIP(activeIP.ip)"
+              >
+                {{ t('keys.removeActiveIP') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </BaseDialog>
+
     <!-- Use Key Modal -->
     <UseKeyModal
       :show="showUseKeyModal"
@@ -1068,7 +1267,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform } from '@/types'
+	import type { ApiKey, ApiKeyRuntimeStatus, Group, PublicSettings, SubscriptionType, GroupPlatform } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1105,6 +1304,7 @@ const columns = computed<Column[]>(() => [
   { key: 'group', label: t('keys.group'), sortable: false },
   { key: 'usage', label: t('keys.usage'), sortable: false },
   { key: 'rate_limit', label: t('keys.rateLimitColumn'), sortable: false },
+  { key: 'runtime_limits', label: t('keys.runtimeLimitsColumn'), sortable: false },
   { key: 'expires_at', label: t('keys.expiresAt'), sortable: true },
   { key: 'status', label: t('common.status'), sortable: true },
   { key: 'last_used_at', label: t('keys.lastUsedAt'), sortable: true },
@@ -1143,9 +1343,13 @@ const showDeleteDialog = ref(false)
 const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
 const showUseKeyModal = ref(false)
+const showRuntimeModal = ref(false)
 const showCcsClientSelect = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
+const runtimeStatus = ref<ApiKeyRuntimeStatus | null>(null)
+const runtimeLoading = ref(false)
+const runtimeActionLoading = ref(false)
 const copiedKeyId = ref<number | null>(null)
 const groupSelectorKeyId = ref<number | null>(null)
 const publicSettings = ref<PublicSettings | null>(null)
@@ -1185,6 +1389,10 @@ const formData = ref({
   rate_limit_5h: null as number | null,
   rate_limit_1d: null as number | null,
   rate_limit_7d: null as number | null,
+  enable_runtime_limits: false,
+  max_active_ips: null as number | null,
+  ip_idle_timeout_seconds: null as number | null,
+  max_concurrency: null as number | null,
   enable_expiration: false,
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
   expiration_date: ''
@@ -1273,6 +1481,36 @@ const copyToClipboard = async (text: string, keyId: number) => {
       copiedKeyId.value = null
     }, 800)
   }
+}
+
+const hasRuntimeLimits = (key: ApiKey): boolean =>
+  (key.max_active_ips || 0) > 0 ||
+  (key.ip_idle_timeout_seconds || 0) > 0 ||
+  (key.max_concurrency || 0) > 0
+
+const effectiveIdleTimeout = (seconds: number | null | undefined): number =>
+  seconds && seconds > 0 ? seconds : 600
+
+const runtimeActiveIPSummary = (key: ApiKey): string => {
+  if ((key.max_active_ips || 0) <= 0) return t('keys.runtimeUnlimited')
+  return `${key.max_active_ips}/${formatRuntimeSeconds(effectiveIdleTimeout(key.ip_idle_timeout_seconds))}`
+}
+
+const runtimeConcurrencySummary = (key: ApiKey): string => {
+  if ((key.max_concurrency || 0) <= 0) return t('keys.runtimeUnlimited')
+  return String(key.max_concurrency)
+}
+
+const formatRuntimeSeconds = (seconds: number): string => {
+  if (seconds <= 0) return `0s`
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${mins}m`
+  if (mins > 0) return `${mins}m ${secs}s`
+  return `${secs}s`
 }
 
 const isAbortError = (error: unknown) => {
@@ -1391,6 +1629,7 @@ const editKey = (key: ApiKey) => {
   selectedKey.value = key
   const hasIPRestriction = (key.ip_whitelist?.length > 0) || (key.ip_blacklist?.length > 0)
   const hasExpiration = !!key.expires_at
+  const hasRuntimeLimit = hasRuntimeLimits(key)
   formData.value = {
     name: key.name,
     group_id: key.group_id,
@@ -1406,6 +1645,10 @@ const editKey = (key: ApiKey) => {
     rate_limit_5h: key.rate_limit_5h || null,
     rate_limit_1d: key.rate_limit_1d || null,
     rate_limit_7d: key.rate_limit_7d || null,
+    enable_runtime_limits: hasRuntimeLimit,
+    max_active_ips: key.max_active_ips || null,
+    ip_idle_timeout_seconds: key.ip_idle_timeout_seconds || null,
+    max_concurrency: key.max_concurrency || null,
     enable_expiration: hasExpiration,
     expiration_preset: 'custom',
     expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : ''
@@ -1539,6 +1782,19 @@ const handleSubmit = async () => {
     rate_limit_7d: formData.value.rate_limit_7d && formData.value.rate_limit_7d > 0 ? formData.value.rate_limit_7d : 0,
   } : { rate_limit_5h: 0, rate_limit_1d: 0, rate_limit_7d: 0 }
 
+  const runtimeLimitData = formData.value.enable_runtime_limits ? {
+    max_active_ips: formData.value.max_active_ips && formData.value.max_active_ips > 0 ? Math.floor(formData.value.max_active_ips) : 0,
+    ip_idle_timeout_seconds: formData.value.ip_idle_timeout_seconds && formData.value.ip_idle_timeout_seconds > 0 ? Math.floor(formData.value.ip_idle_timeout_seconds) : 0,
+    max_concurrency: formData.value.max_concurrency && formData.value.max_concurrency > 0 ? Math.floor(formData.value.max_concurrency) : 0,
+  } : { max_active_ips: 0, ip_idle_timeout_seconds: 0, max_concurrency: 0 }
+  if (
+    runtimeLimitData.ip_idle_timeout_seconds > 0 &&
+    (runtimeLimitData.ip_idle_timeout_seconds < 60 || runtimeLimitData.ip_idle_timeout_seconds > 86400)
+  ) {
+    appStore.showError(t('keys.invalidIPIdleTimeout'))
+    return
+  }
+
   submitting.value = true
   try {
     if (showEditModal.value && selectedKey.value) {
@@ -1553,6 +1809,9 @@ const handleSubmit = async () => {
         rate_limit_5h: rateLimitData.rate_limit_5h,
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
+        max_active_ips: runtimeLimitData.max_active_ips,
+        ip_idle_timeout_seconds: runtimeLimitData.ip_idle_timeout_seconds,
+        max_concurrency: runtimeLimitData.max_concurrency,
       })
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
     } else {
@@ -1565,7 +1824,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        runtimeLimitData
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1623,9 +1883,71 @@ const closeModals = () => {
     rate_limit_5h: null,
     rate_limit_1d: null,
     rate_limit_7d: null,
+    enable_runtime_limits: false,
+    max_active_ips: null,
+    ip_idle_timeout_seconds: null,
+    max_concurrency: null,
     enable_expiration: false,
     expiration_preset: '30',
     expiration_date: ''
+  }
+}
+
+const openRuntimeModal = async (key: ApiKey) => {
+  selectedKey.value = key
+  runtimeStatus.value = null
+  showRuntimeModal.value = true
+  await loadRuntimeStatus()
+}
+
+const closeRuntimeModal = () => {
+  showRuntimeModal.value = false
+  runtimeStatus.value = null
+  if (!showEditModal.value && !showDeleteDialog.value && !showResetQuotaDialog.value && !showResetRateLimitDialog.value) {
+    selectedKey.value = null
+  }
+}
+
+const loadRuntimeStatus = async () => {
+  if (!selectedKey.value) return
+  runtimeLoading.value = true
+  try {
+    runtimeStatus.value = await keysAPI.getRuntime(selectedKey.value.id)
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || error?.message || t('keys.failedToLoadRuntime')
+    appStore.showError(errorMsg)
+  } finally {
+    runtimeLoading.value = false
+  }
+}
+
+const removeRuntimeIP = async (ip: string) => {
+  if (!selectedKey.value) return
+  runtimeActionLoading.value = true
+  try {
+    await keysAPI.removeRuntimeIP(selectedKey.value.id, ip)
+    appStore.showSuccess(t('keys.activeIPRemoved'))
+    await loadRuntimeStatus()
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || error?.message || t('keys.failedToRemoveActiveIP')
+    appStore.showError(errorMsg)
+  } finally {
+    runtimeActionLoading.value = false
+  }
+}
+
+const clearRuntimeIPs = async () => {
+  if (!selectedKey.value) return
+  runtimeActionLoading.value = true
+  try {
+    await keysAPI.clearRuntimeIPs(selectedKey.value.id)
+    appStore.showSuccess(t('keys.activeIPsCleared'))
+    await loadRuntimeStatus()
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.detail || error?.message || t('keys.failedToClearActiveIPs')
+    appStore.showError(errorMsg)
+  } finally {
+    runtimeActionLoading.value = false
   }
 }
 

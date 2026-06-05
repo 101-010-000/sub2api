@@ -6,6 +6,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,10 @@ func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) 
 //
 // It is intended for Gemini native endpoints (/v1beta) to match Gemini SDK expectations.
 func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+	return APIKeyAuthWithSubscriptionGoogleWithRuntime(apiKeyService, subscriptionService, nil, cfg)
+}
+
+func APIKeyAuthWithSubscriptionGoogleWithRuntime(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, apiKeyRuntimeService *service.APIKeyRuntimeService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if v := strings.TrimSpace(c.Query("api_key")); v != "" {
 			abortWithGoogleError(c, 400, "Query parameter api_key is deprecated. Use Authorization header or key instead.")
@@ -58,6 +63,47 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
 			abortWithGoogleError(c, 403, message)
 			return
+		}
+		clientIP := ip.GetTrustedClientIP(c)
+		if cfg.TrustForwardedIPForAPIKeyACL() {
+			clientIP = ip.GetClientIP(c)
+		}
+		if len(apiKey.IPWhitelist) > 0 || len(apiKey.IPBlacklist) > 0 {
+			allowed, _ := ip.CheckIPRestrictionWithCompiledRules(clientIP, apiKey.CompiledIPWhitelist, apiKey.CompiledIPBlacklist)
+			if !allowed {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonIPRestriction)
+				abortWithGoogleError(c, 403, "Access denied")
+				return
+			}
+		}
+		if apiKeyRuntimeService == nil {
+			if apiKey.MaxActiveIPs > 0 || apiKey.MaxConcurrency > 0 {
+				abortWithGoogleError(c, 503, "API key runtime limit service unavailable")
+				return
+			}
+		} else {
+			if err := apiKeyRuntimeService.EnforceActiveIP(c.Request.Context(), apiKey, clientIP); err != nil {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonIPRestriction)
+				if errors.Is(err, service.ErrAPIKeyActiveIPLimitExceeded) {
+					abortWithGoogleError(c, 403, "Access denied")
+					return
+				}
+				abortWithGoogleError(c, 503, "API key runtime limit service unavailable")
+				return
+			}
+			apiKeySlot, err := apiKeyRuntimeService.AcquireConcurrency(c.Request.Context(), apiKey)
+			if err != nil {
+				if errors.Is(err, service.ErrAPIKeyConcurrencyExceeded) {
+					abortWithGoogleError(c, 429, "Too many requests for this API key")
+					return
+				}
+				abortWithGoogleError(c, 503, "API key runtime limit service unavailable")
+				return
+			}
+			releaseAPIKeySlot := wrapAPIKeyRuntimeSlotRelease(c.Request.Context(), apiKeySlot)
+			if releaseAPIKeySlot != nil {
+				defer releaseAPIKeySlot()
+			}
 		}
 
 		// 简易模式：跳过余额和订阅检查

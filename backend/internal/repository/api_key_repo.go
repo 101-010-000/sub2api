@@ -65,6 +65,7 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		key.LastUsedAt = created.LastUsedAt
 		key.CreatedAt = created.CreatedAt
 		key.UpdatedAt = created.UpdatedAt
+		err = r.updateRuntimeLimits(ctx, r.sql, key.ID, key.MaxActiveIPs, key.IPIdleTimeoutSeconds, key.MaxConcurrency)
 	}
 	return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
 }
@@ -129,6 +130,9 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldStatus,
 			apikey.FieldIPWhitelist,
 			apikey.FieldIPBlacklist,
+			apikey.FieldMaxActiveIPs,
+			apikey.FieldIPIdleTimeoutSeconds,
+			apikey.FieldMaxConcurrency,
 			apikey.FieldQuota,
 			apikey.FieldQuotaUsed,
 			apikey.FieldExpiresAt,
@@ -268,10 +272,35 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 		// 更新影响行数为 0，说明记录不存在或已被软删除。
 		return service.ErrAPIKeyNotFound
 	}
+	if err := r.updateRuntimeLimits(ctx, r.runtimeLimitExecutor(ctx), key.ID, key.MaxActiveIPs, key.IPIdleTimeoutSeconds, key.MaxConcurrency); err != nil {
+		return err
+	}
 
 	// 使用同一时间戳回填，避免并发删除导致二次查询失败。
 	key.UpdatedAt = now
 	return nil
+}
+
+func (r *apiKeyRepository) runtimeLimitExecutor(ctx context.Context) sqlExecutor {
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		return tx
+	}
+	return r.sql
+}
+
+func (r *apiKeyRepository) updateRuntimeLimits(ctx context.Context, exec sqlExecutor, id int64, maxActiveIPs, ipIdleTimeoutSeconds, maxConcurrency int) error {
+	if exec == nil {
+		return fmt.Errorf("api key runtime limit sql executor is not configured")
+	}
+	_, err := exec.ExecContext(ctx, `
+		UPDATE api_keys
+		SET max_active_ips = $1,
+		    ip_idle_timeout_seconds = $2,
+		    max_concurrency = $3,
+		    updated_at = NOW()
+		WHERE id = $4 AND deleted_at IS NULL`,
+		maxActiveIPs, ipIdleTimeoutSeconds, maxConcurrency, id)
+	return err
 }
 
 func (r *apiKeyRepository) Delete(ctx context.Context, id int64) error {
@@ -626,6 +655,9 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		Status:        m.Status,
 		IPWhitelist:   m.IPWhitelist,
 		IPBlacklist:   m.IPBlacklist,
+		MaxActiveIPs:         m.MaxActiveIPs,
+		IPIdleTimeoutSeconds: m.IPIdleTimeoutSeconds,
+		MaxConcurrency:       m.MaxConcurrency,
 		LastUsedAt:    m.LastUsedAt,
 		CreatedAt:     m.CreatedAt,
 		UpdatedAt:     m.UpdatedAt,

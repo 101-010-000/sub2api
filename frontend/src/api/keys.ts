@@ -4,7 +4,20 @@
  */
 
 import { apiClient } from './client'
-import type { ApiKey, CreateApiKeyRequest, UpdateApiKeyRequest, PaginatedResponse } from '@/types'
+import type {
+  ApiKey,
+  ApiKeyRuntimeStatus,
+  CreateApiKeyRequest,
+  FetchOptions,
+  PaginatedResponse,
+  UpdateApiKeyRequest
+} from '@/types'
+
+export interface ApiKeyRuntimeLimitData {
+  max_active_ips?: number
+  ip_idle_timeout_seconds?: number
+  max_concurrency?: number
+}
 
 /**
  * List all API keys for current user
@@ -65,7 +78,8 @@ export async function create(
   ipBlacklist?: string[],
   quota?: number,
   expiresInDays?: number,
-  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number }
+  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
+  runtimeLimitData?: ApiKeyRuntimeLimitData
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
   if (groupId !== undefined) {
@@ -79,6 +93,15 @@ export async function create(
   }
   if (ipBlacklist && ipBlacklist.length > 0) {
     payload.ip_blacklist = ipBlacklist
+  }
+  if (runtimeLimitData?.max_active_ips !== undefined) {
+    payload.max_active_ips = runtimeLimitData.max_active_ips
+  }
+  if (runtimeLimitData?.ip_idle_timeout_seconds !== undefined) {
+    payload.ip_idle_timeout_seconds = runtimeLimitData.ip_idle_timeout_seconds
+  }
+  if (runtimeLimitData?.max_concurrency !== undefined) {
+    payload.max_concurrency = runtimeLimitData.max_concurrency
   }
   if (quota !== undefined && quota > 0) {
     payload.quota = quota
@@ -131,13 +154,38 @@ export async function toggleStatus(id: number, status: 'active' | 'inactive'): P
   return update(id, { status })
 }
 
+export async function getRuntime(
+  id: number,
+  options?: FetchOptions
+): Promise<ApiKeyRuntimeStatus> {
+  const { data } = await apiClient.get<ApiKeyRuntimeStatus>(`/keys/${id}/runtime`, {
+    signal: options?.signal
+  })
+  return data
+}
+
+export async function removeRuntimeIP(id: number, ip: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>(`/keys/${id}/runtime/ips/remove`, {
+    ip
+  })
+  return data
+}
+
+export async function clearRuntimeIPs(id: number): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>(`/keys/${id}/runtime/ips/clear`)
+  return data
+}
+
 export const keysAPI = {
   list,
   getById,
   create,
   update,
   delete: deleteKey,
-  toggleStatus
+  toggleStatus,
+  getRuntime,
+  removeRuntimeIP,
+  clearRuntimeIPs
 }
 
 export default keysAPI

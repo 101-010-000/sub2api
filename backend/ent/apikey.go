@@ -42,6 +42,12 @@ type APIKey struct {
 	IPWhitelist []string `json:"ip_whitelist,omitempty"`
 	// Blocked IPs/CIDRs
 	IPBlacklist []string `json:"ip_blacklist,omitempty"`
+	// Maximum active client IPs for this API key (0 = unlimited)
+	MaxActiveIPs int `json:"max_active_ips,omitempty"`
+	// Idle timeout in seconds before active IP auto-unbinds (0 = default)
+	IPIdleTimeoutSeconds int `json:"ip_idle_timeout_seconds,omitempty"`
+	// Maximum concurrent requests for this API key (0 = unlimited)
+	MaxConcurrency int `json:"max_concurrency,omitempty"`
 	// Quota limit in USD for this API key (0 = unlimited)
 	Quota float64 `json:"quota,omitempty"`
 	// Used quota amount in USD
@@ -125,7 +131,7 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
-		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID:
+		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID, apikey.FieldMaxActiveIPs, apikey.FieldIPIdleTimeoutSeconds, apikey.FieldMaxConcurrency:
 			values[i] = new(sql.NullInt64)
 		case apikey.FieldKey, apikey.FieldName, apikey.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -224,6 +230,24 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.IPBlacklist); err != nil {
 					return fmt.Errorf("unmarshal field ip_blacklist: %w", err)
 				}
+			}
+		case apikey.FieldMaxActiveIPs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field max_active_ips", values[i])
+			} else if value.Valid {
+				_m.MaxActiveIPs = int(value.Int64)
+			}
+		case apikey.FieldIPIdleTimeoutSeconds:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field ip_idle_timeout_seconds", values[i])
+			} else if value.Valid {
+				_m.IPIdleTimeoutSeconds = int(value.Int64)
+			}
+		case apikey.FieldMaxConcurrency:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field max_concurrency", values[i])
+			} else if value.Valid {
+				_m.MaxConcurrency = int(value.Int64)
 			}
 		case apikey.FieldQuota:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -390,6 +414,15 @@ func (_m *APIKey) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("ip_blacklist=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IPBlacklist))
+	builder.WriteString(", ")
+	builder.WriteString("max_active_ips=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MaxActiveIPs))
+	builder.WriteString(", ")
+	builder.WriteString("ip_idle_timeout_seconds=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IPIdleTimeoutSeconds))
+	builder.WriteString(", ")
+	builder.WriteString("max_concurrency=")
+	builder.WriteString(fmt.Sprintf("%v", _m.MaxConcurrency))
 	builder.WriteString(", ")
 	builder.WriteString("quota=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Quota))

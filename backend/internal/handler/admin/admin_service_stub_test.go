@@ -588,6 +588,25 @@ func (s *stubAdminService) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 	return nil, service.ErrAPIKeyNotFound
 }
 
+func (s *stubAdminService) AdminUpdateAPIKeyRuntimeLimits(ctx context.Context, keyID int64, input service.AdminUpdateAPIKeyRuntimeLimitsInput) (*service.APIKey, error) {
+	for i := range s.apiKeys {
+		if s.apiKeys[i].ID == keyID {
+			if input.MaxActiveIPs != nil {
+				s.apiKeys[i].MaxActiveIPs = *input.MaxActiveIPs
+			}
+			if input.IPIdleTimeoutSeconds != nil {
+				s.apiKeys[i].IPIdleTimeoutSeconds = *input.IPIdleTimeoutSeconds
+			}
+			if input.MaxConcurrency != nil {
+				s.apiKeys[i].MaxConcurrency = *input.MaxConcurrency
+			}
+			k := s.apiKeys[i]
+			return &k, nil
+		}
+	}
+	return nil, service.ErrAPIKeyNotFound
+}
+
 func (s *stubAdminService) AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*service.APIKey, error) {
 	for i := range s.apiKeys {
 		if s.apiKeys[i].ID == keyID {

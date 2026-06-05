@@ -3,10 +3,10 @@
     <div class="space-y-6">
       <div class="text-center">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          {{ t('auth.linuxdo.callbackTitle') }}
+          {{ t(`auth.${provider}.callbackTitle`) }}
         </h2>
         <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
-          {{ isProcessing ? t('auth.linuxdo.callbackProcessing') : t('auth.linuxdo.callbackHint') }}
+          {{ isProcessing ? t(`auth.${provider}.callbackProcessing`) : t(`auth.${provider}.callbackHint`) }}
         </p>
       </div>
 
@@ -29,10 +29,10 @@
             <div class="space-y-3">
               <div class="space-y-1">
                 <p class="text-sm font-medium text-gray-900 dark:text-white">
-                  {{ t('auth.oauthFlow.profileDetailsTitle', { providerName }) }}
+                  {{ t('auth.oauthFlow.profileDetailsTitle', { providerName: providerNameText }) }}
                 </p>
                 <p class="text-xs text-gray-500 dark:text-dark-400">
-                  {{ t('auth.oauthFlow.profileDetailsDescription', { providerName }) }}
+                  {{ t('auth.oauthFlow.profileDetailsDescription', { providerName: providerNameText }) }}
                 </p>
               </div>
 
@@ -58,7 +58,7 @@
                 <input v-model="adoptAvatar" type="checkbox" class="mt-1 h-4 w-4" />
                 <img
                   :src="suggestedAvatarUrl"
-                  :alt="t('auth.oauthFlow.avatarAlt', { providerName })"
+                  :alt="t('auth.oauthFlow.avatarAlt', { providerName: providerNameText })"
                   class="h-10 w-10 rounded-full border border-gray-200 object-cover dark:border-dark-600"
                 />
                 <span class="space-y-1">
@@ -75,7 +75,7 @@
 
           <template v-if="needsInvitation">
             <p class="text-sm text-gray-700 dark:text-gray-300">
-              {{ t('auth.linuxdo.invitationRequired') }}
+              {{ t(`auth.${provider}.invitationRequired`) }}
             </p>
             <div>
               <input
@@ -92,13 +92,13 @@
               :disabled="isSubmitting || !invitationCode.trim()"
               @click="handleSubmitInvitation"
             >
-              {{ isSubmitting ? t('auth.linuxdo.completing') : t('auth.linuxdo.completeRegistration') }}
+              {{ isSubmitting ? t(`auth.${provider}.completing`) : t(`auth.${provider}.completeRegistration`) }}
             </button>
           </template>
 
           <template v-else-if="needsAdoptionConfirmation">
             <p class="text-sm text-gray-700 dark:text-gray-300">
-              {{ t('auth.oauthFlow.reviewProfileBeforeContinue', { providerName }) }}
+              {{ t('auth.oauthFlow.reviewProfileBeforeContinue', { providerName: providerNameText }) }}
             </p>
             <button class="btn btn-primary w-full" :disabled="isSubmitting" @click="handleContinueLogin">
               {{ isSubmitting ? t('common.processing') : t('auth.continue') }}
@@ -146,7 +146,7 @@
               {{ t('auth.oauthFlow.createAccountHint') }}
             </p>
             <PendingOAuthCreateAccountForm
-              test-id-prefix="linuxdo"
+              :test-id-prefix="provider"
               :initial-email="pendingAccountEmail"
               :is-submitting="isSubmitting"
               :error-message="accountActionError"
@@ -157,12 +157,12 @@
 
           <template v-else-if="needsBindLogin">
             <p class="text-sm text-gray-700 dark:text-gray-300">
-              {{ t('auth.oauthFlow.bindLoginHint', { providerName }) }}
+              {{ t('auth.oauthFlow.bindLoginHint', { providerName: providerNameText }) }}
             </p>
             <div class="space-y-3">
               <input
                 v-model="bindLoginEmail"
-                data-testid="linuxdo-bind-login-email"
+                :data-testid="`${provider}-bind-login-email`"
                 type="email"
                 class="input w-full"
                 :placeholder="t('auth.emailPlaceholder')"
@@ -171,7 +171,7 @@
               />
               <input
                 v-model="bindLoginPassword"
-                data-testid="linuxdo-bind-login-password"
+                :data-testid="`${provider}-bind-login-password`"
                 type="password"
                 class="input w-full"
                 :placeholder="t('auth.passwordPlaceholder')"
@@ -179,7 +179,7 @@
                 @keyup.enter="handleBindLogin"
               />
               <button
-                data-testid="linuxdo-bind-login-submit"
+                :data-testid="`${provider}-bind-login-submit`"
                 class="btn btn-primary w-full"
                 :disabled="isSubmitting || !bindLoginEmail.trim() || !bindLoginPassword"
                 @click="handleBindLogin"
@@ -201,7 +201,7 @@
             <p class="text-sm text-gray-700 dark:text-gray-300">
               {{
                 t('auth.oauthFlow.totpHint', {
-                  providerName,
+                  providerName: providerNameText,
                   account: totpUserEmailMasked || t('auth.oauthFlow.yourAccount')
                 })
               }}
@@ -209,7 +209,7 @@
             <div class="space-y-3">
               <input
                 v-model="totpCode"
-                data-testid="linuxdo-bind-login-totp"
+                :data-testid="`${provider}-bind-login-totp`"
                 type="text"
                 inputmode="numeric"
                 maxlength="6"
@@ -219,7 +219,7 @@
                 @keyup.enter="handleSubmitTotpChallenge"
               />
               <button
-                data-testid="linuxdo-bind-login-totp-submit"
+                :data-testid="`${provider}-bind-login-totp-submit`"
                 class="btn btn-primary w-full"
                 :disabled="isSubmitting || totpCode.trim().length !== 6"
                 @click="handleSubmitTotpChallenge"
@@ -245,7 +245,6 @@ import PendingOAuthCreateAccountForm, {
 import { apiClient } from '@/api/client'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
-  completeLinuxDoOAuthRegistration,
   exchangePendingOAuthCompletion,
   getOAuthCompletionKind,
   isOAuthLoginCompletion,
@@ -267,6 +266,11 @@ const { t } = useI18n()
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
+const provider = computed<'linuxdo' | 'feishu'>(() =>
+  route.meta.pendingOAuthProvider === 'feishu' ? 'feishu' : 'linuxdo'
+)
+const providerName = computed(() => (provider.value === 'feishu' ? '飞书' : 'LinuxDo'))
+const providerNameText = computed(() => providerName.value)
 
 const isProcessing = ref(true)
 const errorMessage = ref('')
@@ -296,7 +300,6 @@ const totpTempToken = ref('')
 const totpCode = ref('')
 const totpError = ref('')
 const totpUserEmailMasked = ref('')
-const providerName = 'LinuxDo'
 
 const needsCreateAccount = computed(() => pendingAccountAction.value === 'create_account')
 const needsChooser = computed(() => pendingAccountAction.value === 'choose_account_action')
@@ -340,7 +343,7 @@ function persistPendingAuthSession(redirect?: string) {
   authStore.setPendingAuthSession({
     token: '',
     token_field: 'pending_oauth_token',
-    provider: 'linuxdo',
+    provider: provider.value,
     redirect: sanitizeRedirectPath(redirect || redirectTo.value)
   })
 }
@@ -580,7 +583,7 @@ async function finalizeCompletion(completion: PendingOAuthExchangeResponse, redi
   }
 
   if (!isOAuthLoginCompletion(completion)) {
-    throw new Error(t('auth.linuxdo.callbackMissingToken'))
+    throw new Error(t(`auth.${provider.value}.callbackMissingToken`))
   }
 
   persistOAuthTokenContext(completion)
@@ -638,7 +641,7 @@ async function handleSubmitInvitation() {
     const decision = currentAdoptionDecision()
     const completion: LinuxDoPendingActionResponse = legacyPendingOAuthToken.value
       ? (
-          await apiClient.post<LinuxDoPendingActionResponse>('/auth/oauth/linuxdo/complete-registration', {
+          await apiClient.post<LinuxDoPendingActionResponse>(`/auth/oauth/${provider.value}/complete-registration`, {
             pending_oauth_token: legacyPendingOAuthToken.value,
             invitation_code: invitationCode.value.trim(),
             ...oauthAffiliatePayload(affCode),
@@ -646,13 +649,24 @@ async function handleSubmitInvitation() {
           })
         ).data
       : affCode
-        ? await completeLinuxDoOAuthRegistration(invitationCode.value.trim(), decision, affCode)
-        : await completeLinuxDoOAuthRegistration(invitationCode.value.trim(), decision)
+        ? (
+            await apiClient.post<LinuxDoPendingActionResponse>(`/auth/oauth/${provider.value}/complete-registration`, {
+              invitation_code: invitationCode.value.trim(),
+              ...oauthAffiliatePayload(affCode),
+              ...serializeAdoptionDecision(decision)
+            })
+          ).data
+        : (
+            await apiClient.post<LinuxDoPendingActionResponse>(`/auth/oauth/${provider.value}/complete-registration`, {
+              invitation_code: invitationCode.value.trim(),
+              ...serializeAdoptionDecision(decision)
+            })
+          ).data
     await finalizePendingAccountResponse(completion)
   } catch (e: unknown) {
     const err = e as { message?: string; response?: { data?: { message?: string } } }
     invitationError.value =
-      err.response?.data?.message || err.message || t('auth.linuxdo.completeRegistrationFailed')
+      err.response?.data?.message || err.message || t(`auth.${provider.value}.completeRegistrationFailed`)
   } finally {
     isSubmitting.value = false
   }

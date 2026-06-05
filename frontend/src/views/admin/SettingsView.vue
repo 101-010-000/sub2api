@@ -1787,6 +1787,291 @@
             </div>
           </div>
 
+          <!-- Feishu Connect OAuth 登录 -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ localText("飞书登录", "Feishu Sign-in") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{
+                  localText(
+                    "配置飞书应用 OAuth 登录；用户资料页会自动识别 Casdoor/OIDC 中的飞书 open_id，没有绑定时可点击飞书发起绑定。",
+                    "Configure Feishu OAuth sign-in. Profile bindings can recognize Feishu open_id from Casdoor/OIDC claims and start a Feishu bind flow when missing.",
+                  )
+                }}
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="font-medium text-gray-900 dark:text-white">
+                    {{ localText("启用飞书登录", "Enable Feishu sign-in") }}
+                  </label>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{
+                      localText(
+                        "启用后登录页和资料页绑定入口可使用飞书 OAuth。",
+                        "When enabled, Feishu OAuth can be used from sign-in and profile binding flows.",
+                      )
+                    }}
+                  </p>
+                </div>
+                <Toggle v-model="form.feishu_connect_enabled" />
+              </div>
+
+              <div
+                v-if="form.feishu_connect_enabled"
+                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+              >
+                <div class="grid grid-cols-1 gap-6">
+                  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ localText("App ID", "App ID") }}
+                      </label>
+                      <input
+                        v-model="form.feishu_connect_app_id"
+                        type="text"
+                        class="input font-mono text-sm"
+                        placeholder="cli_xxxxxxxxxxxxx"
+                      />
+                    </div>
+
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ localText("App Secret", "App Secret") }}
+                      </label>
+                      <input
+                        v-model="form.feishu_connect_app_secret"
+                        type="password"
+                        class="input font-mono text-sm"
+                        :placeholder="
+                          form.feishu_connect_app_secret_configured
+                            ? localText('已配置，留空保持不变', 'Configured, leave empty to keep unchanged')
+                            : 'App Secret'
+                        "
+                      />
+                      <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        {{
+                          form.feishu_connect_app_secret_configured
+                            ? localText("留空不会覆盖当前密钥。", "Leaving this empty keeps the current secret.")
+                            : localText("从飞书开放平台应用凭证页复制。", "Copy this from the Feishu developer app credentials page.")
+                        }}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("后端回调地址", "Backend callback URL") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_connect_redirect_url"
+                      type="url"
+                      class="input font-mono text-sm"
+                      placeholder="https://your-domain.com/api/v1/auth/oauth/feishu/callback"
+                    />
+                    <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-sm w-fit"
+                        @click="setAndCopyFeishuRedirectUrl"
+                      >
+                        {{ localText("快速填入并复制", "Set and copy") }}
+                      </button>
+                      <code
+                        v-if="feishuRedirectUrlSuggestion"
+                        class="select-all break-all rounded bg-gray-50 px-2 py-1 font-mono text-xs text-gray-600 dark:bg-dark-800 dark:text-gray-300"
+                      >
+                        {{ feishuRedirectUrlSuggestion }}
+                      </code>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("前端回调路径", "Frontend callback path") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_connect_frontend_redirect_url"
+                      type="text"
+                      class="input font-mono text-sm"
+                      placeholder="/auth/feishu/callback"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ localText("授权地址", "Authorize URL") }}
+                      </label>
+                      <input
+                        v-model="form.feishu_connect_authorize_url"
+                        type="url"
+                        class="input font-mono text-sm"
+                        placeholder="https://accounts.feishu.cn/open-apis/authen/v1/authorize"
+                      />
+                    </div>
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ localText("Token 地址", "Token URL") }}
+                      </label>
+                      <input
+                        v-model="form.feishu_connect_token_url"
+                        type="url"
+                        class="input font-mono text-sm"
+                        placeholder="https://open.feishu.cn/open-apis/authen/v2/oauth/token"
+                      />
+                    </div>
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ localText("UserInfo 地址", "UserInfo URL") }}
+                      </label>
+                      <input
+                        v-model="form.feishu_connect_userinfo_url"
+                        type="url"
+                        class="input font-mono text-sm"
+                        placeholder="https://open.feishu.cn/open-apis/authen/v1/user_info"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("Scopes", "Scopes") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_connect_scopes"
+                      type="text"
+                      class="input font-mono text-sm"
+                      placeholder=""
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{ localText("通常可留空，按飞书应用默认授权范围执行。", "Usually empty; Feishu will use the app's default authorization scopes.") }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feishu Notification App -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ localText("飞书通知 App", "Feishu Notification App") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{
+                  localText(
+                    "配置用于发送飞书消息的应用；用户需要在资料页单独绑定该应用，绑定后默认开启飞书通知。",
+                    "Configure the app used for Feishu messages. Users bind this app from profile settings; Feishu notifications are enabled by default after binding.",
+                  )
+                }}
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <label class="font-medium text-gray-900 dark:text-white">
+                    {{ localText("启用飞书通知", "Enable Feishu notifications") }}
+                  </label>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    {{
+                      localText(
+                        "普通用户通知会优先尝试飞书，未绑定或发送失败时回落邮件。",
+                        "User notifications try Feishu first and fall back to email when unbound or delivery fails.",
+                      )
+                    }}
+                  </p>
+                </div>
+                <Toggle v-model="form.feishu_notify_enabled" />
+              </div>
+
+              <div
+                v-if="form.feishu_notify_enabled"
+                class="grid grid-cols-1 gap-6 border-t border-gray-100 pt-4 dark:border-dark-700"
+              >
+                <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("App ID", "App ID") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_notify_app_id"
+                      type="text"
+                      class="input font-mono text-sm"
+                      placeholder="cli_xxxxxxxxxxxxx"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("App Secret", "App Secret") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_notify_app_secret"
+                      type="password"
+                      class="input font-mono text-sm"
+                      :placeholder="
+                        form.feishu_notify_app_secret_configured
+                          ? localText('已配置，留空保持不变', 'Configured, leave empty to keep unchanged')
+                          : 'App Secret'
+                      "
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{
+                        form.feishu_notify_app_secret_configured
+                          ? localText("留空不会覆盖当前密钥。", "Leaving this empty keeps the current secret.")
+                          : localText("通知 App 需要具备发送应用消息权限。", "The notification app needs permission to send app messages.")
+                      }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("Tenant Token URL", "Tenant Token URL") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_notify_token_url"
+                      type="url"
+                      class="input font-mono text-sm"
+                      placeholder="https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("Message URL", "Message URL") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_notify_message_url"
+                      type="url"
+                      class="input font-mono text-sm"
+                      placeholder="https://open.feishu.cn/open-apis/im/v1/messages"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {{ localText("面板路径", "Panel URL") }}
+                    </label>
+                    <input
+                      v-model="form.feishu_notify_panel_url"
+                      type="text"
+                      class="input font-mono text-sm"
+                      placeholder="/feishu/panel"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- GitHub / Google 邮箱快捷登录 -->
           <div class="card">
             <div
@@ -6966,6 +7251,8 @@ type SettingsForm = Omit<
   turnstile_secret_key: string;
   linuxdo_connect_client_secret: string;
   dingtalk_connect_client_secret: string;
+  feishu_connect_app_secret: string;
+  feishu_notify_app_secret: string;
   wechat_connect_app_secret: string;
   wechat_connect_open_app_secret: string;
   wechat_connect_mp_app_secret: string;
@@ -7090,6 +7377,25 @@ const form = reactive<SettingsForm>({
   dingtalk_connect_sync_corp_email_attr_name: "钉钉企业邮箱",
   dingtalk_connect_sync_display_name_attr_name: "钉钉姓名",
   dingtalk_connect_sync_dept_attr_name: "钉钉部门",
+  // Feishu Connect OAuth 登录
+  feishu_connect_enabled: false,
+  feishu_connect_app_id: "",
+  feishu_connect_app_secret: "",
+  feishu_connect_app_secret_configured: false,
+  feishu_connect_authorize_url: "https://accounts.feishu.cn/open-apis/authen/v1/authorize",
+  feishu_connect_token_url: "https://open.feishu.cn/open-apis/authen/v2/oauth/token",
+  feishu_connect_userinfo_url: "https://open.feishu.cn/open-apis/authen/v1/user_info",
+  feishu_connect_scopes: "",
+  feishu_connect_redirect_url: "",
+  feishu_connect_frontend_redirect_url: "/auth/feishu/callback",
+  // Feishu Notification App
+  feishu_notify_enabled: false,
+  feishu_notify_app_id: "",
+  feishu_notify_app_secret: "",
+  feishu_notify_app_secret_configured: false,
+  feishu_notify_token_url: "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+  feishu_notify_message_url: "https://open.feishu.cn/open-apis/im/v1/messages",
+  feishu_notify_panel_url: "/feishu/panel",
   wechat_connect_enabled: false,
   wechat_connect_app_id: "",
   wechat_connect_app_secret: "",
@@ -7239,6 +7545,14 @@ const authSourceDefaultsMeta = computed(() => [
     description: localText(
       "通过钉钉首次注册或首次绑定时应用。",
       "Applied on first signup or first bind through DingTalk.",
+    ),
+  },
+  {
+    source: "feishu" as AuthSourceType,
+    title: "飞书",
+    description: localText(
+      "通过飞书首次注册或首次绑定时应用。",
+      "Applied on first signup or first bind through Feishu.",
     ),
   },
 ]);
@@ -7548,6 +7862,25 @@ async function setAndCopyLinuxdoRedirectUrl() {
   );
 }
 
+const feishuRedirectUrlSuggestion = computed(() => {
+  if (typeof window === "undefined") return "";
+  const origin =
+    window.location.origin ||
+    `${window.location.protocol}//${window.location.host}`;
+  return `${origin}/api/v1/auth/oauth/feishu/callback`;
+});
+
+async function setAndCopyFeishuRedirectUrl() {
+  const url = feishuRedirectUrlSuggestion.value;
+  if (!url) return;
+
+  form.feishu_connect_redirect_url = url;
+  await copyToClipboard(
+    url,
+    localText("飞书回调地址已写入并复制。", "Feishu callback URL set and copied."),
+  );
+}
+
 type EmailOAuthProvider = "github" | "google";
 
 const githubOAuthRedirectUrlSuggestion = computed(() => {
@@ -7826,6 +8159,8 @@ async function loadSettings() {
     form.turnstile_secret_key = "";
     form.linuxdo_connect_client_secret = "";
     form.dingtalk_connect_client_secret = "";
+    form.feishu_connect_app_secret = "";
+    form.feishu_notify_app_secret = "";
     form.github_oauth_client_secret = "";
     form.google_oauth_client_secret = "";
     form.wechat_connect_app_secret = "";
@@ -8197,6 +8532,23 @@ async function saveSettings() {
       dingtalk_connect_sync_corp_email_attr_name: form.dingtalk_connect_sync_corp_email_attr_name,
       dingtalk_connect_sync_display_name_attr_name: form.dingtalk_connect_sync_display_name_attr_name,
       dingtalk_connect_sync_dept_attr_name: form.dingtalk_connect_sync_dept_attr_name,
+      feishu_connect_enabled: form.feishu_connect_enabled,
+      feishu_connect_app_id: form.feishu_connect_app_id,
+      feishu_connect_app_secret:
+        form.feishu_connect_app_secret || undefined,
+      feishu_connect_authorize_url: form.feishu_connect_authorize_url,
+      feishu_connect_token_url: form.feishu_connect_token_url,
+      feishu_connect_userinfo_url: form.feishu_connect_userinfo_url,
+      feishu_connect_scopes: form.feishu_connect_scopes,
+      feishu_connect_redirect_url: form.feishu_connect_redirect_url,
+      feishu_connect_frontend_redirect_url:
+        form.feishu_connect_frontend_redirect_url,
+      feishu_notify_enabled: form.feishu_notify_enabled,
+      feishu_notify_app_id: form.feishu_notify_app_id,
+      feishu_notify_app_secret: form.feishu_notify_app_secret || undefined,
+      feishu_notify_token_url: form.feishu_notify_token_url,
+      feishu_notify_message_url: form.feishu_notify_message_url,
+      feishu_notify_panel_url: form.feishu_notify_panel_url,
       wechat_connect_enabled: form.wechat_connect_enabled,
       wechat_connect_app_id:
         form.wechat_connect_open_app_id ||
@@ -8388,6 +8740,8 @@ async function saveSettings() {
     form.turnstile_secret_key = "";
     form.linuxdo_connect_client_secret = "";
     form.dingtalk_connect_client_secret = "";
+    form.feishu_connect_app_secret = "";
+    form.feishu_notify_app_secret = "";
     form.github_oauth_client_secret = "";
     form.google_oauth_client_secret = "";
     form.wechat_connect_app_secret = "";

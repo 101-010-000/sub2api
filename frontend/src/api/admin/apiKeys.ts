@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from '../client'
-import type { ApiKey } from '@/types'
+import type { ApiKey, ApiKeyRuntimeStatus, FetchOptions } from '@/types'
 
 export interface UpdateApiKeyGroupResult {
   api_key: ApiKey
@@ -26,8 +26,49 @@ export async function updateApiKeyGroup(id: number, groupId: number | null): Pro
   return data
 }
 
+export async function updateApiKeyRuntimeLimits(
+  id: number,
+  limits: {
+    max_active_ips?: number
+    ip_idle_timeout_seconds?: number
+    max_concurrency?: number
+  }
+): Promise<UpdateApiKeyGroupResult> {
+  const { data } = await apiClient.put<UpdateApiKeyGroupResult>(`/admin/api-keys/${id}`, limits)
+  return data
+}
+
+export async function getRuntime(
+  id: number,
+  options?: FetchOptions
+): Promise<ApiKeyRuntimeStatus> {
+  const { data } = await apiClient.get<ApiKeyRuntimeStatus>(`/admin/api-keys/${id}/runtime`, {
+    signal: options?.signal
+  })
+  return data
+}
+
+export async function removeRuntimeIP(id: number, ip: string): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>(
+    `/admin/api-keys/${id}/runtime/ips/remove`,
+    { ip }
+  )
+  return data
+}
+
+export async function clearRuntimeIPs(id: number): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>(
+    `/admin/api-keys/${id}/runtime/ips/clear`
+  )
+  return data
+}
+
 export const apiKeysAPI = {
-  updateApiKeyGroup
+  updateApiKeyGroup,
+  updateApiKeyRuntimeLimits,
+  getRuntime,
+  removeRuntimeIP,
+  clearRuntimeIPs
 }
 
 export default apiKeysAPI

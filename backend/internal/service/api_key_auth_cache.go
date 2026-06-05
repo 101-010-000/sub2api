@@ -12,6 +12,9 @@ type APIKeyAuthSnapshot struct {
 	Status      string                   `json:"status"`
 	IPWhitelist []string                 `json:"ip_whitelist,omitempty"`
 	IPBlacklist []string                 `json:"ip_blacklist,omitempty"`
+	MaxActiveIPs         int `json:"max_active_ips"`
+	IPIdleTimeoutSeconds int `json:"ip_idle_timeout_seconds"`
+	MaxConcurrency       int `json:"max_concurrency"`
 	User        APIKeyAuthUserSnapshot   `json:"user"`
 	Group       *APIKeyAuthGroupSnapshot `json:"group,omitempty"`
 

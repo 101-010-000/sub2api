@@ -64,7 +64,8 @@ export type AuthSourceType =
   | "wechat"
   | "github"
   | "google"
-  | "dingtalk";
+  | "dingtalk"
+  | "feishu";
 
 export interface AuthSourceDefaultsValue {
   balance: number;
@@ -109,6 +110,7 @@ const AUTH_SOURCE_TYPES: AuthSourceType[] = [
   "github",
   "google",
   "dingtalk",
+  "feishu",
 ];
 const AUTH_SOURCE_DEFAULT_BALANCE = 0;
 const AUTH_SOURCE_DEFAULT_CONCURRENCY = 5;
@@ -404,6 +406,11 @@ export interface SystemSettings {
   auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
   auth_source_default_dingtalk_grant_on_signup?: boolean;
   auth_source_default_dingtalk_grant_on_first_bind?: boolean;
+  auth_source_default_feishu_balance?: number;
+  auth_source_default_feishu_concurrency?: number;
+  auth_source_default_feishu_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_feishu_grant_on_signup?: boolean;
+  auth_source_default_feishu_grant_on_first_bind?: boolean;
   auth_source_default_github_balance?: number;
   auth_source_default_github_concurrency?: number;
   auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
@@ -424,6 +431,7 @@ export interface SystemSettings {
   auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
+  auth_source_default_feishu_platform_quotas?: DefaultPlatformQuotasMap;
   // OEM settings
   site_name: string;
   site_logo: string;
@@ -475,6 +483,23 @@ export interface SystemSettings {
   dingtalk_connect_sync_corp_email_attr_name: string;
   dingtalk_connect_sync_display_name_attr_name: string;
   dingtalk_connect_sync_dept_attr_name: string;
+
+  // Feishu Connect OAuth settings
+  feishu_connect_enabled: boolean;
+  feishu_connect_app_id: string;
+  feishu_connect_app_secret_configured: boolean;
+  feishu_connect_authorize_url: string;
+  feishu_connect_token_url: string;
+  feishu_connect_userinfo_url: string;
+  feishu_connect_scopes: string;
+  feishu_connect_redirect_url: string;
+  feishu_connect_frontend_redirect_url: string;
+  feishu_notify_enabled: boolean;
+  feishu_notify_app_id: string;
+  feishu_notify_app_secret_configured: boolean;
+  feishu_notify_token_url: string;
+  feishu_notify_message_url: string;
+  feishu_notify_panel_url: string;
 
   // WeChat Connect OAuth settings
   wechat_connect_enabled: boolean;
@@ -660,6 +685,11 @@ export interface UpdateSettingsRequest {
   auth_source_default_dingtalk_subscriptions?: DefaultSubscriptionSetting[];
   auth_source_default_dingtalk_grant_on_signup?: boolean;
   auth_source_default_dingtalk_grant_on_first_bind?: boolean;
+  auth_source_default_feishu_balance?: number;
+  auth_source_default_feishu_concurrency?: number;
+  auth_source_default_feishu_subscriptions?: DefaultSubscriptionSetting[];
+  auth_source_default_feishu_grant_on_signup?: boolean;
+  auth_source_default_feishu_grant_on_first_bind?: boolean;
   auth_source_default_github_balance?: number;
   auth_source_default_github_concurrency?: number;
   auth_source_default_github_subscriptions?: DefaultSubscriptionSetting[];
@@ -680,6 +710,7 @@ export interface UpdateSettingsRequest {
   auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
+  auth_source_default_feishu_platform_quotas?: DefaultPlatformQuotasMap;
   site_name?: string;
   site_logo?: string;
   site_subtitle?: string;
@@ -724,6 +755,21 @@ export interface UpdateSettingsRequest {
   dingtalk_connect_sync_corp_email_attr_name?: string;
   dingtalk_connect_sync_display_name_attr_name?: string;
   dingtalk_connect_sync_dept_attr_name?: string;
+  feishu_connect_enabled?: boolean;
+  feishu_connect_app_id?: string;
+  feishu_connect_app_secret?: string;
+  feishu_connect_authorize_url?: string;
+  feishu_connect_token_url?: string;
+  feishu_connect_userinfo_url?: string;
+  feishu_connect_scopes?: string;
+  feishu_connect_redirect_url?: string;
+  feishu_connect_frontend_redirect_url?: string;
+  feishu_notify_enabled?: boolean;
+  feishu_notify_app_id?: string;
+  feishu_notify_app_secret?: string;
+  feishu_notify_token_url?: string;
+  feishu_notify_message_url?: string;
+  feishu_notify_panel_url?: string;
   wechat_connect_enabled?: boolean;
   wechat_connect_app_id?: string;
   wechat_connect_app_secret?: string;

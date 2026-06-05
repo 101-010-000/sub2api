@@ -119,6 +119,9 @@ const WeChatConnectSyntheticEmailDomain = "@wechat-connect.invalid"
 // DingTalkConnectSyntheticEmailDomain 是 DingTalk Connect 用户的合成邮箱后缀（RFC 保留域名）。
 const DingTalkConnectSyntheticEmailDomain = "@dingtalk-connect.invalid"
 
+// FeishuConnectSyntheticEmailDomain 是 Feishu Connect 用户的合成邮箱后缀（RFC 保留域名）。
+const FeishuConnectSyntheticEmailDomain = "@feishu-connect.invalid"
+
 // Setting keys
 const (
 	// 注册设置
@@ -184,6 +187,25 @@ const (
 	SettingKeyDingTalkConnectSyncCorpEmailAttrName   = "dingtalk_connect_sync_corp_email_attr_name"
 	SettingKeyDingTalkConnectSyncDisplayNameAttrName = "dingtalk_connect_sync_display_name_attr_name"
 	SettingKeyDingTalkConnectSyncDeptAttrName        = "dingtalk_connect_sync_dept_attr_name"
+
+	// Feishu Connect OAuth 登录设置
+	SettingKeyFeishuConnectEnabled             = "feishu_connect_enabled"
+	SettingKeyFeishuConnectAppID               = "feishu_connect_app_id"
+	SettingKeyFeishuConnectAppSecret           = "feishu_connect_app_secret"
+	SettingKeyFeishuConnectAuthorizeURL        = "feishu_connect_authorize_url"
+	SettingKeyFeishuConnectTokenURL            = "feishu_connect_token_url"
+	SettingKeyFeishuConnectUserInfoURL         = "feishu_connect_userinfo_url"
+	SettingKeyFeishuConnectScopes              = "feishu_connect_scopes"
+	SettingKeyFeishuConnectRedirectURL         = "feishu_connect_redirect_url"
+	SettingKeyFeishuConnectFrontendRedirectURL = "feishu_connect_frontend_redirect_url"
+
+	// Feishu Notification App 设置
+	SettingKeyFeishuNotifyEnabled    = "feishu_notify_enabled"
+	SettingKeyFeishuNotifyAppID      = "feishu_notify_app_id"
+	SettingKeyFeishuNotifyAppSecret  = "feishu_notify_app_secret"
+	SettingKeyFeishuNotifyTokenURL   = "feishu_notify_token_url"
+	SettingKeyFeishuNotifyMessageURL = "feishu_notify_message_url"
+	SettingKeyFeishuNotifyPanelURL   = "feishu_notify_panel_url"
 
 	// WeChat Connect OAuth 登录设置
 	SettingKeyWeChatConnectEnabled             = "wechat_connect_enabled"
@@ -292,12 +314,17 @@ const (
 	SettingKeyAuthSourceDefaultGoogleSubscriptions      = "auth_source_default_google_subscriptions"
 	SettingKeyAuthSourceDefaultGoogleGrantOnSignup      = "auth_source_default_google_grant_on_signup"
 	SettingKeyAuthSourceDefaultGoogleGrantOnFirstBind   = "auth_source_default_google_grant_on_first_bind"
-	SettingKeyAuthSourceDefaultDingTalkBalance          = "auth_source_default_dingtalk_balance"
-	SettingKeyAuthSourceDefaultDingTalkConcurrency      = "auth_source_default_dingtalk_concurrency"
-	SettingKeyAuthSourceDefaultDingTalkSubscriptions    = "auth_source_default_dingtalk_subscriptions"
-	SettingKeyAuthSourceDefaultDingTalkGrantOnSignup    = "auth_source_default_dingtalk_grant_on_signup"
-	SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind = "auth_source_default_dingtalk_grant_on_first_bind"
-	SettingKeyForceEmailOnThirdPartySignup              = "force_email_on_third_party_signup"
+		SettingKeyAuthSourceDefaultDingTalkBalance          = "auth_source_default_dingtalk_balance"
+		SettingKeyAuthSourceDefaultDingTalkConcurrency      = "auth_source_default_dingtalk_concurrency"
+		SettingKeyAuthSourceDefaultDingTalkSubscriptions    = "auth_source_default_dingtalk_subscriptions"
+		SettingKeyAuthSourceDefaultDingTalkGrantOnSignup    = "auth_source_default_dingtalk_grant_on_signup"
+		SettingKeyAuthSourceDefaultDingTalkGrantOnFirstBind = "auth_source_default_dingtalk_grant_on_first_bind"
+		SettingKeyAuthSourceDefaultFeishuBalance            = "auth_source_default_feishu_balance"
+		SettingKeyAuthSourceDefaultFeishuConcurrency        = "auth_source_default_feishu_concurrency"
+		SettingKeyAuthSourceDefaultFeishuSubscriptions      = "auth_source_default_feishu_subscriptions"
+		SettingKeyAuthSourceDefaultFeishuGrantOnSignup      = "auth_source_default_feishu_grant_on_signup"
+		SettingKeyAuthSourceDefaultFeishuGrantOnFirstBind   = "auth_source_default_feishu_grant_on_first_bind"
+		SettingKeyForceEmailOnThirdPartySignup              = "force_email_on_third_party_signup"
 
 	// 管理员 API Key
 	SettingKeyAdminAPIKey = "admin_api_key" // 全局管理员 API Key（用于外部系统集成）

@@ -32,9 +32,30 @@ export interface NotifyEmailEntry {
   verified: boolean
 }
 
+export interface FeishuNotificationStatus {
+  bound: boolean
+  enabled: boolean
+  app_id?: string
+  tenant_key?: string
+  union_id_hint?: string
+  open_id_hint?: string
+  bind_start_path?: string
+  panel_url?: string
+  can_open_panel: boolean
+  notification_enabled: boolean
+}
+
+export interface UserNotificationSettings {
+  feishu: FeishuNotificationStatus
+}
+
+export interface UpdateUserNotificationSettingsRequest {
+  feishu_notification_enabled?: boolean
+}
+
 // ==================== User & Auth Types ====================
 
-export type UserAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google' | 'dingtalk'
+export type UserAuthProvider = 'email' | 'linuxdo' | 'oidc' | 'wechat' | 'github' | 'google' | 'dingtalk' | 'feishu'
 
 export interface UserAuthBindingStatus {
   bound?: boolean
@@ -84,6 +105,8 @@ export interface User {
   linuxdo_bound?: boolean
   oidc_bound?: boolean
   wechat_bound?: boolean
+  dingtalk_bound?: boolean
+  feishu_bound?: boolean
   role: 'admin' | 'user' // User role for authorization
   balance: number // User balance for API usage
   concurrency: number // Allowed concurrent requests
@@ -217,6 +240,7 @@ export interface PublicSettings {
   custom_endpoints: CustomEndpoint[]
   linuxdo_oauth_enabled: boolean
   dingtalk_oauth_enabled?: boolean
+  feishu_oauth_enabled?: boolean
   wechat_oauth_enabled: boolean
   wechat_oauth_open_enabled?: boolean
   wechat_oauth_mp_enabled?: boolean
@@ -569,6 +593,9 @@ export interface ApiKey {
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
   ip_whitelist: string[]
   ip_blacklist: string[]
+  max_active_ips: number
+  ip_idle_timeout_seconds: number
+  max_concurrency: number
   last_used_at: string | null
   quota: number // Quota limit in USD (0 = unlimited)
   quota_used: number // Used quota amount in USD
@@ -590,12 +617,31 @@ export interface ApiKey {
   reset_7d_at: string | null
 }
 
+export interface ApiKeyActiveIP {
+  ip: string
+  last_seen_at: string
+  expires_at: string
+  remaining_idle_seconds: number
+}
+
+export interface ApiKeyRuntimeStatus {
+  max_active_ips: number
+  ip_idle_timeout_seconds: number
+  max_concurrency: number
+  current_concurrency: number
+  active_ip_count: number
+  active_ips: ApiKeyActiveIP[]
+}
+
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
   ip_blacklist?: string[]
+  max_active_ips?: number
+  ip_idle_timeout_seconds?: number
+  max_concurrency?: number
   quota?: number // Quota limit in USD (0 = unlimited)
   expires_in_days?: number // Days until expiry (null = never expires)
   rate_limit_5h?: number
@@ -609,6 +655,9 @@ export interface UpdateApiKeyRequest {
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]
   ip_blacklist?: string[]
+  max_active_ips?: number
+  ip_idle_timeout_seconds?: number
+  max_concurrency?: number
   quota?: number // Quota limit in USD (null = no change, 0 = unlimited)
   expires_at?: string | null // Expiration time (null = no change)
   reset_quota?: boolean // Reset quota_used to 0
