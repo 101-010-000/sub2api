@@ -117,6 +117,31 @@ export async function unbindAuthIdentity(provider: BindableOAuthProvider): Promi
 
 export type BindableOAuthProvider = Exclude<UserAuthProvider, 'email'>
 
+export interface UserRiskControlBanStatus {
+  user_id: number
+  banned: boolean
+  reason: string
+  triggered_at?: string
+  banned_until?: string
+  remaining_seconds: number
+  self_unban_available: boolean
+  self_unban_attempts_used: number
+  self_unban_max_attempts: number
+  self_unban_wait_seconds: number
+  self_unban_window_reset_at?: string
+}
+
+export interface UserRiskControlSelfUnbanResponse {
+  user_id: number
+  unbanned: boolean
+  status: string
+  attempts_used: number
+  max_attempts: number
+  wait_seconds: number
+  window_reset_at?: string
+  message: string
+}
+
 interface BuildOAuthBindingStartURLOptions {
   redirectTo?: string
   wechatOAuthSettings?: WeChatOAuthPublicSettings | null
@@ -194,6 +219,18 @@ export async function getMyPlatformQuotas(): Promise<PlatformQuotasResponse> {
   return data
 }
 
+export async function getRiskControlBanStatus(): Promise<UserRiskControlBanStatus> {
+  const { data } = await apiClient.get<UserRiskControlBanStatus>('/user/risk-control/ban-status')
+  return data
+}
+
+export async function selfUnbanRiskControl(): Promise<UserRiskControlSelfUnbanResponse> {
+  const { data } = await apiClient.post<UserRiskControlSelfUnbanResponse>(
+    '/user/risk-control/self-unban'
+  )
+  return data
+}
+
 export const userAPI = {
   getProfile,
   updateProfile,
@@ -210,6 +247,8 @@ export const userAPI = {
   getAffiliateDetail,
   transferAffiliateQuota,
   getMyPlatformQuotas,
+  getRiskControlBanStatus,
+  selfUnbanRiskControl,
 }
 
 export default userAPI

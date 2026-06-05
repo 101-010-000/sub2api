@@ -1184,6 +1184,27 @@ export default {
     passwordTooShort: '密码至少需要 8 个字符',
     passwordChangeSuccess: '密码修改成功',
     passwordChangeFailed: '密码修改失败',
+    riskControl: {
+      title: '风控状态',
+      description: '查看当前封禁状态，并在符合策略时自助解封。',
+      loadFailed: '加载风控状态失败',
+      banned: '当前已封禁',
+      notBanned: '当前账号风控状态正常',
+      remaining: '剩余封禁时间：{time}',
+      reason: '封禁原因：{reason}',
+      attempts: '自助解封次数：{used}/{max}',
+      waitSecond: '再次自助解封需等待：{time}',
+      noAttempts: '当前暂无可用自助解封次数',
+      windowReset: '自助解封次数将在 {time} 重置',
+      selfUnban: '自助解封',
+      unbanning: '解封中...',
+      unbanSuccess: '自助解封成功',
+      unbanFailed: '自助解封失败',
+      unbanUnavailable: '当前不可自助解封',
+      durationHours: '{hours} 小时 {minutes} 分钟',
+      durationMinutes: '{minutes} 分钟 {seconds} 秒',
+      durationSeconds: '{seconds} 秒'
+    },
     // TOTP 2FA
     totp: {
       title: '双因素认证 (2FA)',

@@ -1180,6 +1180,27 @@ export default {
     passwordTooShort: 'Password must be at least 8 characters long',
     passwordChangeSuccess: 'Password changed successfully',
     passwordChangeFailed: 'Failed to change password',
+    riskControl: {
+      title: 'Risk Control Status',
+      description: 'Review your current ban status and self-unban when policy allows.',
+      loadFailed: 'Failed to load risk control status',
+      banned: 'Currently banned',
+      notBanned: 'Your account risk control status is normal',
+      remaining: 'Ban time remaining: {time}',
+      reason: 'Ban reason: {reason}',
+      attempts: 'Self-unban attempts: {used}/{max}',
+      waitSecond: 'Wait before trying self-unban again: {time}',
+      noAttempts: 'No self-unban attempts are currently available',
+      windowReset: 'Self-unban attempts reset at {time}',
+      selfUnban: 'Self-unban',
+      unbanning: 'Unbanning...',
+      unbanSuccess: 'Self-unban succeeded',
+      unbanFailed: 'Self-unban failed',
+      unbanUnavailable: 'Self-unban is currently unavailable',
+      durationHours: '{hours}h {minutes}m',
+      durationMinutes: '{minutes}m {seconds}s',
+      durationSeconds: '{seconds}s'
+    },
     // TOTP 2FA
     totp: {
       title: 'Two-Factor Authentication (2FA)',
