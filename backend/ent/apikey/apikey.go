@@ -37,8 +37,8 @@ const (
 	FieldIPWhitelist = "ip_whitelist"
 	// FieldIPBlacklist holds the string denoting the ip_blacklist field in the database.
 	FieldIPBlacklist = "ip_blacklist"
-	// FieldMaxActiveIPs holds the string denoting the max_active_ips field in the database.
-	FieldMaxActiveIPs = "max_active_ips"
+	// FieldMaxActiveIps holds the string denoting the max_active_ips field in the database.
+	FieldMaxActiveIps = "max_active_ips"
 	// FieldIPIdleTimeoutSeconds holds the string denoting the ip_idle_timeout_seconds field in the database.
 	FieldIPIdleTimeoutSeconds = "ip_idle_timeout_seconds"
 	// FieldMaxConcurrency holds the string denoting the max_concurrency field in the database.
@@ -112,7 +112,7 @@ var Columns = []string{
 	FieldLastUsedAt,
 	FieldIPWhitelist,
 	FieldIPBlacklist,
-	FieldMaxActiveIPs,
+	FieldMaxActiveIps,
 	FieldIPIdleTimeoutSeconds,
 	FieldMaxConcurrency,
 	FieldQuota,
@@ -161,6 +161,18 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultMaxActiveIps holds the default value on creation for the "max_active_ips" field.
+	DefaultMaxActiveIps int
+	// MaxActiveIpsValidator is a validator for the "max_active_ips" field. It is called by the builders before save.
+	MaxActiveIpsValidator func(int) error
+	// DefaultIPIdleTimeoutSeconds holds the default value on creation for the "ip_idle_timeout_seconds" field.
+	DefaultIPIdleTimeoutSeconds int
+	// IPIdleTimeoutSecondsValidator is a validator for the "ip_idle_timeout_seconds" field. It is called by the builders before save.
+	IPIdleTimeoutSecondsValidator func(int) error
+	// DefaultMaxConcurrency holds the default value on creation for the "max_concurrency" field.
+	DefaultMaxConcurrency int
+	// MaxConcurrencyValidator is a validator for the "max_concurrency" field. It is called by the builders before save.
+	MaxConcurrencyValidator func(int) error
 	// DefaultQuota holds the default value on creation for the "quota" field.
 	DefaultQuota float64
 	// DefaultQuotaUsed holds the default value on creation for the "quota_used" field.
@@ -230,6 +242,21 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByLastUsedAt orders the results by the last_used_at field.
 func ByLastUsedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastUsedAt, opts...).ToFunc()
+}
+
+// ByMaxActiveIps orders the results by the max_active_ips field.
+func ByMaxActiveIps(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMaxActiveIps, opts...).ToFunc()
+}
+
+// ByIPIdleTimeoutSeconds orders the results by the ip_idle_timeout_seconds field.
+func ByIPIdleTimeoutSeconds(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIPIdleTimeoutSeconds, opts...).ToFunc()
+}
+
+// ByMaxConcurrency orders the results by the max_concurrency field.
+func ByMaxConcurrency(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMaxConcurrency, opts...).ToFunc()
 }
 
 // ByQuota orders the results by the quota field.

@@ -190,6 +190,69 @@ func (_u *APIKeyUpdate) ClearIPBlacklist() *APIKeyUpdate {
 	return _u
 }
 
+// SetMaxActiveIps sets the "max_active_ips" field.
+func (_u *APIKeyUpdate) SetMaxActiveIps(v int) *APIKeyUpdate {
+	_u.mutation.ResetMaxActiveIps()
+	_u.mutation.SetMaxActiveIps(v)
+	return _u
+}
+
+// SetNillableMaxActiveIps sets the "max_active_ips" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableMaxActiveIps(v *int) *APIKeyUpdate {
+	if v != nil {
+		_u.SetMaxActiveIps(*v)
+	}
+	return _u
+}
+
+// AddMaxActiveIps adds value to the "max_active_ips" field.
+func (_u *APIKeyUpdate) AddMaxActiveIps(v int) *APIKeyUpdate {
+	_u.mutation.AddMaxActiveIps(v)
+	return _u
+}
+
+// SetIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field.
+func (_u *APIKeyUpdate) SetIPIdleTimeoutSeconds(v int) *APIKeyUpdate {
+	_u.mutation.ResetIPIdleTimeoutSeconds()
+	_u.mutation.SetIPIdleTimeoutSeconds(v)
+	return _u
+}
+
+// SetNillableIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableIPIdleTimeoutSeconds(v *int) *APIKeyUpdate {
+	if v != nil {
+		_u.SetIPIdleTimeoutSeconds(*v)
+	}
+	return _u
+}
+
+// AddIPIdleTimeoutSeconds adds value to the "ip_idle_timeout_seconds" field.
+func (_u *APIKeyUpdate) AddIPIdleTimeoutSeconds(v int) *APIKeyUpdate {
+	_u.mutation.AddIPIdleTimeoutSeconds(v)
+	return _u
+}
+
+// SetMaxConcurrency sets the "max_concurrency" field.
+func (_u *APIKeyUpdate) SetMaxConcurrency(v int) *APIKeyUpdate {
+	_u.mutation.ResetMaxConcurrency()
+	_u.mutation.SetMaxConcurrency(v)
+	return _u
+}
+
+// SetNillableMaxConcurrency sets the "max_concurrency" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableMaxConcurrency(v *int) *APIKeyUpdate {
+	if v != nil {
+		_u.SetMaxConcurrency(*v)
+	}
+	return _u
+}
+
+// AddMaxConcurrency adds value to the "max_concurrency" field.
+func (_u *APIKeyUpdate) AddMaxConcurrency(v int) *APIKeyUpdate {
+	_u.mutation.AddMaxConcurrency(v)
+	return _u
+}
+
 // SetQuota sets the "quota" field.
 func (_u *APIKeyUpdate) SetQuota(v float64) *APIKeyUpdate {
 	_u.mutation.ResetQuota()
@@ -560,6 +623,21 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.MaxActiveIps(); ok {
+		if err := apikey.MaxActiveIpsValidator(v); err != nil {
+			return &ValidationError{Name: "max_active_ips", err: fmt.Errorf(`ent: validator failed for field "APIKey.max_active_ips": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.IPIdleTimeoutSeconds(); ok {
+		if err := apikey.IPIdleTimeoutSecondsValidator(v); err != nil {
+			return &ValidationError{Name: "ip_idle_timeout_seconds", err: fmt.Errorf(`ent: validator failed for field "APIKey.ip_idle_timeout_seconds": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.MaxConcurrency(); ok {
+		if err := apikey.MaxConcurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "max_concurrency", err: fmt.Errorf(`ent: validator failed for field "APIKey.max_concurrency": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -623,6 +701,24 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.IPBlacklistCleared() {
 		_spec.ClearField(apikey.FieldIPBlacklist, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.MaxActiveIps(); ok {
+		_spec.SetField(apikey.FieldMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedMaxActiveIps(); ok {
+		_spec.AddField(apikey.FieldMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.IPIdleTimeoutSeconds(); ok {
+		_spec.SetField(apikey.FieldIPIdleTimeoutSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedIPIdleTimeoutSeconds(); ok {
+		_spec.AddField(apikey.FieldIPIdleTimeoutSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.MaxConcurrency(); ok {
+		_spec.SetField(apikey.FieldMaxConcurrency, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedMaxConcurrency(); ok {
+		_spec.AddField(apikey.FieldMaxConcurrency, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)
@@ -974,6 +1070,69 @@ func (_u *APIKeyUpdateOne) AppendIPBlacklist(v []string) *APIKeyUpdateOne {
 // ClearIPBlacklist clears the value of the "ip_blacklist" field.
 func (_u *APIKeyUpdateOne) ClearIPBlacklist() *APIKeyUpdateOne {
 	_u.mutation.ClearIPBlacklist()
+	return _u
+}
+
+// SetMaxActiveIps sets the "max_active_ips" field.
+func (_u *APIKeyUpdateOne) SetMaxActiveIps(v int) *APIKeyUpdateOne {
+	_u.mutation.ResetMaxActiveIps()
+	_u.mutation.SetMaxActiveIps(v)
+	return _u
+}
+
+// SetNillableMaxActiveIps sets the "max_active_ips" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableMaxActiveIps(v *int) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetMaxActiveIps(*v)
+	}
+	return _u
+}
+
+// AddMaxActiveIps adds value to the "max_active_ips" field.
+func (_u *APIKeyUpdateOne) AddMaxActiveIps(v int) *APIKeyUpdateOne {
+	_u.mutation.AddMaxActiveIps(v)
+	return _u
+}
+
+// SetIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field.
+func (_u *APIKeyUpdateOne) SetIPIdleTimeoutSeconds(v int) *APIKeyUpdateOne {
+	_u.mutation.ResetIPIdleTimeoutSeconds()
+	_u.mutation.SetIPIdleTimeoutSeconds(v)
+	return _u
+}
+
+// SetNillableIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableIPIdleTimeoutSeconds(v *int) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetIPIdleTimeoutSeconds(*v)
+	}
+	return _u
+}
+
+// AddIPIdleTimeoutSeconds adds value to the "ip_idle_timeout_seconds" field.
+func (_u *APIKeyUpdateOne) AddIPIdleTimeoutSeconds(v int) *APIKeyUpdateOne {
+	_u.mutation.AddIPIdleTimeoutSeconds(v)
+	return _u
+}
+
+// SetMaxConcurrency sets the "max_concurrency" field.
+func (_u *APIKeyUpdateOne) SetMaxConcurrency(v int) *APIKeyUpdateOne {
+	_u.mutation.ResetMaxConcurrency()
+	_u.mutation.SetMaxConcurrency(v)
+	return _u
+}
+
+// SetNillableMaxConcurrency sets the "max_concurrency" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableMaxConcurrency(v *int) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetMaxConcurrency(*v)
+	}
+	return _u
+}
+
+// AddMaxConcurrency adds value to the "max_concurrency" field.
+func (_u *APIKeyUpdateOne) AddMaxConcurrency(v int) *APIKeyUpdateOne {
+	_u.mutation.AddMaxConcurrency(v)
 	return _u
 }
 
@@ -1360,6 +1519,21 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.MaxActiveIps(); ok {
+		if err := apikey.MaxActiveIpsValidator(v); err != nil {
+			return &ValidationError{Name: "max_active_ips", err: fmt.Errorf(`ent: validator failed for field "APIKey.max_active_ips": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.IPIdleTimeoutSeconds(); ok {
+		if err := apikey.IPIdleTimeoutSecondsValidator(v); err != nil {
+			return &ValidationError{Name: "ip_idle_timeout_seconds", err: fmt.Errorf(`ent: validator failed for field "APIKey.ip_idle_timeout_seconds": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.MaxConcurrency(); ok {
+		if err := apikey.MaxConcurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "max_concurrency", err: fmt.Errorf(`ent: validator failed for field "APIKey.max_concurrency": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -1440,6 +1614,24 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if _u.mutation.IPBlacklistCleared() {
 		_spec.ClearField(apikey.FieldIPBlacklist, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.MaxActiveIps(); ok {
+		_spec.SetField(apikey.FieldMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedMaxActiveIps(); ok {
+		_spec.AddField(apikey.FieldMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.IPIdleTimeoutSeconds(); ok {
+		_spec.SetField(apikey.FieldIPIdleTimeoutSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedIPIdleTimeoutSeconds(); ok {
+		_spec.AddField(apikey.FieldIPIdleTimeoutSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.MaxConcurrency(); ok {
+		_spec.SetField(apikey.FieldMaxConcurrency, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedMaxConcurrency(); ok {
+		_spec.AddField(apikey.FieldMaxConcurrency, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)

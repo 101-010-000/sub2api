@@ -139,6 +139,48 @@ func (_c *APIKeyCreate) SetIPBlacklist(v []string) *APIKeyCreate {
 	return _c
 }
 
+// SetMaxActiveIps sets the "max_active_ips" field.
+func (_c *APIKeyCreate) SetMaxActiveIps(v int) *APIKeyCreate {
+	_c.mutation.SetMaxActiveIps(v)
+	return _c
+}
+
+// SetNillableMaxActiveIps sets the "max_active_ips" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableMaxActiveIps(v *int) *APIKeyCreate {
+	if v != nil {
+		_c.SetMaxActiveIps(*v)
+	}
+	return _c
+}
+
+// SetIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field.
+func (_c *APIKeyCreate) SetIPIdleTimeoutSeconds(v int) *APIKeyCreate {
+	_c.mutation.SetIPIdleTimeoutSeconds(v)
+	return _c
+}
+
+// SetNillableIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableIPIdleTimeoutSeconds(v *int) *APIKeyCreate {
+	if v != nil {
+		_c.SetIPIdleTimeoutSeconds(*v)
+	}
+	return _c
+}
+
+// SetMaxConcurrency sets the "max_concurrency" field.
+func (_c *APIKeyCreate) SetMaxConcurrency(v int) *APIKeyCreate {
+	_c.mutation.SetMaxConcurrency(v)
+	return _c
+}
+
+// SetNillableMaxConcurrency sets the "max_concurrency" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableMaxConcurrency(v *int) *APIKeyCreate {
+	if v != nil {
+		_c.SetMaxConcurrency(*v)
+	}
+	return _c
+}
+
 // SetQuota sets the "quota" field.
 func (_c *APIKeyCreate) SetQuota(v float64) *APIKeyCreate {
 	_c.mutation.SetQuota(v)
@@ -387,6 +429,18 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.MaxActiveIps(); !ok {
+		v := apikey.DefaultMaxActiveIps
+		_c.mutation.SetMaxActiveIps(v)
+	}
+	if _, ok := _c.mutation.IPIdleTimeoutSeconds(); !ok {
+		v := apikey.DefaultIPIdleTimeoutSeconds
+		_c.mutation.SetIPIdleTimeoutSeconds(v)
+	}
+	if _, ok := _c.mutation.MaxConcurrency(); !ok {
+		v := apikey.DefaultMaxConcurrency
+		_c.mutation.SetMaxConcurrency(v)
+	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		v := apikey.DefaultQuota
 		_c.mutation.SetQuota(v)
@@ -455,6 +509,30 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.MaxActiveIps(); !ok {
+		return &ValidationError{Name: "max_active_ips", err: errors.New(`ent: missing required field "APIKey.max_active_ips"`)}
+	}
+	if v, ok := _c.mutation.MaxActiveIps(); ok {
+		if err := apikey.MaxActiveIpsValidator(v); err != nil {
+			return &ValidationError{Name: "max_active_ips", err: fmt.Errorf(`ent: validator failed for field "APIKey.max_active_ips": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.IPIdleTimeoutSeconds(); !ok {
+		return &ValidationError{Name: "ip_idle_timeout_seconds", err: errors.New(`ent: missing required field "APIKey.ip_idle_timeout_seconds"`)}
+	}
+	if v, ok := _c.mutation.IPIdleTimeoutSeconds(); ok {
+		if err := apikey.IPIdleTimeoutSecondsValidator(v); err != nil {
+			return &ValidationError{Name: "ip_idle_timeout_seconds", err: fmt.Errorf(`ent: validator failed for field "APIKey.ip_idle_timeout_seconds": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.MaxConcurrency(); !ok {
+		return &ValidationError{Name: "max_concurrency", err: errors.New(`ent: missing required field "APIKey.max_concurrency"`)}
+	}
+	if v, ok := _c.mutation.MaxConcurrency(); ok {
+		if err := apikey.MaxConcurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "max_concurrency", err: fmt.Errorf(`ent: validator failed for field "APIKey.max_concurrency": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Quota(); !ok {
@@ -546,6 +624,18 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IPBlacklist(); ok {
 		_spec.SetField(apikey.FieldIPBlacklist, field.TypeJSON, value)
 		_node.IPBlacklist = value
+	}
+	if value, ok := _c.mutation.MaxActiveIps(); ok {
+		_spec.SetField(apikey.FieldMaxActiveIps, field.TypeInt, value)
+		_node.MaxActiveIps = value
+	}
+	if value, ok := _c.mutation.IPIdleTimeoutSeconds(); ok {
+		_spec.SetField(apikey.FieldIPIdleTimeoutSeconds, field.TypeInt, value)
+		_node.IPIdleTimeoutSeconds = value
+	}
+	if value, ok := _c.mutation.MaxConcurrency(); ok {
+		_spec.SetField(apikey.FieldMaxConcurrency, field.TypeInt, value)
+		_node.MaxConcurrency = value
 	}
 	if value, ok := _c.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)
@@ -844,6 +934,60 @@ func (u *APIKeyUpsert) UpdateIPBlacklist() *APIKeyUpsert {
 // ClearIPBlacklist clears the value of the "ip_blacklist" field.
 func (u *APIKeyUpsert) ClearIPBlacklist() *APIKeyUpsert {
 	u.SetNull(apikey.FieldIPBlacklist)
+	return u
+}
+
+// SetMaxActiveIps sets the "max_active_ips" field.
+func (u *APIKeyUpsert) SetMaxActiveIps(v int) *APIKeyUpsert {
+	u.Set(apikey.FieldMaxActiveIps, v)
+	return u
+}
+
+// UpdateMaxActiveIps sets the "max_active_ips" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateMaxActiveIps() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldMaxActiveIps)
+	return u
+}
+
+// AddMaxActiveIps adds v to the "max_active_ips" field.
+func (u *APIKeyUpsert) AddMaxActiveIps(v int) *APIKeyUpsert {
+	u.Add(apikey.FieldMaxActiveIps, v)
+	return u
+}
+
+// SetIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field.
+func (u *APIKeyUpsert) SetIPIdleTimeoutSeconds(v int) *APIKeyUpsert {
+	u.Set(apikey.FieldIPIdleTimeoutSeconds, v)
+	return u
+}
+
+// UpdateIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateIPIdleTimeoutSeconds() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldIPIdleTimeoutSeconds)
+	return u
+}
+
+// AddIPIdleTimeoutSeconds adds v to the "ip_idle_timeout_seconds" field.
+func (u *APIKeyUpsert) AddIPIdleTimeoutSeconds(v int) *APIKeyUpsert {
+	u.Add(apikey.FieldIPIdleTimeoutSeconds, v)
+	return u
+}
+
+// SetMaxConcurrency sets the "max_concurrency" field.
+func (u *APIKeyUpsert) SetMaxConcurrency(v int) *APIKeyUpsert {
+	u.Set(apikey.FieldMaxConcurrency, v)
+	return u
+}
+
+// UpdateMaxConcurrency sets the "max_concurrency" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateMaxConcurrency() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldMaxConcurrency)
+	return u
+}
+
+// AddMaxConcurrency adds v to the "max_concurrency" field.
+func (u *APIKeyUpsert) AddMaxConcurrency(v int) *APIKeyUpsert {
+	u.Add(apikey.FieldMaxConcurrency, v)
 	return u
 }
 
@@ -1280,6 +1424,69 @@ func (u *APIKeyUpsertOne) UpdateIPBlacklist() *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) ClearIPBlacklist() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearIPBlacklist()
+	})
+}
+
+// SetMaxActiveIps sets the "max_active_ips" field.
+func (u *APIKeyUpsertOne) SetMaxActiveIps(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetMaxActiveIps(v)
+	})
+}
+
+// AddMaxActiveIps adds v to the "max_active_ips" field.
+func (u *APIKeyUpsertOne) AddMaxActiveIps(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddMaxActiveIps(v)
+	})
+}
+
+// UpdateMaxActiveIps sets the "max_active_ips" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateMaxActiveIps() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateMaxActiveIps()
+	})
+}
+
+// SetIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field.
+func (u *APIKeyUpsertOne) SetIPIdleTimeoutSeconds(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetIPIdleTimeoutSeconds(v)
+	})
+}
+
+// AddIPIdleTimeoutSeconds adds v to the "ip_idle_timeout_seconds" field.
+func (u *APIKeyUpsertOne) AddIPIdleTimeoutSeconds(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddIPIdleTimeoutSeconds(v)
+	})
+}
+
+// UpdateIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateIPIdleTimeoutSeconds() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateIPIdleTimeoutSeconds()
+	})
+}
+
+// SetMaxConcurrency sets the "max_concurrency" field.
+func (u *APIKeyUpsertOne) SetMaxConcurrency(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetMaxConcurrency(v)
+	})
+}
+
+// AddMaxConcurrency adds v to the "max_concurrency" field.
+func (u *APIKeyUpsertOne) AddMaxConcurrency(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddMaxConcurrency(v)
+	})
+}
+
+// UpdateMaxConcurrency sets the "max_concurrency" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateMaxConcurrency() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateMaxConcurrency()
 	})
 }
 
@@ -1918,6 +2125,69 @@ func (u *APIKeyUpsertBulk) UpdateIPBlacklist() *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) ClearIPBlacklist() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearIPBlacklist()
+	})
+}
+
+// SetMaxActiveIps sets the "max_active_ips" field.
+func (u *APIKeyUpsertBulk) SetMaxActiveIps(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetMaxActiveIps(v)
+	})
+}
+
+// AddMaxActiveIps adds v to the "max_active_ips" field.
+func (u *APIKeyUpsertBulk) AddMaxActiveIps(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddMaxActiveIps(v)
+	})
+}
+
+// UpdateMaxActiveIps sets the "max_active_ips" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateMaxActiveIps() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateMaxActiveIps()
+	})
+}
+
+// SetIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field.
+func (u *APIKeyUpsertBulk) SetIPIdleTimeoutSeconds(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetIPIdleTimeoutSeconds(v)
+	})
+}
+
+// AddIPIdleTimeoutSeconds adds v to the "ip_idle_timeout_seconds" field.
+func (u *APIKeyUpsertBulk) AddIPIdleTimeoutSeconds(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddIPIdleTimeoutSeconds(v)
+	})
+}
+
+// UpdateIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateIPIdleTimeoutSeconds() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateIPIdleTimeoutSeconds()
+	})
+}
+
+// SetMaxConcurrency sets the "max_concurrency" field.
+func (u *APIKeyUpsertBulk) SetMaxConcurrency(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetMaxConcurrency(v)
+	})
+}
+
+// AddMaxConcurrency adds v to the "max_concurrency" field.
+func (u *APIKeyUpsertBulk) AddMaxConcurrency(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddMaxConcurrency(v)
+	})
+}
+
+// UpdateMaxConcurrency sets the "max_concurrency" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateMaxConcurrency() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateMaxConcurrency()
 	})
 }
 

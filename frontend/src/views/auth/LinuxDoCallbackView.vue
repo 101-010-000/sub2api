@@ -267,7 +267,7 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 const provider = computed<'linuxdo' | 'feishu'>(() =>
-  route.meta.pendingOAuthProvider === 'feishu' ? 'feishu' : 'linuxdo'
+  route.meta?.pendingOAuthProvider === 'feishu' ? 'feishu' : 'linuxdo'
 )
 const providerName = computed(() => (provider.value === 'feishu' ? '飞书' : 'LinuxDo'))
 const providerNameText = computed(() => providerName.value)

@@ -100,51 +100,57 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *int64
-	created_at         *time.Time
-	updated_at         *time.Time
-	deleted_at         *time.Time
-	key                *string
-	name               *string
-	status             *string
-	last_used_at       *time.Time
-	ip_whitelist       *[]string
-	appendip_whitelist []string
-	ip_blacklist       *[]string
-	appendip_blacklist []string
-	quota              *float64
-	addquota           *float64
-	quota_used         *float64
-	addquota_used      *float64
-	expires_at         *time.Time
-	rate_limit_5h      *float64
-	addrate_limit_5h   *float64
-	rate_limit_1d      *float64
-	addrate_limit_1d   *float64
-	rate_limit_7d      *float64
-	addrate_limit_7d   *float64
-	usage_5h           *float64
-	addusage_5h        *float64
-	usage_1d           *float64
-	addusage_1d        *float64
-	usage_7d           *float64
-	addusage_7d        *float64
-	window_5h_start    *time.Time
-	window_1d_start    *time.Time
-	window_7d_start    *time.Time
-	clearedFields      map[string]struct{}
-	user               *int64
-	cleareduser        bool
-	group              *int64
-	clearedgroup       bool
-	usage_logs         map[int64]struct{}
-	removedusage_logs  map[int64]struct{}
-	clearedusage_logs  bool
-	done               bool
-	oldValue           func(context.Context) (*APIKey, error)
-	predicates         []predicate.APIKey
+	op                         Op
+	typ                        string
+	id                         *int64
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	deleted_at                 *time.Time
+	key                        *string
+	name                       *string
+	status                     *string
+	last_used_at               *time.Time
+	ip_whitelist               *[]string
+	appendip_whitelist         []string
+	ip_blacklist               *[]string
+	appendip_blacklist         []string
+	max_active_ips             *int
+	addmax_active_ips          *int
+	ip_idle_timeout_seconds    *int
+	addip_idle_timeout_seconds *int
+	max_concurrency            *int
+	addmax_concurrency         *int
+	quota                      *float64
+	addquota                   *float64
+	quota_used                 *float64
+	addquota_used              *float64
+	expires_at                 *time.Time
+	rate_limit_5h              *float64
+	addrate_limit_5h           *float64
+	rate_limit_1d              *float64
+	addrate_limit_1d           *float64
+	rate_limit_7d              *float64
+	addrate_limit_7d           *float64
+	usage_5h                   *float64
+	addusage_5h                *float64
+	usage_1d                   *float64
+	addusage_1d                *float64
+	usage_7d                   *float64
+	addusage_7d                *float64
+	window_5h_start            *time.Time
+	window_1d_start            *time.Time
+	window_7d_start            *time.Time
+	clearedFields              map[string]struct{}
+	user                       *int64
+	cleareduser                bool
+	group                      *int64
+	clearedgroup               bool
+	usage_logs                 map[int64]struct{}
+	removedusage_logs          map[int64]struct{}
+	clearedusage_logs          bool
+	done                       bool
+	oldValue                   func(context.Context) (*APIKey, error)
+	predicates                 []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -736,6 +742,174 @@ func (m *APIKeyMutation) ResetIPBlacklist() {
 	m.ip_blacklist = nil
 	m.appendip_blacklist = nil
 	delete(m.clearedFields, apikey.FieldIPBlacklist)
+}
+
+// SetMaxActiveIps sets the "max_active_ips" field.
+func (m *APIKeyMutation) SetMaxActiveIps(i int) {
+	m.max_active_ips = &i
+	m.addmax_active_ips = nil
+}
+
+// MaxActiveIps returns the value of the "max_active_ips" field in the mutation.
+func (m *APIKeyMutation) MaxActiveIps() (r int, exists bool) {
+	v := m.max_active_ips
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxActiveIps returns the old "max_active_ips" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldMaxActiveIps(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxActiveIps is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxActiveIps requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxActiveIps: %w", err)
+	}
+	return oldValue.MaxActiveIps, nil
+}
+
+// AddMaxActiveIps adds i to the "max_active_ips" field.
+func (m *APIKeyMutation) AddMaxActiveIps(i int) {
+	if m.addmax_active_ips != nil {
+		*m.addmax_active_ips += i
+	} else {
+		m.addmax_active_ips = &i
+	}
+}
+
+// AddedMaxActiveIps returns the value that was added to the "max_active_ips" field in this mutation.
+func (m *APIKeyMutation) AddedMaxActiveIps() (r int, exists bool) {
+	v := m.addmax_active_ips
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMaxActiveIps resets all changes to the "max_active_ips" field.
+func (m *APIKeyMutation) ResetMaxActiveIps() {
+	m.max_active_ips = nil
+	m.addmax_active_ips = nil
+}
+
+// SetIPIdleTimeoutSeconds sets the "ip_idle_timeout_seconds" field.
+func (m *APIKeyMutation) SetIPIdleTimeoutSeconds(i int) {
+	m.ip_idle_timeout_seconds = &i
+	m.addip_idle_timeout_seconds = nil
+}
+
+// IPIdleTimeoutSeconds returns the value of the "ip_idle_timeout_seconds" field in the mutation.
+func (m *APIKeyMutation) IPIdleTimeoutSeconds() (r int, exists bool) {
+	v := m.ip_idle_timeout_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIPIdleTimeoutSeconds returns the old "ip_idle_timeout_seconds" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldIPIdleTimeoutSeconds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIPIdleTimeoutSeconds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIPIdleTimeoutSeconds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIPIdleTimeoutSeconds: %w", err)
+	}
+	return oldValue.IPIdleTimeoutSeconds, nil
+}
+
+// AddIPIdleTimeoutSeconds adds i to the "ip_idle_timeout_seconds" field.
+func (m *APIKeyMutation) AddIPIdleTimeoutSeconds(i int) {
+	if m.addip_idle_timeout_seconds != nil {
+		*m.addip_idle_timeout_seconds += i
+	} else {
+		m.addip_idle_timeout_seconds = &i
+	}
+}
+
+// AddedIPIdleTimeoutSeconds returns the value that was added to the "ip_idle_timeout_seconds" field in this mutation.
+func (m *APIKeyMutation) AddedIPIdleTimeoutSeconds() (r int, exists bool) {
+	v := m.addip_idle_timeout_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetIPIdleTimeoutSeconds resets all changes to the "ip_idle_timeout_seconds" field.
+func (m *APIKeyMutation) ResetIPIdleTimeoutSeconds() {
+	m.ip_idle_timeout_seconds = nil
+	m.addip_idle_timeout_seconds = nil
+}
+
+// SetMaxConcurrency sets the "max_concurrency" field.
+func (m *APIKeyMutation) SetMaxConcurrency(i int) {
+	m.max_concurrency = &i
+	m.addmax_concurrency = nil
+}
+
+// MaxConcurrency returns the value of the "max_concurrency" field in the mutation.
+func (m *APIKeyMutation) MaxConcurrency() (r int, exists bool) {
+	v := m.max_concurrency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxConcurrency returns the old "max_concurrency" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldMaxConcurrency(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxConcurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxConcurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxConcurrency: %w", err)
+	}
+	return oldValue.MaxConcurrency, nil
+}
+
+// AddMaxConcurrency adds i to the "max_concurrency" field.
+func (m *APIKeyMutation) AddMaxConcurrency(i int) {
+	if m.addmax_concurrency != nil {
+		*m.addmax_concurrency += i
+	} else {
+		m.addmax_concurrency = &i
+	}
+}
+
+// AddedMaxConcurrency returns the value that was added to the "max_concurrency" field in this mutation.
+func (m *APIKeyMutation) AddedMaxConcurrency() (r int, exists bool) {
+	v := m.addmax_concurrency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMaxConcurrency resets all changes to the "max_concurrency" field.
+func (m *APIKeyMutation) ResetMaxConcurrency() {
+	m.max_concurrency = nil
+	m.addmax_concurrency = nil
 }
 
 // SetQuota sets the "quota" field.
@@ -1524,7 +1698,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 26)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1557,6 +1731,15 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.ip_blacklist != nil {
 		fields = append(fields, apikey.FieldIPBlacklist)
+	}
+	if m.max_active_ips != nil {
+		fields = append(fields, apikey.FieldMaxActiveIps)
+	}
+	if m.ip_idle_timeout_seconds != nil {
+		fields = append(fields, apikey.FieldIPIdleTimeoutSeconds)
+	}
+	if m.max_concurrency != nil {
+		fields = append(fields, apikey.FieldMaxConcurrency)
 	}
 	if m.quota != nil {
 		fields = append(fields, apikey.FieldQuota)
@@ -1624,6 +1807,12 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.IPWhitelist()
 	case apikey.FieldIPBlacklist:
 		return m.IPBlacklist()
+	case apikey.FieldMaxActiveIps:
+		return m.MaxActiveIps()
+	case apikey.FieldIPIdleTimeoutSeconds:
+		return m.IPIdleTimeoutSeconds()
+	case apikey.FieldMaxConcurrency:
+		return m.MaxConcurrency()
 	case apikey.FieldQuota:
 		return m.Quota()
 	case apikey.FieldQuotaUsed:
@@ -1679,6 +1868,12 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldIPWhitelist(ctx)
 	case apikey.FieldIPBlacklist:
 		return m.OldIPBlacklist(ctx)
+	case apikey.FieldMaxActiveIps:
+		return m.OldMaxActiveIps(ctx)
+	case apikey.FieldIPIdleTimeoutSeconds:
+		return m.OldIPIdleTimeoutSeconds(ctx)
+	case apikey.FieldMaxConcurrency:
+		return m.OldMaxConcurrency(ctx)
 	case apikey.FieldQuota:
 		return m.OldQuota(ctx)
 	case apikey.FieldQuotaUsed:
@@ -1789,6 +1984,27 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetIPBlacklist(v)
 		return nil
+	case apikey.FieldMaxActiveIps:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxActiveIps(v)
+		return nil
+	case apikey.FieldIPIdleTimeoutSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIPIdleTimeoutSeconds(v)
+		return nil
+	case apikey.FieldMaxConcurrency:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxConcurrency(v)
+		return nil
 	case apikey.FieldQuota:
 		v, ok := value.(float64)
 		if !ok {
@@ -1881,6 +2097,15 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *APIKeyMutation) AddedFields() []string {
 	var fields []string
+	if m.addmax_active_ips != nil {
+		fields = append(fields, apikey.FieldMaxActiveIps)
+	}
+	if m.addip_idle_timeout_seconds != nil {
+		fields = append(fields, apikey.FieldIPIdleTimeoutSeconds)
+	}
+	if m.addmax_concurrency != nil {
+		fields = append(fields, apikey.FieldMaxConcurrency)
+	}
 	if m.addquota != nil {
 		fields = append(fields, apikey.FieldQuota)
 	}
@@ -1913,6 +2138,12 @@ func (m *APIKeyMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case apikey.FieldMaxActiveIps:
+		return m.AddedMaxActiveIps()
+	case apikey.FieldIPIdleTimeoutSeconds:
+		return m.AddedIPIdleTimeoutSeconds()
+	case apikey.FieldMaxConcurrency:
+		return m.AddedMaxConcurrency()
 	case apikey.FieldQuota:
 		return m.AddedQuota()
 	case apikey.FieldQuotaUsed:
@@ -1938,6 +2169,27 @@ func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *APIKeyMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case apikey.FieldMaxActiveIps:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxActiveIps(v)
+		return nil
+	case apikey.FieldIPIdleTimeoutSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddIPIdleTimeoutSeconds(v)
+		return nil
+	case apikey.FieldMaxConcurrency:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxConcurrency(v)
+		return nil
 	case apikey.FieldQuota:
 		v, ok := value.(float64)
 		if !ok {
@@ -2110,6 +2362,15 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldIPBlacklist:
 		m.ResetIPBlacklist()
+		return nil
+	case apikey.FieldMaxActiveIps:
+		m.ResetMaxActiveIps()
+		return nil
+	case apikey.FieldIPIdleTimeoutSeconds:
+		m.ResetIPIdleTimeoutSeconds()
+		return nil
+	case apikey.FieldMaxConcurrency:
+		m.ResetMaxConcurrency()
 		return nil
 	case apikey.FieldQuota:
 		m.ResetQuota()

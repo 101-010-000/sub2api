@@ -43,7 +43,7 @@ type APIKey struct {
 	// Blocked IPs/CIDRs
 	IPBlacklist []string `json:"ip_blacklist,omitempty"`
 	// Maximum active client IPs for this API key (0 = unlimited)
-	MaxActiveIPs int `json:"max_active_ips,omitempty"`
+	MaxActiveIps int `json:"max_active_ips,omitempty"`
 	// Idle timeout in seconds before active IP auto-unbinds (0 = default)
 	IPIdleTimeoutSeconds int `json:"ip_idle_timeout_seconds,omitempty"`
 	// Maximum concurrent requests for this API key (0 = unlimited)
@@ -131,7 +131,7 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
-		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID, apikey.FieldMaxActiveIPs, apikey.FieldIPIdleTimeoutSeconds, apikey.FieldMaxConcurrency:
+		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID, apikey.FieldMaxActiveIps, apikey.FieldIPIdleTimeoutSeconds, apikey.FieldMaxConcurrency:
 			values[i] = new(sql.NullInt64)
 		case apikey.FieldKey, apikey.FieldName, apikey.FieldStatus:
 			values[i] = new(sql.NullString)
@@ -231,11 +231,11 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field ip_blacklist: %w", err)
 				}
 			}
-		case apikey.FieldMaxActiveIPs:
+		case apikey.FieldMaxActiveIps:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field max_active_ips", values[i])
 			} else if value.Valid {
-				_m.MaxActiveIPs = int(value.Int64)
+				_m.MaxActiveIps = int(value.Int64)
 			}
 		case apikey.FieldIPIdleTimeoutSeconds:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -416,7 +416,7 @@ func (_m *APIKey) String() string {
 	builder.WriteString(fmt.Sprintf("%v", _m.IPBlacklist))
 	builder.WriteString(", ")
 	builder.WriteString("max_active_ips=")
-	builder.WriteString(fmt.Sprintf("%v", _m.MaxActiveIPs))
+	builder.WriteString(fmt.Sprintf("%v", _m.MaxActiveIps))
 	builder.WriteString(", ")
 	builder.WriteString("ip_idle_timeout_seconds=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IPIdleTimeoutSeconds))

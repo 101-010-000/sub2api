@@ -10,7 +10,6 @@ const setToken = vi.fn()
 const setPendingAuthSession = vi.fn()
 const clearPendingAuthSession = vi.fn()
 const exchangePendingOAuthCompletion = vi.fn()
-const completeLinuxDoOAuthRegistration = vi.fn()
 const getPublicSettings = vi.fn()
 const login2FA = vi.fn()
 const apiClientPost = vi.fn()
@@ -64,7 +63,6 @@ vi.mock('@/api/auth', async () => {
   return {
     ...actual,
     exchangePendingOAuthCompletion: (...args: any[]) => exchangePendingOAuthCompletion(...args),
-    completeLinuxDoOAuthRegistration: (...args: any[]) => completeLinuxDoOAuthRegistration(...args),
     getPublicSettings: (...args: any[]) => getPublicSettings(...args),
     login2FA: (...args: any[]) => login2FA(...args),
     sendVerifyCode: (...args: any[]) => sendVerifyCode(...args),
@@ -81,7 +79,6 @@ describe('LinuxDoCallbackView', () => {
     setPendingAuthSession.mockReset()
     clearPendingAuthSession.mockReset()
     exchangePendingOAuthCompletion.mockReset()
-    completeLinuxDoOAuthRegistration.mockReset()
     getPublicSettings.mockReset()
     login2FA.mockReset()
     apiClientPost.mockReset()
@@ -399,11 +396,13 @@ describe('LinuxDoCallbackView', () => {
       suggested_display_name: 'LinuxDo Nick',
       suggested_avatar_url: 'https://cdn.example/linuxdo.png'
     })
-    completeLinuxDoOAuthRegistration.mockResolvedValue({
-      access_token: 'access-token',
-      refresh_token: 'refresh-token',
-      expires_in: 3600,
-      token_type: 'Bearer'
+    apiClientPost.mockResolvedValue({
+      data: {
+        access_token: 'access-token',
+        refresh_token: 'refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer'
+      }
     })
     setToken.mockResolvedValue({})
 
@@ -431,9 +430,10 @@ describe('LinuxDoCallbackView', () => {
     await wrapper.find('input[type="text"]').setValue('invite-code')
     await wrapper.find('button').trigger('click')
 
-    expect(completeLinuxDoOAuthRegistration).toHaveBeenCalledWith('invite-code', {
-      adoptDisplayName: false,
-      adoptAvatar: true
+    expect(apiClientPost).toHaveBeenCalledWith('/auth/oauth/linuxdo/complete-registration', {
+      invitation_code: 'invite-code',
+      adopt_display_name: false,
+      adopt_avatar: true
     })
   })
 
@@ -445,14 +445,16 @@ describe('LinuxDoCallbackView', () => {
       suggested_display_name: 'LinuxDo Nick',
       suggested_avatar_url: 'https://cdn.example/linuxdo.png'
     })
-    completeLinuxDoOAuthRegistration.mockResolvedValue({
-      auth_result: 'pending_session',
-      step: 'choose_account_action_required',
-      redirect: '/dashboard',
-      email: 'fresh@example.com',
-      resolved_email: 'fresh@example.com',
-      force_email_on_signup: true,
-      adoption_required: true
+    apiClientPost.mockResolvedValue({
+      data: {
+        auth_result: 'pending_session',
+        step: 'choose_account_action_required',
+        redirect: '/dashboard',
+        email: 'fresh@example.com',
+        resolved_email: 'fresh@example.com',
+        force_email_on_signup: true,
+        adoption_required: true
+      }
     })
 
     const wrapper = mount(LinuxDoCallbackView, {
@@ -471,9 +473,10 @@ describe('LinuxDoCallbackView', () => {
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
-    expect(completeLinuxDoOAuthRegistration).toHaveBeenCalledWith('invite-code', {
-      adoptDisplayName: true,
-      adoptAvatar: true
+    expect(apiClientPost).toHaveBeenCalledWith('/auth/oauth/linuxdo/complete-registration', {
+      invitation_code: 'invite-code',
+      adopt_display_name: true,
+      adopt_avatar: true
     })
     expect(setToken).not.toHaveBeenCalled()
     expect(replace).not.toHaveBeenCalled()

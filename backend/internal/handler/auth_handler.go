@@ -19,14 +19,14 @@ import (
 
 // AuthHandler handles authentication-related requests
 type AuthHandler struct {
-	cfg                  *config.Config
-	authService          *service.AuthService
-	userService          *service.UserService
-	settingSvc           *service.SettingService
-	promoService         *service.PromoService
-	redeemService        *service.RedeemService
-	totpService          *service.TotpService
-	userAttributeService *service.UserAttributeService
+	cfg                       *config.Config
+	authService               *service.AuthService
+	userService               *service.UserService
+	settingSvc                *service.SettingService
+	promoService              *service.PromoService
+	redeemService             *service.RedeemService
+	totpService               *service.TotpService
+	userAttributeService      *service.UserAttributeService
 	feishuNotificationService *service.FeishuNotificationService
 
 	dingTalkClientInstance *DingTalkClient

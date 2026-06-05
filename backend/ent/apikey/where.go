@@ -100,6 +100,21 @@ func LastUsedAt(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldLastUsedAt, v))
 }
 
+// MaxActiveIps applies equality check predicate on the "max_active_ips" field. It's identical to MaxActiveIpsEQ.
+func MaxActiveIps(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldMaxActiveIps, v))
+}
+
+// IPIdleTimeoutSeconds applies equality check predicate on the "ip_idle_timeout_seconds" field. It's identical to IPIdleTimeoutSecondsEQ.
+func IPIdleTimeoutSeconds(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldIPIdleTimeoutSeconds, v))
+}
+
+// MaxConcurrency applies equality check predicate on the "max_concurrency" field. It's identical to MaxConcurrencyEQ.
+func MaxConcurrency(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldMaxConcurrency, v))
+}
+
 // Quota applies equality check predicate on the "quota" field. It's identical to QuotaEQ.
 func Quota(v float64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldQuota, v))
@@ -603,6 +618,126 @@ func IPBlacklistIsNil() predicate.APIKey {
 // IPBlacklistNotNil applies the NotNil predicate on the "ip_blacklist" field.
 func IPBlacklistNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldIPBlacklist))
+}
+
+// MaxActiveIpsEQ applies the EQ predicate on the "max_active_ips" field.
+func MaxActiveIpsEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldMaxActiveIps, v))
+}
+
+// MaxActiveIpsNEQ applies the NEQ predicate on the "max_active_ips" field.
+func MaxActiveIpsNEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldMaxActiveIps, v))
+}
+
+// MaxActiveIpsIn applies the In predicate on the "max_active_ips" field.
+func MaxActiveIpsIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldMaxActiveIps, vs...))
+}
+
+// MaxActiveIpsNotIn applies the NotIn predicate on the "max_active_ips" field.
+func MaxActiveIpsNotIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldMaxActiveIps, vs...))
+}
+
+// MaxActiveIpsGT applies the GT predicate on the "max_active_ips" field.
+func MaxActiveIpsGT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldMaxActiveIps, v))
+}
+
+// MaxActiveIpsGTE applies the GTE predicate on the "max_active_ips" field.
+func MaxActiveIpsGTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldMaxActiveIps, v))
+}
+
+// MaxActiveIpsLT applies the LT predicate on the "max_active_ips" field.
+func MaxActiveIpsLT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldMaxActiveIps, v))
+}
+
+// MaxActiveIpsLTE applies the LTE predicate on the "max_active_ips" field.
+func MaxActiveIpsLTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldMaxActiveIps, v))
+}
+
+// IPIdleTimeoutSecondsEQ applies the EQ predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldIPIdleTimeoutSeconds, v))
+}
+
+// IPIdleTimeoutSecondsNEQ applies the NEQ predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsNEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldIPIdleTimeoutSeconds, v))
+}
+
+// IPIdleTimeoutSecondsIn applies the In predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldIPIdleTimeoutSeconds, vs...))
+}
+
+// IPIdleTimeoutSecondsNotIn applies the NotIn predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsNotIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldIPIdleTimeoutSeconds, vs...))
+}
+
+// IPIdleTimeoutSecondsGT applies the GT predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsGT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldIPIdleTimeoutSeconds, v))
+}
+
+// IPIdleTimeoutSecondsGTE applies the GTE predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsGTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldIPIdleTimeoutSeconds, v))
+}
+
+// IPIdleTimeoutSecondsLT applies the LT predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsLT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldIPIdleTimeoutSeconds, v))
+}
+
+// IPIdleTimeoutSecondsLTE applies the LTE predicate on the "ip_idle_timeout_seconds" field.
+func IPIdleTimeoutSecondsLTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldIPIdleTimeoutSeconds, v))
+}
+
+// MaxConcurrencyEQ applies the EQ predicate on the "max_concurrency" field.
+func MaxConcurrencyEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldMaxConcurrency, v))
+}
+
+// MaxConcurrencyNEQ applies the NEQ predicate on the "max_concurrency" field.
+func MaxConcurrencyNEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldMaxConcurrency, v))
+}
+
+// MaxConcurrencyIn applies the In predicate on the "max_concurrency" field.
+func MaxConcurrencyIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldMaxConcurrency, vs...))
+}
+
+// MaxConcurrencyNotIn applies the NotIn predicate on the "max_concurrency" field.
+func MaxConcurrencyNotIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldMaxConcurrency, vs...))
+}
+
+// MaxConcurrencyGT applies the GT predicate on the "max_concurrency" field.
+func MaxConcurrencyGT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldMaxConcurrency, v))
+}
+
+// MaxConcurrencyGTE applies the GTE predicate on the "max_concurrency" field.
+func MaxConcurrencyGTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldMaxConcurrency, v))
+}
+
+// MaxConcurrencyLT applies the LT predicate on the "max_concurrency" field.
+func MaxConcurrencyLT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldMaxConcurrency, v))
+}
+
+// MaxConcurrencyLTE applies the LTE predicate on the "max_concurrency" field.
+func MaxConcurrencyLTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldMaxConcurrency, v))
 }
 
 // QuotaEQ applies the EQ predicate on the "quota" field.
