@@ -698,7 +698,7 @@ type UpdateSettingsRequest struct {
 	AuthSourceGooglePlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_google_platform_quotas"`
 	AuthSourceDingTalkPlatformQuotas map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_dingtalk_platform_quotas"`
 	AuthSourceFeishuPlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_feishu_platform_quotas"`
-	}
+}
 
 // UpdateSettings 更新系统设置
 // PUT /api/v1/admin/settings

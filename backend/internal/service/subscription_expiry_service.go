@@ -15,14 +15,14 @@ import (
 
 // SubscriptionExpiryService periodically updates expired subscription status.
 type SubscriptionExpiryService struct {
-	userSubRepo              UserSubscriptionRepository
-	settingRepo              SettingRepository
-	notificationEmailService *NotificationEmailService
+	userSubRepo               UserSubscriptionRepository
+	settingRepo               SettingRepository
+	notificationEmailService  *NotificationEmailService
 	feishuNotificationService *FeishuNotificationService
-	interval                 time.Duration
-	stopCh                   chan struct{}
-	stopOnce                 sync.Once
-	wg                       sync.WaitGroup
+	interval                  time.Duration
+	stopCh                    chan struct{}
+	stopOnce                  sync.Once
+	wg                        sync.WaitGroup
 }
 
 func NewSubscriptionExpiryService(userSubRepo UserSubscriptionRepository, interval time.Duration) *SubscriptionExpiryService {
@@ -169,12 +169,12 @@ func (s *SubscriptionExpiryService) trySendSubscriptionExpiryFeishu(ctx context.
 		return false
 	}
 	err := s.feishuNotificationService.SendSubscriptionExpiryReminder(ctx, FeishuSubscriptionExpiryNotification{
-		UserID:           sub.UserID,
-		SubscriptionID:   sub.ID,
-		RecipientName:    firstNonEmpty(sub.User.Username, sub.User.Email),
-		GroupName:        sub.Group.Name,
-		ExpiresAt:        sub.ExpiresAt,
-		DaysRemaining:    daysRemaining,
+		UserID:            sub.UserID,
+		SubscriptionID:    sub.ID,
+		RecipientName:     firstNonEmpty(sub.User.Username, sub.User.Email),
+		GroupName:         sub.Group.Name,
+		ExpiresAt:         sub.ExpiresAt,
+		DaysRemaining:     daysRemaining,
 		SourceReminderKey: fmt.Sprintf("%dd", daysRemaining),
 	})
 	if err == nil {

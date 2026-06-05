@@ -63,32 +63,32 @@ type SystemSettings struct {
 	DingTalkConnectSyncDisplayNameAttrKey  string
 	DingTalkConnectSyncDeptAttrKey         string
 	DingTalkConnectSyncCorpEmailAttrName   string
-		DingTalkConnectSyncDisplayNameAttrName string
-		DingTalkConnectSyncDeptAttrName        string
+	DingTalkConnectSyncDisplayNameAttrName string
+	DingTalkConnectSyncDeptAttrName        string
 
-		// Feishu Connect OAuth 登录
-		FeishuConnectEnabled             bool
-		FeishuConnectAppID               string
-		FeishuConnectAppSecret           string
-		FeishuConnectAppSecretConfigured bool
-		FeishuConnectAuthorizeURL        string
-		FeishuConnectTokenURL            string
-		FeishuConnectUserInfoURL         string
-		FeishuConnectScopes              string
-		FeishuConnectRedirectURL         string
-		FeishuConnectFrontendRedirectURL string
+	// Feishu Connect OAuth 登录
+	FeishuConnectEnabled             bool
+	FeishuConnectAppID               string
+	FeishuConnectAppSecret           string
+	FeishuConnectAppSecretConfigured bool
+	FeishuConnectAuthorizeURL        string
+	FeishuConnectTokenURL            string
+	FeishuConnectUserInfoURL         string
+	FeishuConnectScopes              string
+	FeishuConnectRedirectURL         string
+	FeishuConnectFrontendRedirectURL string
 
-		// Feishu Notification App 设置
-		FeishuNotifyEnabled             bool
-		FeishuNotifyAppID               string
-		FeishuNotifyAppSecret           string
-		FeishuNotifyAppSecretConfigured bool
-		FeishuNotifyTokenURL            string
-		FeishuNotifyMessageURL          string
-		FeishuNotifyPanelURL            string
+	// Feishu Notification App 设置
+	FeishuNotifyEnabled             bool
+	FeishuNotifyAppID               string
+	FeishuNotifyAppSecret           string
+	FeishuNotifyAppSecretConfigured bool
+	FeishuNotifyTokenURL            string
+	FeishuNotifyMessageURL          string
+	FeishuNotifyPanelURL            string
 
-		// WeChat Connect OAuth 登录
-		WeChatConnectEnabled                   bool
+	// WeChat Connect OAuth 登录
+	WeChatConnectEnabled                   bool
 	WeChatConnectAppID                     string
 	WeChatConnectAppSecret                 string
 	WeChatConnectAppSecretConfigured       bool
@@ -283,10 +283,10 @@ type PublicSettings struct {
 	CustomMenuItems             string // JSON array of custom menu items
 	CustomEndpoints             string // JSON array of custom endpoints
 
-		LinuxDoOAuthEnabled      bool
-		DingTalkOAuthEnabled     bool
-		FeishuOAuthEnabled       bool
-		WeChatOAuthEnabled       bool
+	LinuxDoOAuthEnabled      bool
+	DingTalkOAuthEnabled     bool
+	FeishuOAuthEnabled       bool
+	WeChatOAuthEnabled       bool
 	WeChatOAuthOpenEnabled   bool
 	WeChatOAuthMPEnabled     bool
 	WeChatOAuthMobileEnabled bool

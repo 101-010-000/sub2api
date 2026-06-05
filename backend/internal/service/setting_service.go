@@ -738,10 +738,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyTablePageSizeOptions,
 		SettingKeyCustomMenuItems,
 		SettingKeyCustomEndpoints,
-			SettingKeyLinuxDoConnectEnabled,
-			SettingKeyDingTalkConnectEnabled,
-			SettingKeyFeishuConnectEnabled,
-			SettingKeyWeChatConnectEnabled,
+		SettingKeyLinuxDoConnectEnabled,
+		SettingKeyDingTalkConnectEnabled,
+		SettingKeyFeishuConnectEnabled,
+		SettingKeyWeChatConnectEnabled,
 		SettingKeyWeChatConnectAppID,
 		SettingKeyWeChatConnectAppSecret,
 		SettingKeyWeChatConnectOpenAppID,
@@ -869,10 +869,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		TablePageSizeOptions:             tablePageSizeOptions,
 		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
 		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
-			LinuxDoOAuthEnabled:              linuxDoEnabled,
-			DingTalkOAuthEnabled:             dingTalkEnabled,
-			FeishuOAuthEnabled:               feishuEnabled,
-			WeChatOAuthEnabled:               weChatEnabled,
+		LinuxDoOAuthEnabled:              linuxDoEnabled,
+		DingTalkOAuthEnabled:             dingTalkEnabled,
+		FeishuOAuthEnabled:               feishuEnabled,
+		WeChatOAuthEnabled:               weChatEnabled,
 		WeChatOAuthOpenEnabled:           weChatOpenEnabled,
 		WeChatOAuthMPEnabled:             weChatMPEnabled,
 		WeChatOAuthMobileEnabled:         weChatMobileEnabled,
@@ -2861,7 +2861,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAuthSourceDefaultGoogleSubscriptions:      "[]",
 		SettingKeyAuthSourceDefaultGoogleGrantOnSignup:      "false",
 		SettingKeyAuthSourceDefaultGoogleGrantOnFirstBind:   "false",
-			SettingKeyAuthSourceDefaultDingTalkBalance:          "0",
+		SettingKeyAuthSourceDefaultDingTalkBalance:          "0",
 		SettingKeyAuthSourceDefaultDingTalkConcurrency:      "5",
 		SettingKeyAuthSourceDefaultDingTalkSubscriptions:    "[]",
 		SettingKeyAuthSourceDefaultDingTalkGrantOnSignup:    "false",
@@ -3182,76 +3182,76 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		}
 	}
 	result.DingTalkConnectSyncDeptAttrName = strings.TrimSpace(settings[SettingKeyDingTalkConnectSyncDeptAttrName])
-		if result.DingTalkConnectSyncDeptAttrName == "" {
-			if v := strings.TrimSpace(dingTalkBase.SyncDeptAttrName); v != "" {
-				result.DingTalkConnectSyncDeptAttrName = v
-			} else {
-				result.DingTalkConnectSyncDeptAttrName = "钉钉部门"
-			}
+	if result.DingTalkConnectSyncDeptAttrName == "" {
+		if v := strings.TrimSpace(dingTalkBase.SyncDeptAttrName); v != "" {
+			result.DingTalkConnectSyncDeptAttrName = v
+		} else {
+			result.DingTalkConnectSyncDeptAttrName = "钉钉部门"
 		}
+	}
 
-		// Feishu Connect 设置：
-		// - 兼容 config.yaml/env
-		// - 支持后台系统设置覆盖并持久化（存储于 DB）
-		feishuBase := config.FeishuConnectConfig{}
-		if s.cfg != nil {
-			feishuBase = s.cfg.Feishu
-		}
-		if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok {
-			result.FeishuConnectEnabled = raw == "true"
-		} else {
-			result.FeishuConnectEnabled = feishuBase.Enabled
-		}
-		if v, ok := settings[SettingKeyFeishuConnectAppID]; ok && strings.TrimSpace(v) != "" {
-			result.FeishuConnectAppID = strings.TrimSpace(v)
-		} else {
-			result.FeishuConnectAppID = strings.TrimSpace(feishuBase.AppID)
-		}
-		result.FeishuConnectAppSecret = strings.TrimSpace(settings[SettingKeyFeishuConnectAppSecret])
-		if result.FeishuConnectAppSecret == "" {
-			result.FeishuConnectAppSecret = strings.TrimSpace(feishuBase.AppSecret)
-		}
-		result.FeishuConnectAppSecretConfigured = result.FeishuConnectAppSecret != ""
-		if v, ok := settings[SettingKeyFeishuConnectAuthorizeURL]; ok && strings.TrimSpace(v) != "" {
-			result.FeishuConnectAuthorizeURL = strings.TrimSpace(v)
-		} else {
-			result.FeishuConnectAuthorizeURL = strings.TrimSpace(firstNonEmpty(feishuBase.AuthorizeURL, defaultFeishuOAuthAuthorize))
-		}
-		if v, ok := settings[SettingKeyFeishuConnectTokenURL]; ok && strings.TrimSpace(v) != "" {
-			result.FeishuConnectTokenURL = strings.TrimSpace(v)
-		} else {
-			result.FeishuConnectTokenURL = strings.TrimSpace(firstNonEmpty(feishuBase.TokenURL, defaultFeishuOAuthToken))
-		}
-		if v, ok := settings[SettingKeyFeishuConnectUserInfoURL]; ok && strings.TrimSpace(v) != "" {
-			result.FeishuConnectUserInfoURL = strings.TrimSpace(v)
-		} else {
-			result.FeishuConnectUserInfoURL = strings.TrimSpace(firstNonEmpty(feishuBase.UserInfoURL, defaultFeishuOAuthUserInfo))
-		}
-		if v, ok := settings[SettingKeyFeishuConnectScopes]; ok {
-			result.FeishuConnectScopes = strings.TrimSpace(v)
-		} else {
-			result.FeishuConnectScopes = strings.TrimSpace(feishuBase.Scopes)
-		}
-		if v, ok := settings[SettingKeyFeishuConnectRedirectURL]; ok && strings.TrimSpace(v) != "" {
-			result.FeishuConnectRedirectURL = strings.TrimSpace(v)
-		} else {
-			result.FeishuConnectRedirectURL = strings.TrimSpace(feishuBase.RedirectURL)
-		}
-		if v, ok := settings[SettingKeyFeishuConnectFrontendRedirectURL]; ok && strings.TrimSpace(v) != "" {
-			result.FeishuConnectFrontendRedirectURL = strings.TrimSpace(v)
-		} else {
-			result.FeishuConnectFrontendRedirectURL = strings.TrimSpace(firstNonEmpty(feishuBase.FrontendRedirectURL, defaultFeishuOAuthFrontend))
-		}
+	// Feishu Connect 设置：
+	// - 兼容 config.yaml/env
+	// - 支持后台系统设置覆盖并持久化（存储于 DB）
+	feishuBase := config.FeishuConnectConfig{}
+	if s.cfg != nil {
+		feishuBase = s.cfg.Feishu
+	}
+	if raw, ok := settings[SettingKeyFeishuConnectEnabled]; ok {
+		result.FeishuConnectEnabled = raw == "true"
+	} else {
+		result.FeishuConnectEnabled = feishuBase.Enabled
+	}
+	if v, ok := settings[SettingKeyFeishuConnectAppID]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectAppID = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectAppID = strings.TrimSpace(feishuBase.AppID)
+	}
+	result.FeishuConnectAppSecret = strings.TrimSpace(settings[SettingKeyFeishuConnectAppSecret])
+	if result.FeishuConnectAppSecret == "" {
+		result.FeishuConnectAppSecret = strings.TrimSpace(feishuBase.AppSecret)
+	}
+	result.FeishuConnectAppSecretConfigured = result.FeishuConnectAppSecret != ""
+	if v, ok := settings[SettingKeyFeishuConnectAuthorizeURL]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectAuthorizeURL = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectAuthorizeURL = strings.TrimSpace(firstNonEmpty(feishuBase.AuthorizeURL, defaultFeishuOAuthAuthorize))
+	}
+	if v, ok := settings[SettingKeyFeishuConnectTokenURL]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectTokenURL = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectTokenURL = strings.TrimSpace(firstNonEmpty(feishuBase.TokenURL, defaultFeishuOAuthToken))
+	}
+	if v, ok := settings[SettingKeyFeishuConnectUserInfoURL]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectUserInfoURL = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectUserInfoURL = strings.TrimSpace(firstNonEmpty(feishuBase.UserInfoURL, defaultFeishuOAuthUserInfo))
+	}
+	if v, ok := settings[SettingKeyFeishuConnectScopes]; ok {
+		result.FeishuConnectScopes = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectScopes = strings.TrimSpace(feishuBase.Scopes)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectRedirectURL]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectRedirectURL = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectRedirectURL = strings.TrimSpace(feishuBase.RedirectURL)
+	}
+	if v, ok := settings[SettingKeyFeishuConnectFrontendRedirectURL]; ok && strings.TrimSpace(v) != "" {
+		result.FeishuConnectFrontendRedirectURL = strings.TrimSpace(v)
+	} else {
+		result.FeishuConnectFrontendRedirectURL = strings.TrimSpace(firstNonEmpty(feishuBase.FrontendRedirectURL, defaultFeishuOAuthFrontend))
+	}
 
-		result.FeishuNotifyEnabled = strings.TrimSpace(settings[SettingKeyFeishuNotifyEnabled]) == "true"
-		result.FeishuNotifyAppID = strings.TrimSpace(settings[SettingKeyFeishuNotifyAppID])
-		result.FeishuNotifyAppSecret = strings.TrimSpace(settings[SettingKeyFeishuNotifyAppSecret])
-		result.FeishuNotifyAppSecretConfigured = result.FeishuNotifyAppSecret != ""
-		result.FeishuNotifyTokenURL = firstNonEmpty(settings[SettingKeyFeishuNotifyTokenURL], defaultFeishuNotifyTokenURL)
-		result.FeishuNotifyMessageURL = firstNonEmpty(settings[SettingKeyFeishuNotifyMessageURL], defaultFeishuNotifyMessageURL)
-		result.FeishuNotifyPanelURL = firstNonEmpty(settings[SettingKeyFeishuNotifyPanelURL], defaultFeishuPanelPath)
+	result.FeishuNotifyEnabled = strings.TrimSpace(settings[SettingKeyFeishuNotifyEnabled]) == "true"
+	result.FeishuNotifyAppID = strings.TrimSpace(settings[SettingKeyFeishuNotifyAppID])
+	result.FeishuNotifyAppSecret = strings.TrimSpace(settings[SettingKeyFeishuNotifyAppSecret])
+	result.FeishuNotifyAppSecretConfigured = result.FeishuNotifyAppSecret != ""
+	result.FeishuNotifyTokenURL = firstNonEmpty(settings[SettingKeyFeishuNotifyTokenURL], defaultFeishuNotifyTokenURL)
+	result.FeishuNotifyMessageURL = firstNonEmpty(settings[SettingKeyFeishuNotifyMessageURL], defaultFeishuNotifyMessageURL)
+	result.FeishuNotifyPanelURL = firstNonEmpty(settings[SettingKeyFeishuNotifyPanelURL], defaultFeishuPanelPath)
 
-		// Generic OIDC 设置：
+	// Generic OIDC 设置：
 	// - 兼容 config.yaml/env
 	// - 支持后台系统设置覆盖并持久化（存储于 DB）
 	oidcBase := config.OIDCConnectConfig{}

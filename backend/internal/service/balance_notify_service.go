@@ -39,10 +39,10 @@ type AccountQuotaReader interface {
 
 // BalanceNotifyService handles balance and quota threshold notifications.
 type BalanceNotifyService struct {
-	emailService             *EmailService
-	settingRepo              SettingRepository
-	accountRepo              AccountQuotaReader
-	notificationEmailService *NotificationEmailService
+	emailService              *EmailService
+	settingRepo               SettingRepository
+	accountRepo               AccountQuotaReader
+	notificationEmailService  *NotificationEmailService
 	feishuNotificationService *FeishuNotificationService
 }
 

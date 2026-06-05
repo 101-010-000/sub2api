@@ -96,12 +96,12 @@ type FeishuBalanceLowNotification struct {
 }
 
 type FeishuSubscriptionExpiryNotification struct {
-	UserID           int64
-	SubscriptionID   int64
-	RecipientName    string
-	GroupName        string
-	ExpiresAt        time.Time
-	DaysRemaining    int
+	UserID            int64
+	SubscriptionID    int64
+	RecipientName     string
+	GroupName         string
+	ExpiresAt         time.Time
+	DaysRemaining     int
 	SourceReminderKey string
 }
 
@@ -270,7 +270,7 @@ func (s *FeishuNotificationService) sendInteractiveCard(ctx context.Context, use
 		"msg_type":   "interactive",
 		"content":    string(cardJSON),
 	}
-	resp, err := req.C().SetTimeout(30 * time.Second).R().
+	resp, err := req.C().SetTimeout(30*time.Second).R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+token).
 		SetHeader("Content-Type", "application/json").
@@ -309,7 +309,7 @@ func (s *FeishuNotificationService) feishuPanelActionElement(ctx context.Context
 }
 
 func (s *FeishuNotificationService) fetchTenantAccessToken(ctx context.Context, cfg FeishuNotificationConfig) (string, error) {
-	resp, err := req.C().SetTimeout(30 * time.Second).R().
+	resp, err := req.C().SetTimeout(30*time.Second).R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").
 		SetHeader("Content-Type", "application/json").

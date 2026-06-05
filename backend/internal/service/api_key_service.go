@@ -20,17 +20,17 @@ import (
 )
 
 var (
-	ErrAPIKeyNotFound     = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
-	ErrGroupNotAllowed    = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
-	ErrAPIKeyExists       = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
-	ErrAPIKeyTooShort     = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
-	ErrAPIKeyInvalidChars = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
-	ErrAPIKeyRateLimited  = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
-	ErrInvalidIPPattern   = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
-	ErrInvalidRuntimeLimit = infraerrors.BadRequest("INVALID_API_KEY_RUNTIME_LIMIT", "invalid api key runtime limit")
-	ErrAPIKeyRuntimeUnavailable = infraerrors.ServiceUnavailable("API_KEY_RUNTIME_UNAVAILABLE", "api key runtime limit service unavailable")
+	ErrAPIKeyNotFound              = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
+	ErrGroupNotAllowed             = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
+	ErrAPIKeyExists                = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
+	ErrAPIKeyTooShort              = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
+	ErrAPIKeyInvalidChars          = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
+	ErrAPIKeyRateLimited           = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
+	ErrInvalidIPPattern            = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrInvalidRuntimeLimit         = infraerrors.BadRequest("INVALID_API_KEY_RUNTIME_LIMIT", "invalid api key runtime limit")
+	ErrAPIKeyRuntimeUnavailable    = infraerrors.ServiceUnavailable("API_KEY_RUNTIME_UNAVAILABLE", "api key runtime limit service unavailable")
 	ErrAPIKeyActiveIPLimitExceeded = infraerrors.Forbidden("API_KEY_ACTIVE_IP_LIMIT_EXCEEDED", "api key active IP limit exceeded")
-	ErrAPIKeyConcurrencyExceeded = infraerrors.TooManyRequests("API_KEY_CONCURRENCY_EXCEEDED", "api key concurrency limit exceeded")
+	ErrAPIKeyConcurrencyExceeded   = infraerrors.TooManyRequests("API_KEY_CONCURRENCY_EXCEEDED", "api key concurrency limit exceeded")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
@@ -46,7 +46,7 @@ const (
 	apiKeyMaxErrorsPerHour = 20
 	apiKeyLastUsedMinTouch = 30 * time.Second
 	// DB 写失败后的短退避，避免请求路径持续同步重试造成写风暴与高延迟。
-	apiKeyLastUsedFailBackoff = 5 * time.Second
+	apiKeyLastUsedFailBackoff         = 5 * time.Second
 	defaultAPIKeyIPIdleTimeoutSeconds = 600
 	minAPIKeyIPIdleTimeoutSeconds     = 60
 	maxAPIKeyIPIdleTimeoutSeconds     = 86400
@@ -156,14 +156,14 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name        string   `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
-	MaxActiveIPs         int `json:"max_active_ips"`
-	IPIdleTimeoutSeconds int `json:"ip_idle_timeout_seconds"`
-	MaxConcurrency       int `json:"max_concurrency"`
+	Name                 string   `json:"name"`
+	GroupID              *int64   `json:"group_id"`
+	CustomKey            *string  `json:"custom_key"`   // 可选的自定义key
+	IPWhitelist          []string `json:"ip_whitelist"` // IP 白名单
+	IPBlacklist          []string `json:"ip_blacklist"` // IP 黑名单
+	MaxActiveIPs         int      `json:"max_active_ips"`
+	IPIdleTimeoutSeconds int      `json:"ip_idle_timeout_seconds"`
+	MaxConcurrency       int      `json:"max_concurrency"`
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -177,14 +177,14 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
-	Name        *string  `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	Status      *string  `json:"status"`
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单（空数组清空）
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单（空数组清空）
-	MaxActiveIPs         *int `json:"max_active_ips"`
-	IPIdleTimeoutSeconds *int `json:"ip_idle_timeout_seconds"`
-	MaxConcurrency       *int `json:"max_concurrency"`
+	Name                 *string  `json:"name"`
+	GroupID              *int64   `json:"group_id"`
+	Status               *string  `json:"status"`
+	IPWhitelist          []string `json:"ip_whitelist"` // IP 白名单（空数组清空）
+	IPBlacklist          []string `json:"ip_blacklist"` // IP 黑名单（空数组清空）
+	MaxActiveIPs         *int     `json:"max_active_ips"`
+	IPIdleTimeoutSeconds *int     `json:"ip_idle_timeout_seconds"`
+	MaxConcurrency       *int     `json:"max_concurrency"`
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -431,21 +431,21 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
-		Key:         key,
-		Name:        req.Name,
-		GroupID:     req.GroupID,
-		Status:      StatusActive,
-		IPWhitelist: req.IPWhitelist,
-		IPBlacklist: req.IPBlacklist,
+		UserID:               userID,
+		Key:                  key,
+		Name:                 req.Name,
+		GroupID:              req.GroupID,
+		Status:               StatusActive,
+		IPWhitelist:          req.IPWhitelist,
+		IPBlacklist:          req.IPBlacklist,
 		MaxActiveIPs:         req.MaxActiveIPs,
 		IPIdleTimeoutSeconds: req.IPIdleTimeoutSeconds,
 		MaxConcurrency:       req.MaxConcurrency,
-		Quota:       req.Quota,
-		QuotaUsed:   0,
-		RateLimit5h: req.RateLimit5h,
-		RateLimit1d: req.RateLimit1d,
-		RateLimit7d: req.RateLimit7d,
+		Quota:                req.Quota,
+		QuotaUsed:            0,
+		RateLimit5h:          req.RateLimit5h,
+		RateLimit1d:          req.RateLimit1d,
+		RateLimit7d:          req.RateLimit7d,
 	}
 
 	// Set expiration time if specified
