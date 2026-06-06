@@ -638,6 +638,7 @@ type GatewayService struct {
 	tlsFPProfileService   *TLSFingerprintProfileService
 	balanceNotifyService  *BalanceNotifyService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	speedService          *SpeedService
 }
 
 // NewGatewayService creates a new GatewayService
@@ -669,6 +670,7 @@ func NewGatewayService(
 	resolver *ModelPricingResolver,
 	balanceNotifyService *BalanceNotifyService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	speedService *SpeedService,
 ) *GatewayService {
 	userGroupRateTTL := resolveUserGroupRateCacheTTL(cfg)
 	modelsListTTL := resolveModelsListCacheTTL(cfg)
@@ -705,6 +707,7 @@ func NewGatewayService(
 		resolver:              resolver,
 		balanceNotifyService:  balanceNotifyService,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
+		speedService:          speedService,
 	}
 	svc.userGroupRateResolver = newUserGroupRateResolver(
 		userGroupRateRepo,
@@ -8347,6 +8350,7 @@ type postUsageBillingParams struct {
 	AccountRateMultiplier float64
 	APIKeyService         APIKeyQuotaUpdater
 	Platform              string // 来自 APIKey 关联 Group 的平台标识
+	SpeedService          *SpeedService
 }
 
 // PlatformFromAPIKey 从 APIKey 关联的 Group 推导 platform 名称。
@@ -8428,6 +8432,7 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 			slog.Error("increment account quota used failed", "account_id", p.Account.ID, "cost", accountCost, "error", err)
 		}
 	}
+	recordSpeedUsage(billingCtx, p)
 
 	// Platform quota 累加（legacy 兜底路径）：仅对 standard（余额）模式生效；订阅模式豁免；仅对有 limit 的用户写
 	//   - HasUserPlatformQuotaLimit 守卫:与正常路径对齐，无 limit 公司跳过
@@ -8592,6 +8597,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 	if p.Cost.ActualCost > 0 && p.APIKey != nil && p.APIKey.HasRateLimits() {
 		deps.billingCacheService.QueueUpdateAPIKeyRateLimitUsage(p.APIKey.ID, p.Cost.ActualCost)
 	}
+	recordSpeedUsage(ctx, p)
 
 	deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
 
@@ -8741,6 +8747,7 @@ type billingDeps struct {
 	deferredService       *DeferredService
 	balanceNotifyService  *BalanceNotifyService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	speedService          *SpeedService
 	cfg                   *config.Config
 }
 
@@ -8753,8 +8760,16 @@ func (s *GatewayService) billingDeps() *billingDeps {
 		deferredService:       s.deferredService,
 		balanceNotifyService:  s.balanceNotifyService,
 		userPlatformQuotaRepo: s.userPlatformQuotaRepo,
+		speedService:          s.speedService,
 		cfg:                   s.cfg,
 	}
+}
+
+func recordSpeedUsage(ctx context.Context, p *postUsageBillingParams) {
+	if p == nil || p.SpeedService == nil || p.Cost == nil || p.User == nil || p.APIKey == nil || p.APIKey.GroupID == nil {
+		return
+	}
+	p.SpeedService.RecordUsage(ctx, p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
 }
 
 func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usageLog *UsageLog, logKey string) {
@@ -8982,6 +8997,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		AccountRateMultiplier: accountRateMultiplier,
 		APIKeyService:         input.APIKeyService,
 		Platform:              quotaPlatform,
+		SpeedService:          s.speedService,
 	}, s.billingDeps(), s.usageBillingRepo)
 
 	if billingErr != nil {

@@ -116,6 +116,17 @@ type CreateGroupRequest struct {
 	ModelsListConfig            service.GroupModelsListConfig             `json:"models_list_config"`
 	// 分组 RPM 上限（0 = 不限制）
 	RPMLimit int `json:"rpm_limit"`
+	// 优速通配置
+	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
+	UserSpeedConfigAllowed     bool    `json:"user_speed_config_allowed"`
+	DefaultFastQuotaRatio      float64 `json:"default_fast_quota_ratio"`
+	MinFastQuotaRatio          float64 `json:"min_fast_quota_ratio"`
+	MaxFastQuotaRatio          float64 `json:"max_fast_quota_ratio"`
+	DefaultSlowDelayMinSeconds int     `json:"default_slow_delay_min_seconds"`
+	DefaultSlowDelayMaxSeconds int     `json:"default_slow_delay_max_seconds"`
+	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
+	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
+	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -157,6 +168,17 @@ type UpdateGroupRequest struct {
 	ModelsListConfig            *service.GroupModelsListConfig             `json:"models_list_config"`
 	// 分组 RPM 上限（0 = 不限制）；nil 表示未提供不改动
 	RPMLimit *int `json:"rpm_limit"`
+	// 优速通配置
+	SpeedConfigEnabled         *bool    `json:"speed_config_enabled"`
+	UserSpeedConfigAllowed     *bool    `json:"user_speed_config_allowed"`
+	DefaultFastQuotaRatio      *float64 `json:"default_fast_quota_ratio"`
+	MinFastQuotaRatio          *float64 `json:"min_fast_quota_ratio"`
+	MaxFastQuotaRatio          *float64 `json:"max_fast_quota_ratio"`
+	DefaultSlowDelayMinSeconds *int     `json:"default_slow_delay_min_seconds"`
+	DefaultSlowDelayMaxSeconds *int     `json:"default_slow_delay_max_seconds"`
+	MaxSlowDelaySeconds        *int     `json:"max_slow_delay_seconds"`
+	DefaultSlowRejectRate      *float64 `json:"default_slow_reject_rate"`
+	MaxSlowRejectRate          *float64 `json:"max_slow_reject_rate"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -301,6 +323,16 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		MessagesDispatchModelConfig:     req.MessagesDispatchModelConfig,
 		ModelsListConfig:                req.ModelsListConfig,
 		RPMLimit:                        req.RPMLimit,
+		SpeedConfigEnabled:              req.SpeedConfigEnabled,
+		UserSpeedConfigAllowed:          req.UserSpeedConfigAllowed,
+		DefaultFastQuotaRatio:           req.DefaultFastQuotaRatio,
+		MinFastQuotaRatio:               req.MinFastQuotaRatio,
+		MaxFastQuotaRatio:               req.MaxFastQuotaRatio,
+		DefaultSlowDelayMinSeconds:      req.DefaultSlowDelayMinSeconds,
+		DefaultSlowDelayMaxSeconds:      req.DefaultSlowDelayMaxSeconds,
+		MaxSlowDelaySeconds:             req.MaxSlowDelaySeconds,
+		DefaultSlowRejectRate:           req.DefaultSlowRejectRate,
+		MaxSlowRejectRate:               req.MaxSlowRejectRate,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
@@ -357,6 +389,16 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		MessagesDispatchModelConfig:     req.MessagesDispatchModelConfig,
 		ModelsListConfig:                req.ModelsListConfig,
 		RPMLimit:                        req.RPMLimit,
+		SpeedConfigEnabled:              req.SpeedConfigEnabled,
+		UserSpeedConfigAllowed:          req.UserSpeedConfigAllowed,
+		DefaultFastQuotaRatio:           req.DefaultFastQuotaRatio,
+		MinFastQuotaRatio:               req.MinFastQuotaRatio,
+		MaxFastQuotaRatio:               req.MaxFastQuotaRatio,
+		DefaultSlowDelayMinSeconds:      req.DefaultSlowDelayMinSeconds,
+		DefaultSlowDelayMaxSeconds:      req.DefaultSlowDelayMaxSeconds,
+		MaxSlowDelaySeconds:             req.MaxSlowDelaySeconds,
+		DefaultSlowRejectRate:           req.DefaultSlowRejectRate,
+		MaxSlowRejectRate:               req.MaxSlowRejectRate,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {

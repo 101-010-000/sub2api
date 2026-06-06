@@ -146,6 +146,50 @@ func NewConcurrencyHelper(concurrencyService *service.ConcurrencyService, pingFo
 	}
 }
 
+func waitWithOptionalPing(c *gin.Context, delay time.Duration, isStream bool, streamStarted *bool, pingFormat SSEPingFormat, pingInterval time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	ctx := c.Request.Context()
+	needPing := isStream && pingFormat != "" && pingInterval > 0
+	var flusher http.Flusher
+	if needPing {
+		var ok bool
+		flusher, ok = c.Writer.(http.Flusher)
+		if !ok {
+			needPing = false
+		}
+	}
+	var pingCh <-chan time.Time
+	if needPing {
+		ticker := time.NewTicker(pingInterval)
+		defer ticker.Stop()
+		pingCh = ticker.C
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-pingCh:
+			if streamStarted != nil && !*streamStarted {
+				c.Header("Content-Type", "text/event-stream")
+				c.Header("Cache-Control", "no-cache")
+				c.Header("Connection", "keep-alive")
+				c.Header("X-Accel-Buffering", "no")
+				*streamStarted = true
+			}
+			if _, err := fmt.Fprint(c.Writer, string(pingFormat)); err != nil {
+				return err
+			}
+			flusher.Flush()
+		case <-timer.C:
+			return nil
+		}
+	}
+}
+
 // wrapReleaseOnDone ensures release runs at most once and still triggers on context cancellation.
 // 用于避免客户端断开或上游超时导致的并发槽位泄漏。
 // 优化：基于 context.AfterFunc 注册回调，避免每请求额外守护 goroutine。

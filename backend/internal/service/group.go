@@ -68,6 +68,18 @@ type Group struct {
 	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
 	RPMLimit int
 
+	// 优速通配置：fast 额度正常转发，slow 额度在真实请求前延迟/抽样拒绝。
+	SpeedConfigEnabled            bool
+	UserSpeedConfigAllowed        bool
+	DefaultFastQuotaRatio         float64
+	MinFastQuotaRatio             float64
+	MaxFastQuotaRatio             float64
+	DefaultSlowDelayMinSeconds    int
+	DefaultSlowDelayMaxSeconds    int
+	MaxSlowDelaySeconds           int
+	DefaultSlowRejectRate         float64
+	MaxSlowRejectRate             float64
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

@@ -253,6 +253,10 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		users.GET("/:id/platform-quotas", h.Admin.User.GetUserPlatformQuotas)
 		users.PUT("/:id/platform-quotas", h.Admin.User.UpdateUserPlatformQuotas)
 		users.POST("/:id/platform-quotas/reset", h.Admin.User.ResetUserPlatformQuotaWindow)
+		users.GET("/:id/speed", h.Admin.User.GetUserSpeed)
+		users.PUT("/:id/speed/:group_id", h.Admin.User.UpdateUserSpeed)
+		users.POST("/:id/speed/:group_id/reset", h.Admin.User.ResetUserSpeed)
+		users.DELETE("/:id/speed/:group_id", h.Admin.User.ClearUserSpeedConfig)
 
 		// User attribute values
 		users.GET("/:id/attributes", h.Admin.UserAttribute.GetUserAttributes)

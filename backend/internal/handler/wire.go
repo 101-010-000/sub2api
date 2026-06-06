@@ -95,9 +95,28 @@ func ProvideAuthHandler(cfg *config.Config, authService *service.AuthService, us
 }
 
 // ProvideUserHandler creates UserHandler and attaches optional notification integrations.
-func ProvideUserHandler(userService *service.UserService, authService *service.AuthService, emailService *service.EmailService, emailCache service.EmailCache, affiliateService *service.AffiliateService, userPlatformQuotaRepo service.UserPlatformQuotaRepository, contentModerationService *service.ContentModerationService, feishuNotificationService *service.FeishuNotificationService) *UserHandler {
+func ProvideUserHandler(userService *service.UserService, authService *service.AuthService, emailService *service.EmailService, emailCache service.EmailCache, affiliateService *service.AffiliateService, userPlatformQuotaRepo service.UserPlatformQuotaRepository, contentModerationService *service.ContentModerationService, feishuNotificationService *service.FeishuNotificationService, speedService *service.SpeedService) *UserHandler {
 	h := NewUserHandler(userService, authService, emailService, emailCache, affiliateService, userPlatformQuotaRepo, contentModerationService)
 	h.SetFeishuNotificationService(feishuNotificationService)
+	h.SetSpeedService(speedService)
+	return h
+}
+
+func ProvideAdminUserHandler(adminService service.AdminService, concurrencyService *service.ConcurrencyService, userPlatformQuotaRepo service.UserPlatformQuotaRepository, billingCache service.BillingCache, speedService *service.SpeedService) *admin.UserHandler {
+	h := admin.NewUserHandler(adminService, concurrencyService, userPlatformQuotaRepo, billingCache)
+	h.SetSpeedService(speedService)
+	return h
+}
+
+func ProvideGatewayHandler(gatewayService *service.GatewayService, geminiCompatService *service.GeminiMessagesCompatService, antigravityGatewayService *service.AntigravityGatewayService, userService *service.UserService, concurrencyService *service.ConcurrencyService, billingCacheService *service.BillingCacheService, usageService *service.UsageService, apiKeyService *service.APIKeyService, usageRecordWorkerPool *service.UsageRecordWorkerPool, errorPassthroughService *service.ErrorPassthroughService, contentModerationService *service.ContentModerationService, userMsgQueueService *service.UserMessageQueueService, cfg *config.Config, settingService *service.SettingService, speedService *service.SpeedService) *GatewayHandler {
+	h := NewGatewayHandler(gatewayService, geminiCompatService, antigravityGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
+	h.SetSpeedService(speedService)
+	return h
+}
+
+func ProvideOpenAIGatewayHandler(gatewayService *service.OpenAIGatewayService, concurrencyService *service.ConcurrencyService, billingCacheService *service.BillingCacheService, apiKeyService *service.APIKeyService, usageRecordWorkerPool *service.UsageRecordWorkerPool, errorPassthroughService *service.ErrorPassthroughService, contentModerationService *service.ContentModerationService, cfg *config.Config, speedService *service.SpeedService) *OpenAIGatewayHandler {
+	h := NewOpenAIGatewayHandler(gatewayService, concurrencyService, billingCacheService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, cfg)
+	h.SetSpeedService(speedService)
 	return h
 }
 
@@ -160,8 +179,8 @@ var ProviderSet = wire.NewSet(
 	NewSubscriptionHandler,
 	NewAnnouncementHandler,
 	NewChannelMonitorUserHandler,
-	NewGatewayHandler,
-	NewOpenAIGatewayHandler,
+	ProvideGatewayHandler,
+	ProvideOpenAIGatewayHandler,
 	NewTotpHandler,
 	ProvideSettingHandler,
 	NewPaymentHandler,
@@ -170,7 +189,7 @@ var ProviderSet = wire.NewSet(
 
 	// Admin handlers
 	admin.NewDashboardHandler,
-	admin.NewUserHandler,
+	ProvideAdminUserHandler,
 	admin.NewGroupHandler,
 	admin.NewAccountHandler,
 	admin.NewAnnouncementHandler,

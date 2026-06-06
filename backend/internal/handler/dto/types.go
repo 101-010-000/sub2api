@@ -130,6 +130,17 @@ type Group struct {
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
 	RPMLimit int `json:"rpm_limit"`
 
+	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
+	UserSpeedConfigAllowed     bool    `json:"user_speed_config_allowed"`
+	DefaultFastQuotaRatio      float64 `json:"default_fast_quota_ratio"`
+	MinFastQuotaRatio          float64 `json:"min_fast_quota_ratio"`
+	MaxFastQuotaRatio          float64 `json:"max_fast_quota_ratio"`
+	DefaultSlowDelayMinSeconds int     `json:"default_slow_delay_min_seconds"`
+	DefaultSlowDelayMaxSeconds int     `json:"default_slow_delay_max_seconds"`
+	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
+	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
+	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

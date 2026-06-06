@@ -556,6 +556,16 @@ export interface Group {
   messages_dispatch_model_config?: OpenAIMessagesDispatchModelConfig
   require_oauth_only: boolean
   require_privacy_set: boolean
+  speed_config_enabled?: boolean
+  user_speed_config_allowed?: boolean
+  default_fast_quota_ratio?: number
+  min_fast_quota_ratio?: number
+  max_fast_quota_ratio?: number
+  default_slow_delay_min_seconds?: number
+  default_slow_delay_max_seconds?: number
+  max_slow_delay_seconds?: number
+  default_slow_reject_rate?: number
+  max_slow_reject_rate?: number
   created_at: string
   updated_at: string
 }
@@ -703,6 +713,16 @@ export interface CreateGroupRequest {
   rpm_limit?: number
   require_oauth_only?: boolean
   require_privacy_set?: boolean
+  speed_config_enabled?: boolean
+  user_speed_config_allowed?: boolean
+  default_fast_quota_ratio?: number
+  min_fast_quota_ratio?: number
+  max_fast_quota_ratio?: number
+  default_slow_delay_min_seconds?: number
+  default_slow_delay_max_seconds?: number
+  max_slow_delay_seconds?: number
+  default_slow_reject_rate?: number
+  max_slow_reject_rate?: number
   // 从指定分组复制账号
   copy_accounts_from_group_ids?: number[]
 }
@@ -738,6 +758,16 @@ export interface UpdateGroupRequest {
   rpm_limit?: number
   require_oauth_only?: boolean
   require_privacy_set?: boolean
+  speed_config_enabled?: boolean
+  user_speed_config_allowed?: boolean
+  default_fast_quota_ratio?: number
+  min_fast_quota_ratio?: number
+  max_fast_quota_ratio?: number
+  default_slow_delay_min_seconds?: number
+  default_slow_delay_max_seconds?: number
+  max_slow_delay_seconds?: number
+  default_slow_reject_rate?: number
+  max_slow_reject_rate?: number
   copy_accounts_from_group_ids?: number[]
 }
 

@@ -38,6 +38,7 @@ type OpenAIGatewayHandler struct {
 	imageLimiter             *imageConcurrencyLimiter
 	maxAccountSwitches       int
 	cfg                      *config.Config
+	speedService             *service.SpeedService
 }
 
 func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedModel string) string {
@@ -70,6 +71,10 @@ func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecord
 	return func(ctx context.Context) {
 		task(usageRecordContext(parent, ctx))
 	}
+}
+
+func (h *OpenAIGatewayHandler) SetSpeedService(speedService *service.SpeedService) {
+	h.speedService = speedService
 }
 
 // NewOpenAIGatewayHandler creates a new OpenAIGatewayHandler
@@ -275,6 +280,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
+		return
+	}
+	if !h.applySpeedDecision(c, apiKey, subscription, reqStream, &streamStarted, reqLog, false) {
 		return
 	}
 
@@ -686,6 +694,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
 		h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
+		return
+	}
+	if !h.applySpeedDecision(c, apiKey, subscription, reqStream, &streamStarted, reqLog, true) {
 		return
 	}
 
@@ -1297,6 +1308,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
 		return
 	}
+	if h.speedService != nil {
+		if _, err := h.speedService.Decide(ctx, apiKey.User, apiKey.Group, subscription); err != nil {
+			reqLog.Info("openai.websocket_speed_check_failed", zap.Error(err))
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "speed check failed")
+			return
+		}
+	}
 
 	sessionHash := h.gatewayService.GenerateSessionHashWithFallback(
 		c,
@@ -1828,6 +1846,49 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareError(c *gin.Context, status 
 
 	// Normal case: return JSON response with proper status code
 	h.errorResponse(c, status, errType, message)
+}
+
+func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription, isStream bool, streamStarted *bool, reqLog *zap.Logger, anthropicFormat bool) bool {
+	if h.speedService == nil || apiKey == nil {
+		return true
+	}
+	decision, err := h.speedService.Decide(c.Request.Context(), apiKey.User, apiKey.Group, subscription)
+	if err != nil {
+		started := streamStarted != nil && *streamStarted
+		if errors.Is(err, service.ErrSpeedSlowRejected) {
+			if anthropicFormat {
+				h.anthropicStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
+			} else {
+				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
+			}
+			return false
+		}
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		if anthropicFormat {
+			h.anthropicStreamingAwareError(c, status, code, message, started)
+		} else {
+			h.handleStreamingAwareError(c, status, code, message, started)
+		}
+		return false
+	}
+	if decision == nil || decision.Delay <= 0 {
+		return true
+	}
+	if reqLog != nil {
+		reqLog.Info("openai.speed_slow_delay", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
+	}
+	if err := waitWithOptionalPing(c, decision.Delay, isStream, streamStarted, SSEPingFormatComment, h.concurrencyHelper.pingInterval); err != nil {
+		if anthropicFormat {
+			h.anthropicStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", streamStarted != nil && *streamStarted)
+		} else {
+			h.handleStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", streamStarted != nil && *streamStarted)
+		}
+		return false
+	}
+	return true
 }
 
 // ensureForwardErrorResponse 在 Forward 返回错误但尚未写响应时补写统一错误响应。

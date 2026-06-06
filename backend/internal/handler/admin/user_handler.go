@@ -29,6 +29,7 @@ type UserHandler struct {
 	concurrencyService    *service.ConcurrencyService
 	userPlatformQuotaRepo service.UserPlatformQuotaRepository // T13 admin quota view
 	billingCache          service.BillingCache                // T17/T18 缓存失效（PUT/POST 路径）
+	speedService          *service.SpeedService
 }
 
 // NewUserHandler creates a new admin user handler
@@ -44,6 +45,10 @@ func NewUserHandler(
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
 		billingCache:          billingCache,
 	}
+}
+
+func (h *UserHandler) SetSpeedService(speedService *service.SpeedService) {
+	h.speedService = speedService
 }
 
 // CreateUserRequest represents admin create user request
@@ -84,6 +89,13 @@ type UpdateBalanceRequest struct {
 	Balance   float64 `json:"balance" binding:"required,gt=0"`
 	Operation string  `json:"operation" binding:"required,oneof=set add subtract"`
 	Notes     string  `json:"notes"`
+}
+
+type updateUserSpeedConfigRequest struct {
+	FastQuotaRatio      *float64 `json:"fast_quota_ratio"`
+	SlowDelayMinSeconds *int     `json:"slow_delay_min_seconds"`
+	SlowDelayMaxSeconds *int     `json:"slow_delay_max_seconds"`
+	SlowRejectRate      *float64 `json:"slow_reject_rate"`
 }
 
 type BindUserAuthIdentityRequest struct {
@@ -854,4 +866,105 @@ func (h *UserHandler) ResetUserPlatformQuotaWindow(c *gin.Context) {
 		out = append(out, quotaview.LazyZeroQuotaForResponse(records[i], now, true))
 	}
 	response.Success(c, map[string]any{"platform_quotas": out})
+}
+
+func (h *UserHandler) GetUserSpeed(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user id")
+		return
+	}
+	if h.speedService == nil {
+		response.Success(c, gin.H{"speed": []any{}})
+		return
+	}
+	statuses, err := h.speedService.ListUserStatuses(c.Request.Context(), userID, false)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"speed": statuses})
+}
+
+func (h *UserHandler) UpdateUserSpeed(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user id")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group id")
+		return
+	}
+	var req updateUserSpeedConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body")
+		return
+	}
+	if h.speedService == nil {
+		response.ErrorFrom(c, service.ErrSpeedConfigForbidden)
+		return
+	}
+	status, err := h.speedService.UpdateUserConfig(c.Request.Context(), true, userID, groupID, service.UserGroupSpeedConfig{
+		FastQuotaRatio:      req.FastQuotaRatio,
+		SlowDelayMinSeconds: req.SlowDelayMinSeconds,
+		SlowDelayMaxSeconds: req.SlowDelayMaxSeconds,
+		SlowRejectRate:      req.SlowRejectRate,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, status)
+}
+
+func (h *UserHandler) ResetUserSpeed(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user id")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group id")
+		return
+	}
+	if h.speedService == nil {
+		response.ErrorFrom(c, service.ErrSpeedConfigForbidden)
+		return
+	}
+	if err := h.speedService.ResetUsage(c.Request.Context(), userID, groupID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	status, err := h.speedService.GetUserStatus(c.Request.Context(), userID, groupID, false)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, status)
+}
+
+func (h *UserHandler) ClearUserSpeedConfig(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user id")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group id")
+		return
+	}
+	if h.speedService == nil {
+		response.ErrorFrom(c, service.ErrSpeedConfigForbidden)
+		return
+	}
+	status, err := h.speedService.ClearUserConfig(c.Request.Context(), userID, groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, status)
 }

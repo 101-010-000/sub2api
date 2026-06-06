@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type UserHandler struct {
 	affiliateService          *service.AffiliateService
 	userPlatformQuotaRepo     service.UserPlatformQuotaRepository
 	contentModerationService  *service.ContentModerationService
+	speedService              *service.SpeedService
 	feishuNotificationService *service.FeishuNotificationService
 }
 
@@ -49,6 +51,10 @@ func NewUserHandler(
 		userPlatformQuotaRepo:    userPlatformQuotaRepo,
 		contentModerationService: moderationSvc,
 	}
+}
+
+func (h *UserHandler) SetSpeedService(speedService *service.SpeedService) {
+	h.speedService = speedService
 }
 
 func (h *UserHandler) SetFeishuNotificationService(feishuNotificationService *service.FeishuNotificationService) {
@@ -79,6 +85,87 @@ func (h *UserHandler) GetMyPlatformQuotas(c *gin.Context) {
 		out = append(out, quotaview.LazyZeroQuotaForResponse(r, now, false))
 	}
 	response.Success(c, map[string]any{"platform_quotas": out})
+}
+
+type updateSpeedConfigRequest struct {
+	FastQuotaRatio      *float64 `json:"fast_quota_ratio"`
+	SlowDelayMinSeconds *int     `json:"slow_delay_min_seconds"`
+	SlowDelayMaxSeconds *int     `json:"slow_delay_max_seconds"`
+	SlowRejectRate      *float64 `json:"slow_reject_rate"`
+}
+
+func (h *UserHandler) ListMySpeed(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.speedService == nil {
+		response.Success(c, map[string]any{"speed": []any{}})
+		return
+	}
+	statuses, err := h.speedService.ListUserStatuses(c.Request.Context(), subject.UserID, true)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, map[string]any{"speed": statuses})
+}
+
+func (h *UserHandler) GetMySpeed(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group id")
+		return
+	}
+	if h.speedService == nil {
+		response.ErrorFrom(c, service.ErrSpeedConfigForbidden)
+		return
+	}
+	status, err := h.speedService.GetUserStatus(c.Request.Context(), subject.UserID, groupID, true)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, status)
+}
+
+func (h *UserHandler) UpdateMySpeed(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group id")
+		return
+	}
+	var req updateSpeedConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body")
+		return
+	}
+	if h.speedService == nil {
+		response.ErrorFrom(c, service.ErrSpeedConfigForbidden)
+		return
+	}
+	status, err := h.speedService.UpdateUserConfig(c.Request.Context(), false, subject.UserID, groupID, service.UserGroupSpeedConfig{
+		FastQuotaRatio:      req.FastQuotaRatio,
+		SlowDelayMinSeconds: req.SlowDelayMinSeconds,
+		SlowDelayMaxSeconds: req.SlowDelayMaxSeconds,
+		SlowRejectRate:      req.SlowRejectRate,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, status)
 }
 
 func (h *UserHandler) GetRiskControlBanStatus(c *gin.Context) {

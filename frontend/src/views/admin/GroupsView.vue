@@ -509,6 +509,79 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
+        <div class="space-y-4 border-t pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                优速通
+              </label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                fast 额度正常转发，slow 额度随机延迟或按概率拒绝。
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="createForm.speed_config_enabled = !createForm.speed_config_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                createForm.speed_config_enabled
+                  ? 'bg-primary-500'
+                  : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  createForm.speed_config_enabled ? 'translate-x-6' : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+          <div v-if="createForm.speed_config_enabled" class="space-y-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800">
+            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input v-model="createForm.user_speed_config_allowed" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+              允许用户自由配置额度速率
+            </label>
+            <div class="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label class="input-label">fast 默认占比</label>
+                <input v-model.number="createForm.default_fast_quota_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+              <div>
+                <label class="input-label">fast 最小占比</label>
+                <input v-model.number="createForm.min_fast_quota_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+              <div>
+                <label class="input-label">fast 最大占比</label>
+                <input v-model.number="createForm.max_fast_quota_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label class="input-label">slow 默认最小延迟（秒）</label>
+                <input v-model.number="createForm.default_slow_delay_min_seconds" type="number" min="0" step="1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">slow 默认最大延迟（秒）</label>
+                <input v-model.number="createForm.default_slow_delay_max_seconds" type="number" min="0" step="1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">slow 延迟上限（秒）</label>
+                <input v-model.number="createForm.max_slow_delay_seconds" type="number" min="0" step="1" class="input" />
+              </div>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label class="input-label">slow 默认拒绝率</label>
+                <input v-model.number="createForm.default_slow_reject_rate" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+              <div>
+                <label class="input-label">slow 拒绝率上限</label>
+                <input v-model.number="createForm.max_slow_reject_rate" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+            </div>
+          </div>
+        </div>
         <div
           v-if="createForm.subscription_type !== 'subscription'"
           data-tour="group-form-exclusive"
@@ -1794,6 +1867,79 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+        <div class="space-y-4 border-t pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                优速通
+              </label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                fast 额度正常转发，slow 额度随机延迟或按概率拒绝。
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="editForm.speed_config_enabled = !editForm.speed_config_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                editForm.speed_config_enabled
+                  ? 'bg-primary-500'
+                  : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  editForm.speed_config_enabled ? 'translate-x-6' : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+          <div v-if="editForm.speed_config_enabled" class="space-y-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800">
+            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input v-model="editForm.user_speed_config_allowed" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+              允许用户自由配置额度速率
+            </label>
+            <div class="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label class="input-label">fast 默认占比</label>
+                <input v-model.number="editForm.default_fast_quota_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+              <div>
+                <label class="input-label">fast 最小占比</label>
+                <input v-model.number="editForm.min_fast_quota_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+              <div>
+                <label class="input-label">fast 最大占比</label>
+                <input v-model.number="editForm.max_fast_quota_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label class="input-label">slow 默认最小延迟（秒）</label>
+                <input v-model.number="editForm.default_slow_delay_min_seconds" type="number" min="0" step="1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">slow 默认最大延迟（秒）</label>
+                <input v-model.number="editForm.default_slow_delay_max_seconds" type="number" min="0" step="1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">slow 延迟上限（秒）</label>
+                <input v-model.number="editForm.max_slow_delay_seconds" type="number" min="0" step="1" class="input" />
+              </div>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label class="input-label">slow 默认拒绝率</label>
+                <input v-model.number="editForm.default_slow_reject_rate" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+              <div>
+                <label class="input-label">slow 拒绝率上限</label>
+                <input v-model.number="editForm.max_slow_reject_rate" type="number" min="0" max="1" step="0.01" class="input" />
+              </div>
+            </div>
+          </div>
         </div>
         <div v-if="editForm.subscription_type !== 'subscription'">
           <div class="mb-1.5 flex items-center gap-1">
@@ -3363,6 +3509,16 @@ const createForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  speed_config_enabled: false,
+  user_speed_config_allowed: false,
+  default_fast_quota_ratio: 0.3,
+  min_fast_quota_ratio: 0.1,
+  max_fast_quota_ratio: 0.8,
+  default_slow_delay_min_seconds: 1,
+  default_slow_delay_max_seconds: 5,
+  max_slow_delay_seconds: 30,
+  default_slow_reject_rate: 0,
+  max_slow_reject_rate: 0.5,
 });
 
 // 简单账号类型（用于模型路由选择）
@@ -3695,6 +3851,16 @@ const editForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  speed_config_enabled: false,
+  user_speed_config_allowed: false,
+  default_fast_quota_ratio: 0.3,
+  min_fast_quota_ratio: 0.1,
+  max_fast_quota_ratio: 0.8,
+  default_slow_delay_min_seconds: 1,
+  default_slow_delay_max_seconds: 5,
+  max_slow_delay_seconds: 30,
+  default_slow_reject_rate: 0,
+  max_slow_reject_rate: 0.5,
 });
 
 type ImagePricingFormState = {
@@ -3932,6 +4098,7 @@ const closeCreateModal = () => {
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
   createForm.rpm_limit = 0;
+  resetSpeedConfigForm(createForm);
   resetModelsListState(createModelsListState);
   createModelRoutingRules.value = [];
 };
@@ -3963,6 +4130,24 @@ const normalizeImageRateMultiplier = (
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
+};
+
+const resetSpeedConfigForm = (
+  form: typeof createForm | typeof editForm,
+  group?: Partial<AdminGroup>,
+) => {
+  form.speed_config_enabled = group?.speed_config_enabled ?? false;
+  form.user_speed_config_allowed = group?.user_speed_config_allowed ?? false;
+  form.default_fast_quota_ratio = group?.default_fast_quota_ratio ?? 0.3;
+  form.min_fast_quota_ratio = group?.min_fast_quota_ratio ?? 0.1;
+  form.max_fast_quota_ratio = group?.max_fast_quota_ratio ?? 0.8;
+  form.default_slow_delay_min_seconds =
+    group?.default_slow_delay_min_seconds ?? 1;
+  form.default_slow_delay_max_seconds =
+    group?.default_slow_delay_max_seconds ?? 5;
+  form.max_slow_delay_seconds = group?.max_slow_delay_seconds ?? 30;
+  form.default_slow_reject_rate = group?.default_slow_reject_rate ?? 0;
+  form.max_slow_reject_rate = group?.max_slow_reject_rate ?? 0.5;
 };
 
 const handleCreateGroup = async () => {
@@ -4074,6 +4259,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
+  resetSpeedConfigForm(editForm, group);
   resetModelsListState(editModelsListState, group.models_list_config);
   // 加载模型路由规则（异步加载账号名称）
   editModelRoutingRules.value = await convertApiFormatToRoutingRules(

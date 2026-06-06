@@ -229,6 +229,17 @@ type CreateGroupInput struct {
 	ModelsListConfig            GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制）
 	RPMLimit int
+	// 优速通配置
+	SpeedConfigEnabled         bool
+	UserSpeedConfigAllowed     bool
+	DefaultFastQuotaRatio      float64
+	MinFastQuotaRatio          float64
+	MaxFastQuotaRatio          float64
+	DefaultSlowDelayMinSeconds int
+	DefaultSlowDelayMaxSeconds int
+	MaxSlowDelaySeconds        int
+	DefaultSlowRejectRate      float64
+	MaxSlowRejectRate          float64
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -270,6 +281,17 @@ type UpdateGroupInput struct {
 	ModelsListConfig            *GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制），nil 表示未提供不改动。
 	RPMLimit *int
+	// 优速通配置
+	SpeedConfigEnabled         *bool
+	UserSpeedConfigAllowed     *bool
+	DefaultFastQuotaRatio      *float64
+	MinFastQuotaRatio          *float64
+	MaxFastQuotaRatio          *float64
+	DefaultSlowDelayMinSeconds *int
+	DefaultSlowDelayMaxSeconds *int
+	MaxSlowDelaySeconds        *int
+	DefaultSlowRejectRate      *float64
+	MaxSlowRejectRate          *float64
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -1895,7 +1917,18 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MessagesDispatchModelConfig:     normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
 		ModelsListConfig:                normalizeGroupModelsListConfig(input.ModelsListConfig),
 		RPMLimit:                        input.RPMLimit,
+		SpeedConfigEnabled:              input.SpeedConfigEnabled,
+		UserSpeedConfigAllowed:          input.UserSpeedConfigAllowed,
+		DefaultFastQuotaRatio:           input.DefaultFastQuotaRatio,
+		MinFastQuotaRatio:               input.MinFastQuotaRatio,
+		MaxFastQuotaRatio:               input.MaxFastQuotaRatio,
+		DefaultSlowDelayMinSeconds:      input.DefaultSlowDelayMinSeconds,
+		DefaultSlowDelayMaxSeconds:      input.DefaultSlowDelayMaxSeconds,
+		MaxSlowDelaySeconds:             input.MaxSlowDelaySeconds,
+		DefaultSlowRejectRate:           input.DefaultSlowRejectRate,
+		MaxSlowRejectRate:               input.MaxSlowRejectRate,
 	}
+	normalizeGroupSpeedConfig(group)
 	sanitizeGroupMessagesDispatchFields(group)
 	if err := s.groupRepo.Create(ctx, group); err != nil {
 		return nil, err
@@ -1947,6 +1980,54 @@ func normalizePrice(price *float64) *float64 {
 		return nil
 	}
 	return price
+}
+
+func normalizeGroupSpeedConfig(group *Group) {
+	if group == nil {
+		return
+	}
+	if group.DefaultFastQuotaRatio <= 0 {
+		group.DefaultFastQuotaRatio = defaultFastQuotaRatio
+	}
+	if group.MinFastQuotaRatio <= 0 {
+		group.MinFastQuotaRatio = defaultMinFastQuotaRatio
+	}
+	if group.MaxFastQuotaRatio <= 0 {
+		group.MaxFastQuotaRatio = defaultMaxFastQuotaRatio
+	}
+	if group.MinFastQuotaRatio > group.MaxFastQuotaRatio {
+		group.MinFastQuotaRatio, group.MaxFastQuotaRatio = group.MaxFastQuotaRatio, group.MinFastQuotaRatio
+	}
+	if group.DefaultFastQuotaRatio < group.MinFastQuotaRatio {
+		group.DefaultFastQuotaRatio = group.MinFastQuotaRatio
+	}
+	if group.DefaultFastQuotaRatio > group.MaxFastQuotaRatio {
+		group.DefaultFastQuotaRatio = group.MaxFastQuotaRatio
+	}
+	if group.DefaultSlowDelayMinSeconds <= 0 {
+		group.DefaultSlowDelayMinSeconds = defaultSlowDelayMinSeconds
+	}
+	if group.DefaultSlowDelayMaxSeconds <= 0 {
+		group.DefaultSlowDelayMaxSeconds = defaultSlowDelayMaxSeconds
+	}
+	if group.MaxSlowDelaySeconds <= 0 {
+		group.MaxSlowDelaySeconds = defaultMaxSlowDelaySeconds
+	}
+	if group.DefaultSlowDelayMaxSeconds > group.MaxSlowDelaySeconds {
+		group.DefaultSlowDelayMaxSeconds = group.MaxSlowDelaySeconds
+	}
+	if group.DefaultSlowDelayMinSeconds > group.DefaultSlowDelayMaxSeconds {
+		group.DefaultSlowDelayMinSeconds = group.DefaultSlowDelayMaxSeconds
+	}
+	if group.DefaultSlowRejectRate < 0 {
+		group.DefaultSlowRejectRate = 0
+	}
+	if group.MaxSlowRejectRate <= 0 {
+		group.MaxSlowRejectRate = defaultMaxSlowRejectRate
+	}
+	if group.DefaultSlowRejectRate > group.MaxSlowRejectRate {
+		group.DefaultSlowRejectRate = group.MaxSlowRejectRate
+	}
 }
 
 // validateFallbackGroup 校验降级分组的有效性
@@ -2147,6 +2228,37 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.RPMLimit != nil {
 		group.RPMLimit = *input.RPMLimit
 	}
+	if input.SpeedConfigEnabled != nil {
+		group.SpeedConfigEnabled = *input.SpeedConfigEnabled
+	}
+	if input.UserSpeedConfigAllowed != nil {
+		group.UserSpeedConfigAllowed = *input.UserSpeedConfigAllowed
+	}
+	if input.DefaultFastQuotaRatio != nil {
+		group.DefaultFastQuotaRatio = *input.DefaultFastQuotaRatio
+	}
+	if input.MinFastQuotaRatio != nil {
+		group.MinFastQuotaRatio = *input.MinFastQuotaRatio
+	}
+	if input.MaxFastQuotaRatio != nil {
+		group.MaxFastQuotaRatio = *input.MaxFastQuotaRatio
+	}
+	if input.DefaultSlowDelayMinSeconds != nil {
+		group.DefaultSlowDelayMinSeconds = *input.DefaultSlowDelayMinSeconds
+	}
+	if input.DefaultSlowDelayMaxSeconds != nil {
+		group.DefaultSlowDelayMaxSeconds = *input.DefaultSlowDelayMaxSeconds
+	}
+	if input.MaxSlowDelaySeconds != nil {
+		group.MaxSlowDelaySeconds = *input.MaxSlowDelaySeconds
+	}
+	if input.DefaultSlowRejectRate != nil {
+		group.DefaultSlowRejectRate = *input.DefaultSlowRejectRate
+	}
+	if input.MaxSlowRejectRate != nil {
+		group.MaxSlowRejectRate = *input.MaxSlowRejectRate
+	}
+	normalizeGroupSpeedConfig(group)
 	sanitizeGroupMessagesDispatchFields(group)
 
 	if err := s.groupRepo.Update(ctx, group); err != nil {

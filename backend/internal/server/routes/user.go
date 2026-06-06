@@ -35,6 +35,9 @@ func RegisterUserRoutes(
 			user.PATCH("/notification-settings", h.User.UpdateNotificationSettings)
 			user.GET("/api-keys/:id/usage/daily", h.Usage.GetMyAPIKeyDailyUsage)
 			user.GET("/platform-quotas", h.User.GetMyPlatformQuotas)
+			user.GET("/speed", h.User.ListMySpeed)
+			user.GET("/speed/:group_id", h.User.GetMySpeed)
+			user.PUT("/speed/:group_id", h.User.UpdateMySpeed)
 			user.GET("/risk-control/ban-status", h.User.GetRiskControlBanStatus)
 			user.POST("/risk-control/self-unban", h.User.SelfUnbanRiskControl)
 
