@@ -942,41 +942,42 @@ type ContentModerationHashCache interface {
 }
 
 type ContentModerationService struct {
-	settingRepo              SettingRepository
-	repo                     ContentModerationRepository
-	hashCache                ContentModerationHashCache
-	groupRepo                GroupRepository
-	userRepo                 UserRepository
-	authCacheInvalidator     APIKeyAuthCacheInvalidator
-	emailService             *EmailService
-	encryptor                SecretEncryptor
-	httpClient               *http.Client
-	asyncQueue               chan contentModerationTask
-	workerCount              int
-	apiKeyCursor             atomic.Uint64
-	asyncActive              atomic.Int64
-	asyncEnqueued            atomic.Int64
-	asyncDropped             atomic.Int64
-	asyncProcessed           atomic.Int64
-	asyncErrors              atomic.Int64
-	preBlockActive           atomic.Int64
-	preBlockChecked          atomic.Int64
-	preBlockAllowed          atomic.Int64
-	preBlockBlocked          atomic.Int64
-	preBlockErrors           atomic.Int64
-	preBlockLatencyTotalMS   atomic.Int64
-	lastCleanupUnix          atomic.Int64
-	lastCleanupDeletedHit    atomic.Int64
-	lastCleanupDeletedNonHit atomic.Int64
-	contextDrops             atomic.Int64
-	lastBackgroundReviewUnix atomic.Int64
-	contextErrorMu           sync.Mutex
-	contextCaptureError      string
-	lastContextErrorAt       time.Time
-	keyHealthMu              sync.Mutex
-	keyHealth                map[string]*contentModerationKeyHealth
-	auditModelHealthMu       sync.Mutex
-	auditModelHealth         map[string]*contentModerationAuditModelHealth
+	settingRepo               SettingRepository
+	repo                      ContentModerationRepository
+	hashCache                 ContentModerationHashCache
+	groupRepo                 GroupRepository
+	userRepo                  UserRepository
+	authCacheInvalidator      APIKeyAuthCacheInvalidator
+	emailService              *EmailService
+	feishuNotificationService *FeishuNotificationService
+	encryptor                 SecretEncryptor
+	httpClient                *http.Client
+	asyncQueue                chan contentModerationTask
+	workerCount               int
+	apiKeyCursor              atomic.Uint64
+	asyncActive               atomic.Int64
+	asyncEnqueued             atomic.Int64
+	asyncDropped              atomic.Int64
+	asyncProcessed            atomic.Int64
+	asyncErrors               atomic.Int64
+	preBlockActive            atomic.Int64
+	preBlockChecked           atomic.Int64
+	preBlockAllowed           atomic.Int64
+	preBlockBlocked           atomic.Int64
+	preBlockErrors            atomic.Int64
+	preBlockLatencyTotalMS    atomic.Int64
+	lastCleanupUnix           atomic.Int64
+	lastCleanupDeletedHit     atomic.Int64
+	lastCleanupDeletedNonHit  atomic.Int64
+	contextDrops              atomic.Int64
+	lastBackgroundReviewUnix  atomic.Int64
+	contextErrorMu            sync.Mutex
+	contextCaptureError       string
+	lastContextErrorAt        time.Time
+	keyHealthMu               sync.Mutex
+	keyHealth                 map[string]*contentModerationKeyHealth
+	auditModelHealthMu        sync.Mutex
+	auditModelHealth          map[string]*contentModerationAuditModelHealth
 }
 
 type contentModerationTask struct {
@@ -1063,6 +1064,13 @@ func NewContentModerationService(
 		go svc.cleanupWorker()
 	}
 	return svc
+}
+
+func (s *ContentModerationService) SetFeishuNotificationService(feishuNotificationService *FeishuNotificationService) {
+	if s == nil {
+		return
+	}
+	s.feishuNotificationService = feishuNotificationService
 }
 
 func (s *ContentModerationService) GetConfig(ctx context.Context) (*ContentModerationConfigView, error) {
@@ -2832,26 +2840,54 @@ func (s *ContentModerationService) sendFlaggedNotificationSideEffects(ctx contex
 	if s == nil || cfg == nil || log == nil || !log.Flagged {
 		return
 	}
-	if s.emailService == nil || strings.TrimSpace(log.UserEmail) == "" {
-		return
-	}
 	userID := contentModerationEmailUserID(log)
 	emailSent := false
-	if cfg.EmailOnHit {
-		if err := s.sendViolationEmail(ctx, cfg, log); err != nil {
-			slog.Warn("content_moderation.email_failed", "user_id", userID, "email", log.UserEmail, "error", err)
-		} else {
-			emailSent = true
+	if s.emailService != nil && strings.TrimSpace(log.UserEmail) != "" {
+		if cfg.EmailOnHit {
+			if err := s.sendViolationEmail(ctx, cfg, log); err != nil {
+				slog.Warn("content_moderation.email_failed", "user_id", userID, "email", log.UserEmail, "error", err)
+			} else {
+				emailSent = true
+			}
+		}
+		if autoBanJustApplied {
+			if err := s.sendAccountDisabledEmail(ctx, cfg, log); err != nil {
+				slog.Warn("content_moderation.ban_email_failed", "user_id", userID, "email", log.UserEmail, "error", err)
+			} else {
+				emailSent = true
+			}
 		}
 	}
 	if autoBanJustApplied {
-		if err := s.sendAccountDisabledEmail(ctx, cfg, log); err != nil {
-			slog.Warn("content_moderation.ban_email_failed", "user_id", userID, "email", log.UserEmail, "error", err)
-		} else {
-			emailSent = true
-		}
+		s.sendContentModerationBanFeishu(ctx, cfg, log)
 	}
 	log.EmailSent = emailSent
+}
+
+func (s *ContentModerationService) sendContentModerationBanFeishu(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog) {
+	if s == nil || s.feishuNotificationService == nil || cfg == nil || log == nil {
+		return
+	}
+	userID := contentModerationEmailUserID(log)
+	if userID <= 0 {
+		return
+	}
+	banThreshold := cfg.BanThreshold
+	if log.EffectiveBanThreshold > 0 {
+		banThreshold = log.EffectiveBanThreshold
+	}
+	if err := s.feishuNotificationService.SendContentModerationBan(ctx, FeishuContentModerationBanNotification{
+		UserID:         userID,
+		UserEmail:      log.UserEmail,
+		GroupName:      log.GroupName,
+		Category:       log.HighestCategory,
+		Score:          log.HighestScore,
+		ViolationCount: log.ViolationCount,
+		BanThreshold:   banThreshold,
+		BanDurationMin: cfg.BanDurationMinutes,
+	}); err != nil {
+		slog.Warn("content_moderation.ban_feishu_failed", "user_id", userID, "error", err)
+	}
 }
 
 func (s *ContentModerationService) sendViolationEmail(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog) error {

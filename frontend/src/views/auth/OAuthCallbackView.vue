@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen bg-gray-50 px-4 py-10 dark:bg-dark-900">
-    <div class="mx-auto max-w-2xl">
+  <div class="flex min-h-screen flex-col bg-gray-50 px-4 py-10 dark:bg-dark-900">
+    <div class="mx-auto flex w-full max-w-2xl flex-1 items-center">
       <div v-if="isProcessing" class="card p-6 text-center">
         <div class="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
         <h1 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
@@ -142,6 +142,10 @@
         </div>
       </div>
     </div>
+
+    <footer>
+      <PoweredByFooter />
+    </footer>
   </div>
 </template>
 
@@ -149,6 +153,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore, useAuthStore } from '@/stores'
 import { apiClient } from '@/api/client'

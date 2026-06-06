@@ -396,6 +396,7 @@
         <p class="text-sm text-gray-500 dark:text-dark-400">
           &copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}
         </p>
+        <PoweredByFooter />
         <div class="flex items-center gap-4">
           <a
             v-if="docUrl"
@@ -421,6 +422,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t, locale } = useI18n()

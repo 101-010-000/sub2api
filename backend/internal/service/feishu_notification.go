@@ -105,6 +105,18 @@ type FeishuSubscriptionExpiryNotification struct {
 	SourceReminderKey string
 }
 
+type FeishuContentModerationBanNotification struct {
+	UserID         int64
+	UserName       string
+	UserEmail      string
+	GroupName      string
+	Category       string
+	Score          float64
+	ViolationCount int
+	BanThreshold   int
+	BanDurationMin int
+}
+
 type FeishuNotificationService struct {
 	settingRepo SettingRepository
 	bindingRepo FeishuUserIdentityRepository
@@ -230,6 +242,35 @@ func (s *FeishuNotificationService) SendSubscriptionExpiryReminder(ctx context.C
 				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": "**到期时间**\n" + input.ExpiresAt.Format("2006-01-02 15:04")}},
 			}},
 			s.feishuPanelActionElement(ctx, "查看面板", ""),
+		},
+	}
+	return s.sendInteractiveCard(ctx, input.UserID, card)
+}
+
+func (s *FeishuNotificationService) SendContentModerationBan(ctx context.Context, input FeishuContentModerationBanNotification) error {
+	displayName := firstNonEmpty(input.UserName, input.UserEmail, "用户")
+	groupName := firstNonEmpty(input.GroupName, "-")
+	category := firstNonEmpty(input.Category, "-")
+	banDuration := "-"
+	if input.BanDurationMin > 0 {
+		banDuration = fmt.Sprintf("%d 分钟", input.BanDurationMin)
+	}
+	card := map[string]any{
+		"config": map[string]any{"wide_screen_mode": true},
+		"header": map[string]any{
+			"title":    map[string]any{"tag": "plain_text", "content": "账户风控封禁通知"},
+			"template": "red",
+		},
+		"elements": []any{
+			map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**%s**，您的账户已因触发内容风控规则被自动封禁。", displayName)}},
+			map[string]any{"tag": "div", "fields": []any{
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**命中分组**\n%s", groupName)}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**风险类别**\n%s", category)}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**最高分数**\n%.3f", input.Score)}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**触发次数**\n%d / %d", input.ViolationCount, input.BanThreshold)}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**封禁时长**\n%s", banDuration)}},
+			}},
+			s.feishuPanelActionElement(ctx, "查看账户", ""),
 		},
 	}
 	return s.sendInteractiveCard(ctx, input.UserID, card)

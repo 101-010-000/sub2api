@@ -1,8 +1,9 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-slate-50 p-4 dark:bg-slate-950">
-    <div
-      class="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-    >
+  <div class="flex min-h-screen flex-col bg-slate-50 p-4 dark:bg-slate-950">
+    <div class="flex flex-1 items-center justify-center">
+      <div
+        class="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      >
       <!-- Amount + Order ID -->
       <div v-if="amount" class="text-center">
         <p class="text-3xl font-bold" :style="{ color: methodColor }">¥{{ amount }}</p>
@@ -48,7 +49,12 @@
         />
         <span class="ml-3 text-sm text-gray-500 dark:text-slate-400">{{ hint }}</span>
       </div>
+      </div>
     </div>
+
+    <footer class="pb-2">
+      <PoweredByFooter />
+    </footer>
   </div>
 </template>
 
@@ -56,6 +62,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
 

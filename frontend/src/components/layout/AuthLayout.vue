@@ -55,8 +55,9 @@
       </div>
 
       <!-- Copyright -->
-      <div class="mt-8 text-center text-xs text-gray-400 dark:text-dark-500">
-        &copy; {{ currentYear }} {{ siteName }}. All rights reserved.
+      <div class="mt-8 space-y-2 text-center text-xs text-gray-400 dark:text-dark-500">
+        <p>&copy; {{ currentYear }} {{ siteName }}. All rights reserved.</p>
+        <PoweredByFooter />
       </div>
     </div>
   </div>
@@ -65,6 +66,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import { sanitizeUrl } from '@/utils/url'
 
 const appStore = useAppStore()

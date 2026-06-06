@@ -512,6 +512,42 @@ func (i *contentModerationTestAuthCacheInvalidator) InvalidateAuthCacheByUserID(
 func (i *contentModerationTestAuthCacheInvalidator) InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64) {
 }
 
+type contentModerationTestFeishuBindingRepo struct {
+	binding *FeishuUserIdentityBinding
+	err     error
+}
+
+func (r *contentModerationTestFeishuBindingRepo) UpsertFeishuUserIdentityBinding(ctx context.Context, input UpsertFeishuUserIdentityBindingInput) (*FeishuUserIdentityBinding, error) {
+	panic("unexpected UpsertFeishuUserIdentityBinding call")
+}
+
+func (r *contentModerationTestFeishuBindingRepo) GetFeishuNotificationBinding(ctx context.Context, userID int64, appID string) (*FeishuUserIdentityBinding, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	if r.binding == nil || r.binding.UserID != userID || r.binding.AppID != appID {
+		return nil, ErrFeishuNotificationNotBound
+	}
+	clone := *r.binding
+	return &clone, nil
+}
+
+func (r *contentModerationTestFeishuBindingRepo) GetFeishuBindingByUnionID(ctx context.Context, appID, tenantKey, unionID, purpose string) (*FeishuUserIdentityBinding, error) {
+	panic("unexpected GetFeishuBindingByUnionID call")
+}
+
+func (r *contentModerationTestFeishuBindingRepo) ListFeishuBindingsByUser(ctx context.Context, userID int64) ([]FeishuUserIdentityBinding, error) {
+	panic("unexpected ListFeishuBindingsByUser call")
+}
+
+func (r *contentModerationTestFeishuBindingRepo) SetFeishuNotificationEnabled(ctx context.Context, userID int64, appID string, enabled bool) (*FeishuUserIdentityBinding, error) {
+	panic("unexpected SetFeishuNotificationEnabled call")
+}
+
+func (r *contentModerationTestFeishuBindingRepo) DeleteFeishuNotificationBinding(ctx context.Context, userID int64, appID string) error {
+	panic("unexpected DeleteFeishuNotificationBinding call")
+}
+
 func (c *contentModerationTestHashCache) RecordFlaggedInputHash(ctx context.Context, inputHash string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -2072,6 +2108,104 @@ func TestContentModerationAutoBanDisablesRegularUserAtThreshold(t *testing.T) {
 	require.True(t, logs[1].AutoBanned)
 	require.Len(t, userRepo.updated, 1)
 	require.Equal(t, StatusDisabled, userRepo.user.Status)
+	require.Equal(t, []int64{userID}, invalidator.userIDs)
+}
+
+func TestContentModerationAutoBanSendsFeishuNotificationWhenBound(t *testing.T) {
+	var messageBodies []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code":                0,
+				"tenant_access_token": "tenant-token",
+			})
+		case "/messages":
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			messageBodies = append(messageBodies, body)
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0})
+		default:
+			t.Fatalf("unexpected feishu path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.BanThreshold = 2
+	cfg.ViolationWindowHours = 24
+	cfg.BanDurationMinutes = 60
+
+	userID := int64(1001)
+	repo := &contentModerationTestRepo{}
+	require.NoError(t, repo.CreateLog(context.Background(), newContentModerationFlaggedLog(userID)))
+	userRepo := &contentModerationTestUserRepo{user: &User{ID: userID, Role: RoleUser, Status: StatusActive}}
+	invalidator := &contentModerationTestAuthCacheInvalidator{}
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyFeishuNotifyEnabled:    "true",
+		SettingKeyFeishuNotifyAppID:      "cli-test",
+		SettingKeyFeishuNotifyAppSecret:  "secret",
+		SettingKeyFeishuNotifyTokenURL:   server.URL + "/token",
+		SettingKeyFeishuNotifyMessageURL: server.URL + "/messages",
+		SettingKeyFeishuNotifyPanelURL:   "/feishu/panel",
+	}}
+	bindingRepo := &contentModerationTestFeishuBindingRepo{binding: &FeishuUserIdentityBinding{
+		UserID:              userID,
+		AppID:               "cli-test",
+		OpenID:              "ou-test",
+		NotificationEnabled: true,
+	}}
+	svc := NewContentModerationService(nil, repo, nil, nil, userRepo, invalidator, nil)
+	svc.SetFeishuNotificationService(NewFeishuNotificationService(settingRepo, bindingRepo))
+
+	log := newContentModerationFlaggedLog(userID)
+	log.UserEmail = ""
+	log.GroupName = "vip"
+	log.EffectiveBanThreshold = 2
+	svc.persistContentModerationLog(context.Background(), cfg, log, "", false, true)
+
+	logs := requireContentModerationLogCount(t, repo, 2)
+	require.True(t, logs[1].AutoBanned)
+	require.False(t, logs[1].EmailSent)
+	require.Equal(t, []int64{userID}, invalidator.userIDs)
+	require.Len(t, messageBodies, 1)
+	require.Equal(t, "ou-test", messageBodies[0]["receive_id"])
+	require.Equal(t, "interactive", messageBodies[0]["msg_type"])
+	content, ok := messageBodies[0]["content"].(string)
+	require.True(t, ok)
+	require.Contains(t, content, "账户风控封禁通知")
+	require.Contains(t, content, "vip")
+	require.Contains(t, content, "sexual")
+	require.Contains(t, content, "2 / 2")
+	require.Contains(t, content, "60 分钟")
+}
+
+func TestContentModerationAutoBanIgnoresFeishuNotificationFailure(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.BanThreshold = 2
+	cfg.ViolationWindowHours = 24
+
+	userID := int64(1001)
+	repo := &contentModerationTestRepo{}
+	require.NoError(t, repo.CreateLog(context.Background(), newContentModerationFlaggedLog(userID)))
+	userRepo := &contentModerationTestUserRepo{user: &User{ID: userID, Role: RoleUser, Status: StatusActive}}
+	invalidator := &contentModerationTestAuthCacheInvalidator{}
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyFeishuNotifyEnabled:    "true",
+		SettingKeyFeishuNotifyAppID:      "cli-test",
+		SettingKeyFeishuNotifyAppSecret:  "secret",
+		SettingKeyFeishuNotifyTokenURL:   "http://127.0.0.1:1/token",
+		SettingKeyFeishuNotifyMessageURL: "http://127.0.0.1:1/messages",
+	}}
+	svc := NewContentModerationService(nil, repo, nil, nil, userRepo, invalidator, nil)
+	svc.SetFeishuNotificationService(NewFeishuNotificationService(settingRepo, &contentModerationTestFeishuBindingRepo{}))
+
+	log := newContentModerationFlaggedLog(userID)
+	log.UserEmail = ""
+	svc.persistContentModerationLog(context.Background(), cfg, log, "", false, true)
+
+	logs := requireContentModerationLogCount(t, repo, 2)
+	require.True(t, logs[1].AutoBanned)
 	require.Equal(t, []int64{userID}, invalidator.userIDs)
 }
 

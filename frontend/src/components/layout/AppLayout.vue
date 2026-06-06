@@ -8,16 +8,20 @@
 
     <!-- Main Content Area -->
     <div
-      class="relative min-h-screen transition-all duration-300"
+      class="relative flex min-h-screen flex-col transition-all duration-300"
       :class="[sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-64']"
     >
       <!-- Header -->
       <AppHeader />
 
       <!-- Main Content -->
-      <main class="p-4 md:p-6 lg:p-8">
+      <main class="flex-1 p-4 md:p-6 lg:p-8">
         <slot />
       </main>
+
+      <footer class="px-4 pb-6 md:px-6 lg:px-8">
+        <PoweredByFooter />
+      </footer>
     </div>
   </div>
 </template>
@@ -29,6 +33,7 @@ import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { useOnboardingStore } from '@/stores/onboarding'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
 

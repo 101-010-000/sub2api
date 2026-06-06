@@ -1,6 +1,6 @@
 <template>
-  <component :is="isPopup ? 'div' : AppLayout" :class="isPopup ? 'min-h-screen bg-gray-50 dark:bg-dark-900' : ''">
-    <div class="mx-auto max-w-lg space-y-6 py-8" :class="isPopup ? 'px-4' : ''">
+  <component :is="isPopup ? 'div' : AppLayout" :class="isPopup ? 'flex min-h-screen flex-col bg-gray-50 dark:bg-dark-900' : ''">
+    <div class="mx-auto max-w-lg space-y-6 py-8" :class="isPopup ? 'flex-1 px-4' : ''">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
@@ -90,6 +90,10 @@
         </div>
       </template>
     </div>
+
+    <footer v-if="isPopup" class="px-4 pb-6">
+      <PoweredByFooter />
+    </footer>
   </component>
 </template>
 
@@ -103,6 +107,7 @@ import { extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
 import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
 import { PAYMENT_RECOVERY_STORAGE_KEY, readPaymentRecoverySnapshot } from '@/components/payment/paymentFlow'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import type { PaymentOrder } from '@/types/payment'
 import type { Stripe, StripeElements } from '@stripe/stripe-js'
 import AppLayout from '@/components/layout/AppLayout.vue'

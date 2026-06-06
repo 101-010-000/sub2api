@@ -1,8 +1,9 @@
 <template>
   <div
-    class="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 dark:from-dark-900 dark:to-dark-800"
+    class="flex min-h-screen flex-col bg-gradient-to-br from-gray-50 to-gray-100 p-4 dark:from-dark-900 dark:to-dark-800"
   >
-    <div class="w-full max-w-2xl">
+    <div class="flex w-full flex-1 items-center justify-center">
+      <div class="w-full max-w-2xl">
       <!-- Logo & Title -->
       <div class="mb-8 text-center">
         <div
@@ -485,7 +486,12 @@
           </button>
         </div>
       </div>
+      </div>
     </div>
+
+    <footer class="pb-2">
+      <PoweredByFooter />
+    </footer>
   </div>
 </template>
 
@@ -495,6 +501,7 @@ import { useI18n } from 'vue-i18n'
 import { testDatabase, testRedis, install, type InstallRequest } from '@/api/setup'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()

@@ -73,6 +73,10 @@
           Contact support
         </a>
       </p>
+
+      <div class="mt-8">
+        <PoweredByFooter />
+      </div>
     </div>
   </div>
 </template>
@@ -80,6 +84,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()

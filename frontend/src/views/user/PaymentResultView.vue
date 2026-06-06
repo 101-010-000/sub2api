@@ -1,6 +1,7 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-dark-900">
-    <div class="w-full max-w-md space-y-6">
+  <div class="flex min-h-screen flex-col bg-gray-50 px-4 dark:bg-dark-900">
+    <div class="flex flex-1 items-center justify-center">
+      <div class="w-full max-w-md space-y-6">
       <!-- Loading -->
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
@@ -92,7 +93,12 @@
           <button class="btn btn-primary flex-1" @click="router.push('/orders')">{{ t('payment.result.viewOrders') }}</button>
         </div>
       </template>
+      </div>
     </div>
+
+    <footer class="pb-6">
+      <PoweredByFooter />
+    </footer>
   </div>
 </template>
 
@@ -100,6 +106,7 @@
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 import {
   PAYMENT_RECOVERY_STORAGE_KEY,
