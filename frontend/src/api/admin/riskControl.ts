@@ -16,10 +16,13 @@ export interface ContentModerationAuditModelConfig {
   id: string
   name: string
   enabled: boolean
-  protocol: 'openai_compatible'
+  protocol: 'openai_compatible' | 'internal_group'
   base_url: string
   api_key?: string
   model: string
+  group_id?: number | null
+  group_name?: string
+  internal_api_key_id?: number | null
   temperature: number
   timeout_ms: number
   prompt_template: string

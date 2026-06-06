@@ -2168,16 +2168,129 @@ func TestContentModerationAutoBanSendsFeishuNotificationWhenBound(t *testing.T) 
 	require.True(t, logs[1].AutoBanned)
 	require.False(t, logs[1].EmailSent)
 	require.Equal(t, []int64{userID}, invalidator.userIDs)
+	require.Len(t, messageBodies, 2)
+	require.Equal(t, "ou-test", messageBodies[0]["receive_id"])
+	require.Equal(t, "interactive", messageBodies[0]["msg_type"])
+	content, ok := messageBodies[0]["content"].(string)
+	require.True(t, ok)
+	require.Contains(t, content, "账户风控提醒")
+	require.Contains(t, content, "vip")
+	require.Contains(t, content, "sexual")
+	require.Contains(t, content, "2 / 2")
+	banContent, ok := messageBodies[1]["content"].(string)
+	require.True(t, ok)
+	require.Contains(t, banContent, "账户风控封禁通知")
+	require.Contains(t, banContent, "vip")
+	require.Contains(t, banContent, "sexual")
+	require.Contains(t, banContent, "2 / 2")
+	require.Contains(t, banContent, "60 分钟")
+}
+
+func TestContentModerationViolationSendsFeishuNotificationWhenEmailOnHitEnabled(t *testing.T) {
+	var messageBodies []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code":                0,
+				"tenant_access_token": "tenant-token",
+			})
+		case "/messages":
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			messageBodies = append(messageBodies, body)
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0})
+		default:
+			t.Fatalf("unexpected feishu path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.EmailOnHit = true
+	cfg.BanThreshold = 10
+	cfg.ViolationWindowHours = 24
+
+	userID := int64(1001)
+	repo := &contentModerationTestRepo{}
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyFeishuNotifyEnabled:    "true",
+		SettingKeyFeishuNotifyAppID:      "cli-test",
+		SettingKeyFeishuNotifyAppSecret:  "secret",
+		SettingKeyFeishuNotifyTokenURL:   server.URL + "/token",
+		SettingKeyFeishuNotifyMessageURL: server.URL + "/messages",
+		SettingKeyFeishuNotifyPanelURL:   "/feishu/panel",
+	}}
+	bindingRepo := &contentModerationTestFeishuBindingRepo{binding: &FeishuUserIdentityBinding{
+		UserID:              userID,
+		AppID:               "cli-test",
+		OpenID:              "ou-test",
+		NotificationEnabled: true,
+	}}
+	svc := NewContentModerationService(nil, repo, nil, nil, nil, nil, nil)
+	svc.SetFeishuNotificationService(NewFeishuNotificationService(settingRepo, bindingRepo))
+
+	log := newContentModerationFlaggedLog(userID)
+	log.UserEmail = ""
+	log.GroupName = "vip"
+	svc.persistContentModerationLog(context.Background(), cfg, log, "", false, true)
+
+	logs := requireContentModerationLogCount(t, repo, 1)
+	require.False(t, logs[0].AutoBanned)
+	require.False(t, logs[0].EmailSent)
 	require.Len(t, messageBodies, 1)
 	require.Equal(t, "ou-test", messageBodies[0]["receive_id"])
 	require.Equal(t, "interactive", messageBodies[0]["msg_type"])
 	content, ok := messageBodies[0]["content"].(string)
 	require.True(t, ok)
-	require.Contains(t, content, "账户风控封禁通知")
+	require.Contains(t, content, "账户风控提醒")
 	require.Contains(t, content, "vip")
 	require.Contains(t, content, "sexual")
-	require.Contains(t, content, "2 / 2")
-	require.Contains(t, content, "60 分钟")
+	require.Contains(t, content, "1 / 10")
+}
+
+func TestContentModerationViolationSkipsFeishuNotificationWhenEmailOnHitDisabled(t *testing.T) {
+	var messageCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code":                0,
+				"tenant_access_token": "tenant-token",
+			})
+		case "/messages":
+			messageCount++
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0})
+		default:
+			t.Fatalf("unexpected feishu path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.EmailOnHit = false
+	cfg.BanThreshold = 10
+
+	userID := int64(1001)
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyFeishuNotifyEnabled:    "true",
+		SettingKeyFeishuNotifyAppID:      "cli-test",
+		SettingKeyFeishuNotifyAppSecret:  "secret",
+		SettingKeyFeishuNotifyTokenURL:   server.URL + "/token",
+		SettingKeyFeishuNotifyMessageURL: server.URL + "/messages",
+	}}
+	bindingRepo := &contentModerationTestFeishuBindingRepo{binding: &FeishuUserIdentityBinding{
+		UserID:              userID,
+		AppID:               "cli-test",
+		OpenID:              "ou-test",
+		NotificationEnabled: true,
+	}}
+	svc := NewContentModerationService(nil, &contentModerationTestRepo{}, nil, nil, nil, nil, nil)
+	svc.SetFeishuNotificationService(NewFeishuNotificationService(settingRepo, bindingRepo))
+
+	svc.persistContentModerationLog(context.Background(), cfg, newContentModerationFlaggedLog(userID), "", false, true)
+
+	require.Zero(t, messageCount)
 }
 
 func TestContentModerationAutoBanIgnoresFeishuNotificationFailure(t *testing.T) {

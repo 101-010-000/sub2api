@@ -243,6 +243,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	contentModerationRepository := repository.NewContentModerationRepository(db)
 	contentModerationHashCache := repository.NewContentModerationHashCache(redisClient)
 	contentModerationService := service.NewContentModerationService(settingRepository, contentModerationRepository, contentModerationHashCache, groupRepository, userRepository, apiKeyAuthCacheInvalidator, emailService, secretEncryptor)
+	contentModerationService.SetAPIKeyRepository(apiKeyRepository)
+	contentModerationService.SetConfig(cfg)
 	contentModerationService.SetFeishuNotificationService(feishuNotificationService)
 	userHandler = handler.NewUserHandler(userService, authService, emailService, emailCache, affiliateService, serviceUserPlatformQuotaRepository, contentModerationService)
 	userHandler.SetFeishuNotificationService(feishuNotificationService)

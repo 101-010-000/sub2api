@@ -117,6 +117,17 @@ type FeishuContentModerationBanNotification struct {
 	BanDurationMin int
 }
 
+type FeishuContentModerationViolationNotification struct {
+	UserID         int64
+	UserName       string
+	UserEmail      string
+	GroupName      string
+	Category       string
+	Score          float64
+	ViolationCount int
+	BanThreshold   int
+}
+
 type FeishuNotificationService struct {
 	settingRepo SettingRepository
 	bindingRepo FeishuUserIdentityRepository
@@ -242,6 +253,30 @@ func (s *FeishuNotificationService) SendSubscriptionExpiryReminder(ctx context.C
 				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": "**到期时间**\n" + input.ExpiresAt.Format("2006-01-02 15:04")}},
 			}},
 			s.feishuPanelActionElement(ctx, "查看面板", ""),
+		},
+	}
+	return s.sendInteractiveCard(ctx, input.UserID, card)
+}
+
+func (s *FeishuNotificationService) SendContentModerationViolation(ctx context.Context, input FeishuContentModerationViolationNotification) error {
+	displayName := firstNonEmpty(input.UserName, input.UserEmail, "用户")
+	groupName := firstNonEmpty(input.GroupName, "-")
+	category := firstNonEmpty(input.Category, "-")
+	card := map[string]any{
+		"config": map[string]any{"wide_screen_mode": true},
+		"header": map[string]any{
+			"title":    map[string]any{"tag": "plain_text", "content": "账户风控提醒"},
+			"template": "orange",
+		},
+		"elements": []any{
+			map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**%s**，您的 API 请求触发了内容风控规则。", displayName)}},
+			map[string]any{"tag": "div", "fields": []any{
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**命中分组**\n%s", groupName)}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**风险类别**\n%s", category)}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**最高分数**\n%.3f", input.Score)}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**触发次数**\n%d / %d", input.ViolationCount, input.BanThreshold)}},
+			}},
+			s.feishuPanelActionElement(ctx, "查看账户", ""),
 		},
 	}
 	return s.sendInteractiveCard(ctx, input.UserID, card)

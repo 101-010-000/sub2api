@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -21,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
@@ -79,6 +81,8 @@ const (
 	ContentModerationKeywordModeKeywordAndAPI = "keyword_and_api"
 	ContentModerationKeywordModeAPIOnly       = "api_only"
 
+	contentModerationClientDelayedTriggerCategory = "延后触发"
+
 	ContentModerationModelFilterAll     = "all"
 	ContentModerationModelFilterInclude = "include"
 	ContentModerationModelFilterExclude = "exclude"
@@ -90,6 +94,13 @@ const (
 	ContentModerationProtocolOpenAIImages      = "openai_images"
 
 	ContentModerationAuditProtocolOpenAICompatible = "openai_compatible"
+	ContentModerationAuditProtocolInternalGroup     = "internal_group"
+
+	contentModerationInternalAuditUserEmail = "content-moderation-audit@internal.local"
+	contentModerationInternalAuditUserName  = "Content Moderation Audit"
+	contentModerationInternalAuditKeyPrefix = "content-moderation-audit"
+	contentModerationInternalAuditUserNotes = "internal content moderation audit service account"
+	contentModerationInternalAuditBalance   = 1000000.0
 
 	defaultContentModerationBaseURL   = "https://api.openai.com"
 	defaultContentModerationModel     = "omni-moderation-latest"
@@ -293,17 +304,20 @@ type ContentModerationConfigView struct {
 }
 
 type ContentModerationAuditModelConfig struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Enabled        bool    `json:"enabled"`
-	Protocol       string  `json:"protocol"`
-	BaseURL        string  `json:"base_url"`
-	APIKey         string  `json:"api_key,omitempty"`
-	Model          string  `json:"model"`
-	Temperature    float64 `json:"temperature"`
-	TimeoutMS      int     `json:"timeout_ms"`
-	PromptTemplate string  `json:"prompt_template"`
-	Weight         float64 `json:"weight"`
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Enabled          bool    `json:"enabled"`
+	Protocol         string  `json:"protocol"`
+	BaseURL          string  `json:"base_url"`
+	APIKey           string  `json:"api_key,omitempty"`
+	Model            string  `json:"model"`
+	GroupID          *int64  `json:"group_id,omitempty"`
+	GroupName        string  `json:"group_name,omitempty"`
+	InternalAPIKeyID *int64  `json:"internal_api_key_id,omitempty"`
+	Temperature      float64 `json:"temperature"`
+	TimeoutMS        int     `json:"timeout_ms"`
+	PromptTemplate   string  `json:"prompt_template"`
+	Weight           float64 `json:"weight"`
 }
 
 type ContentModerationDecisionRule struct {
@@ -947,10 +961,12 @@ type ContentModerationService struct {
 	hashCache                 ContentModerationHashCache
 	groupRepo                 GroupRepository
 	userRepo                  UserRepository
+	apiKeyRepo                APIKeyRepository
 	authCacheInvalidator      APIKeyAuthCacheInvalidator
 	emailService              *EmailService
 	feishuNotificationService *FeishuNotificationService
 	encryptor                 SecretEncryptor
+	cfg                       *config.Config
 	httpClient                *http.Client
 	asyncQueue                chan contentModerationTask
 	workerCount               int
@@ -1064,6 +1080,20 @@ func NewContentModerationService(
 		go svc.cleanupWorker()
 	}
 	return svc
+}
+
+func (s *ContentModerationService) SetAPIKeyRepository(apiKeyRepo APIKeyRepository) {
+	if s == nil {
+		return
+	}
+	s.apiKeyRepo = apiKeyRepo
+}
+
+func (s *ContentModerationService) SetConfig(cfg *config.Config) {
+	if s == nil {
+		return
+	}
+	s.cfg = cfg
 }
 
 func (s *ContentModerationService) SetFeishuNotificationService(feishuNotificationService *FeishuNotificationService) {
@@ -1250,6 +1280,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 		return nil, err
 	}
 	cfg.normalize()
+	if err := s.prepareInternalAuditModels(ctx, cfg); err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("marshal content moderation config: %w", err)
@@ -1701,7 +1734,7 @@ func (s *ContentModerationService) checkModelAuditSync(ctx context.Context, inpu
 	for _, modelCfg := range models {
 		prompt := renderContentModerationAuditPrompt(modelCfg.PromptTemplate, content.Text, input, keywordHits)
 		start := time.Now()
-		raw, result, httpStatus, err := s.callOpenAICompatibleAuditModel(ctx, modelCfg, prompt)
+		raw, result, httpStatus, err := s.callAuditModel(ctx, modelCfg, prompt)
 		latencyMS := int(time.Since(start).Milliseconds())
 		detail := ContentModerationModelAuditDetail{
 			ModelID:     modelCfg.ID,
@@ -2436,14 +2469,33 @@ func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *Cont
 		if !model.Enabled {
 			continue
 		}
-		if model.Protocol != ContentModerationAuditProtocolOpenAICompatible {
+		switch model.Protocol {
+		case ContentModerationAuditProtocolOpenAICompatible:
+			if strings.TrimSpace(model.BaseURL) == "" || strings.TrimSpace(model.Model) == "" {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL", "审计模型 base_url 和 model 不能为空")
+			}
+			if _, err := url.ParseRequestURI(model.BaseURL); err != nil {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_BASE_URL", "审计模型 Base URL 无效")
+			}
+		case ContentModerationAuditProtocolInternalGroup:
+			if strings.TrimSpace(model.Model) == "" {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL", "系统分组审计模型不能为空")
+			}
+			if model.GroupID == nil || *model.GroupID <= 0 {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_GROUP", "系统分组审计模型必须选择分组")
+			}
+			if s == nil || s.groupRepo == nil {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_GROUP", "系统分组审计模型需要分组仓库支持")
+			}
+			group, err := s.groupRepo.GetByID(ctx, *model.GroupID)
+			if err != nil {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_GROUP", fmt.Sprintf("系统分组不存在: %d", *model.GroupID))
+			}
+			if group == nil || !group.IsActive() {
+				return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_GROUP", fmt.Sprintf("系统分组未启用: %d", *model.GroupID))
+			}
+		default:
 			return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_PROTOCOL", "审计模型协议无效")
-		}
-		if strings.TrimSpace(model.BaseURL) == "" || strings.TrimSpace(model.Model) == "" {
-			return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL", "审计模型 base_url 和 model 不能为空")
-		}
-		if _, err := url.ParseRequestURI(model.BaseURL); err != nil {
-			return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_BASE_URL", "审计模型 Base URL 无效")
 		}
 	}
 	if cfg.BlockStatus < 400 || cfg.BlockStatus > 599 {
@@ -2463,6 +2515,207 @@ func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *Cont
 		return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_CYBERUSE_SCOPE", "Cyberuse 用户范围为指定用户时至少需要 1 个用户 ID")
 	}
 	return nil
+}
+
+func (s *ContentModerationService) prepareInternalAuditModels(ctx context.Context, cfg *ContentModerationConfig) error {
+	if s == nil || cfg == nil {
+		return nil
+	}
+	for i := range cfg.AuditModels {
+		model := &cfg.AuditModels[i]
+		if !model.Enabled || model.Protocol != ContentModerationAuditProtocolInternalGroup {
+			continue
+		}
+		groupID := derefInt64(model.GroupID)
+		group, err := s.groupRepo.GetByID(ctx, groupID)
+		if err != nil {
+			return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_GROUP", fmt.Sprintf("系统分组不存在: %d", groupID))
+		}
+		if group == nil || !group.IsActive() {
+			return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_GROUP", fmt.Sprintf("系统分组未启用: %d", groupID))
+		}
+		apiKey, err := s.ensureInternalAuditAPIKey(ctx, group)
+		if err != nil {
+			return err
+		}
+		if apiKey != nil {
+			model.InternalAPIKeyID = &apiKey.ID
+		}
+		model.GroupName = strings.TrimSpace(group.Name)
+		model.BaseURL = ""
+		model.APIKey = ""
+	}
+	return nil
+}
+
+func (s *ContentModerationService) ensureInternalAuditAPIKey(ctx context.Context, group *Group) (*APIKey, error) {
+	if s == nil || s.userRepo == nil || s.apiKeyRepo == nil {
+		return nil, infraerrors.BadRequest("CONTENT_MODERATION_INTERNAL_AUDIT_UNAVAILABLE", "系统分组审计模型需要用户和 API Key 仓库支持")
+	}
+	if group == nil || group.ID <= 0 {
+		return nil, infraerrors.BadRequest("INVALID_CONTENT_MODERATION_AUDIT_MODEL_GROUP", "系统分组审计模型必须选择分组")
+	}
+	user, err := s.ensureInternalAuditUser(ctx, group.ID)
+	if err != nil {
+		return nil, err
+	}
+	keyName := internalAuditAPIKeyName(group.ID)
+	keys, _, err := s.apiKeyRepo.ListByUserID(ctx, user.ID, pagination.PaginationParams{Page: 1, PageSize: 500}, APIKeyListFilters{})
+	if err != nil {
+		return nil, fmt.Errorf("list internal audit api keys: %w", err)
+	}
+	for i := range keys {
+		key := keys[i]
+		if strings.TrimSpace(key.Name) != keyName {
+			continue
+		}
+		changed := false
+		if key.Status != StatusActive {
+			key.Status = StatusActive
+			changed = true
+		}
+		if key.GroupID == nil || *key.GroupID != group.ID {
+			groupID := group.ID
+			key.GroupID = &groupID
+			changed = true
+		}
+		if changed {
+			if err := s.apiKeyRepo.Update(ctx, &key); err != nil {
+				return nil, fmt.Errorf("update internal audit api key: %w", err)
+			}
+			if s.authCacheInvalidator != nil {
+				s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, key.Key)
+			}
+		}
+		return &key, nil
+	}
+	key, err := s.generateInternalAuditAPIKey()
+	if err != nil {
+		return nil, err
+	}
+	groupID := group.ID
+	apiKey := &APIKey{
+		UserID:  user.ID,
+		Key:     key,
+		Name:    keyName,
+		GroupID: &groupID,
+		Status:  StatusActive,
+	}
+	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
+		return nil, fmt.Errorf("create internal audit api key: %w", err)
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	}
+	return apiKey, nil
+}
+
+func (s *ContentModerationService) ensureInternalAuditUser(ctx context.Context, groupID int64) (*User, error) {
+	user, err := s.userRepo.GetByEmail(ctx, contentModerationInternalAuditUserEmail)
+	if err == nil {
+		changed := false
+		if user.Status != StatusActive {
+			user.Status = StatusActive
+			changed = true
+		}
+		if user.Role == "" {
+			user.Role = RoleUser
+			changed = true
+		}
+		if user.Balance < contentModerationInternalAuditBalance {
+			user.Balance = contentModerationInternalAuditBalance
+			changed = true
+		}
+		if user.Concurrency <= 0 {
+			user.Concurrency = 4
+			changed = true
+		}
+		if strings.TrimSpace(user.Username) == "" {
+			user.Username = contentModerationInternalAuditUserName
+			changed = true
+		}
+		if !int64SliceContains(user.AllowedGroups, groupID) {
+			user.AllowedGroups = append(user.AllowedGroups, groupID)
+			changed = true
+		}
+		if changed {
+			if err := s.userRepo.Update(ctx, user); err != nil {
+				return nil, fmt.Errorf("update internal audit user: %w", err)
+			}
+		}
+		return user, nil
+	}
+	if !errors.Is(err, ErrUserNotFound) {
+		return nil, fmt.Errorf("get internal audit user: %w", err)
+	}
+	password, err := contentModerationRandomHex(32)
+	if err != nil {
+		return nil, err
+	}
+	user = &User{
+		Email:         contentModerationInternalAuditUserEmail,
+		Username:      contentModerationInternalAuditUserName,
+		Notes:         contentModerationInternalAuditUserNotes,
+		Role:          RoleUser,
+		Balance:       contentModerationInternalAuditBalance,
+		Concurrency:   4,
+		Status:        StatusActive,
+		AllowedGroups: []int64{groupID},
+		SignupSource:  "email",
+	}
+	if err := user.SetPassword(password); err != nil {
+		return nil, fmt.Errorf("set internal audit user password: %w", err)
+	}
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		if errors.Is(err, ErrEmailExists) {
+			return s.ensureInternalAuditUser(ctx, groupID)
+		}
+		return nil, fmt.Errorf("create internal audit user: %w", err)
+	}
+	return user, nil
+}
+
+func (s *ContentModerationService) generateInternalAuditAPIKey() (string, error) {
+	token, err := contentModerationRandomHex(32)
+	if err != nil {
+		return "", err
+	}
+	prefix := "sk-"
+	if s != nil && s.cfg != nil && strings.TrimSpace(s.cfg.Default.APIKeyPrefix) != "" {
+		prefix = strings.TrimSpace(s.cfg.Default.APIKeyPrefix)
+	}
+	return prefix + "rca-" + token, nil
+}
+
+func contentModerationRandomHex(size int) (string, error) {
+	if size <= 0 {
+		size = 32
+	}
+	buf := make([]byte, size)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate random secret: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+func internalAuditAPIKeyName(groupID int64) string {
+	return fmt.Sprintf("%s:%d", contentModerationInternalAuditKeyPrefix, groupID)
+}
+
+func int64SliceContains(values []int64, target int64) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func derefInt64(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func (s *ContentModerationService) callModeration(ctx context.Context, cfg *ContentModerationConfig, input any, trackKeyLoad ...bool) (*moderationAPIResult, error) {
@@ -2516,12 +2769,69 @@ func (s *ContentModerationService) callModeration(ctx context.Context, cfg *Cont
 	return nil, lastErr
 }
 
+func (s *ContentModerationService) callAuditModel(ctx context.Context, cfg ContentModerationAuditModelConfig, prompt string) (string, ContentModerationModelResult, int, error) {
+	if cfg.Protocol == ContentModerationAuditProtocolInternalGroup {
+		return s.callInternalGroupAuditModel(ctx, cfg, prompt)
+	}
+	return s.callOpenAICompatibleAuditModel(ctx, cfg, prompt)
+}
+
+func (s *ContentModerationService) callInternalGroupAuditModel(ctx context.Context, cfg ContentModerationAuditModelConfig, prompt string) (string, ContentModerationModelResult, int, error) {
+	apiKey, err := s.internalAuditAPIKeyForModel(ctx, cfg)
+	if err != nil {
+		return "", ContentModerationModelResult{}, 0, err
+	}
+	endpoint, err := s.internalAuditChatCompletionsEndpoint()
+	if err != nil {
+		return "", ContentModerationModelResult{}, 0, err
+	}
+	return s.callOpenAIChatCompletionAuditModel(ctx, endpoint, apiKey.Key, cfg, prompt)
+}
+
+func (s *ContentModerationService) internalAuditAPIKeyForModel(ctx context.Context, cfg ContentModerationAuditModelConfig) (*APIKey, error) {
+	if s == nil || s.apiKeyRepo == nil || s.groupRepo == nil {
+		return nil, errors.New("internal audit model dependencies unavailable")
+	}
+	if cfg.InternalAPIKeyID != nil && *cfg.InternalAPIKeyID > 0 {
+		key, err := s.apiKeyRepo.GetByID(ctx, *cfg.InternalAPIKeyID)
+		if err == nil && IsContentModerationInternalAuditAPIKey(key) && key.GroupID != nil && cfg.GroupID != nil && *key.GroupID == *cfg.GroupID {
+			return key, nil
+		}
+	}
+	groupID := derefInt64(cfg.GroupID)
+	group, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("get internal audit group: %w", err)
+	}
+	return s.ensureInternalAuditAPIKey(ctx, group)
+}
+
+func (s *ContentModerationService) internalAuditChatCompletionsEndpoint() (string, error) {
+	base := "http://127.0.0.1:8080"
+	if s != nil && s.cfg != nil {
+		host := strings.TrimSpace(s.cfg.Server.Host)
+		if host == "" || host == "0.0.0.0" || host == "::" {
+			host = "127.0.0.1"
+		}
+		port := s.cfg.Server.Port
+		if port <= 0 {
+			port = 8080
+		}
+		base = fmt.Sprintf("http://%s:%d", host, port)
+	}
+	return url.JoinPath(strings.TrimRight(base, "/"), "/v1/chat/completions")
+}
+
 func (s *ContentModerationService) callOpenAICompatibleAuditModel(ctx context.Context, cfg ContentModerationAuditModelConfig, prompt string) (string, ContentModerationModelResult, int, error) {
 	base := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	endpoint, err := url.JoinPath(base, "/v1/chat/completions")
 	if err != nil {
 		return "", ContentModerationModelResult{}, 0, err
 	}
+	return s.callOpenAIChatCompletionAuditModel(ctx, endpoint, cfg.APIKey, cfg, prompt)
+}
+
+func (s *ContentModerationService) callOpenAIChatCompletionAuditModel(ctx context.Context, endpoint string, apiKey string, cfg ContentModerationAuditModelConfig, prompt string) (string, ContentModerationModelResult, int, error) {
 	payload := openAIChatCompletionRequest{
 		Model:       cfg.Model,
 		Messages:    []openAIChatMessage{{Role: "user", Content: prompt}},
@@ -2541,7 +2851,7 @@ func (s *ContentModerationService) callOpenAICompatibleAuditModel(ctx context.Co
 	if err != nil {
 		return "", ContentModerationModelResult{}, 0, err
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(apiKey))
 	req.Header.Set("Content-Type", "application/json")
 	client := s.httpClient
 	if client == nil {
@@ -2554,7 +2864,7 @@ func (s *ContentModerationService) callOpenAICompatibleAuditModel(ctx context.Co
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return string(body), ContentModerationModelResult{}, resp.StatusCode, fmt.Errorf("audit model status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return string(body), ContentModerationModelResult{}, resp.StatusCode, fmt.Errorf("audit model status %d: %s", resp.StatusCode, contentModerationAuditModelErrorMessage(resp.StatusCode, string(body)))
 	}
 	var out openAIChatCompletionResponse
 	if err := json.Unmarshal(body, &out); err != nil {
@@ -2568,6 +2878,18 @@ func (s *ContentModerationService) callOpenAICompatibleAuditModel(ctx context.Co
 		content = string(body)
 	}
 	return content, parseContentModerationModelTextResult(content), resp.StatusCode, nil
+}
+
+func contentModerationAuditModelErrorMessage(status int, body string) string {
+	trimmed := strings.TrimSpace(body)
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(lower, "model_not_found") || strings.Contains(lower, "no available channel for model") {
+		return "所选分组没有可用该模型，请更换模型或补充渠道"
+	}
+	if status >= 500 {
+		return "审核模型上游请求失败，请检查分组渠道和账号健康"
+	}
+	return trimmed
 }
 
 func (s *ContentModerationService) callModerationOnceWithInput(ctx context.Context, cfg *ContentModerationConfig, apiKey string, input any, httpStatus *int) (*moderationAPIResult, error) {
@@ -2684,6 +3006,9 @@ func (s *ContentModerationService) decorateBlockedDecision(cfg *ContentModeratio
 		message = fmt.Sprintf("%s (request_id: %s)", message, strings.TrimSpace(input.RequestID))
 	}
 	decision.Message = message
+	if strings.EqualFold(strings.TrimSpace(decision.HighestCategory), contentModerationKeywordCategory) {
+		decision.HighestCategory = contentModerationClientDelayedTriggerCategory
+	}
 	return decision
 }
 
@@ -2725,13 +3050,33 @@ func (s *ContentModerationService) decorateCyberuseAuditMetadata(cfg *ContentMod
 		InputHash:           strings.TrimSpace(inputHash),
 		ContextID:           cloneInt64Ptr(log.ContextID),
 		Action:              log.Action,
-		HighestCategory:     log.HighestCategory,
+		HighestCategory:     contentModerationClientVisibleCategory(log.HighestCategory),
 		ClientErrorCode:     cfg.CyberuseResponse.ErrorCode,
 		ClientMessage:       cfg.CyberuseResponse.Message,
 		AnnouncementEnabled: cfg.CyberuseResponse.AnnouncementEnabled,
 		AnnouncementTitle:   cfg.CyberuseResponse.AnnouncementTitle,
 		AnnouncementContent: cfg.CyberuseResponse.AnnouncementContent,
 	}
+}
+
+func contentModerationClientVisibleCategory(category string) string {
+	if strings.EqualFold(strings.TrimSpace(category), contentModerationKeywordCategory) {
+		return contentModerationClientDelayedTriggerCategory
+	}
+	return category
+}
+
+func IsContentModerationInternalAuditAPIKey(apiKey *APIKey) bool {
+	if apiKey == nil {
+		return false
+	}
+	if strings.HasPrefix(strings.TrimSpace(apiKey.Name), contentModerationInternalAuditKeyPrefix+":") {
+		return true
+	}
+	if apiKey.User != nil && strings.EqualFold(strings.TrimSpace(apiKey.User.Email), contentModerationInternalAuditUserEmail) {
+		return true
+	}
+	return false
 }
 
 func contentModerationRequestContextFromLog(log *ContentModerationLog) ContentModerationRequestContext {
@@ -2858,10 +3203,27 @@ func (s *ContentModerationService) sendFlaggedNotificationSideEffects(ctx contex
 			}
 		}
 	}
+	if cfg.EmailOnHit {
+		s.sendContentModerationViolationFeishu(ctx, cfg, log)
+	}
 	if autoBanJustApplied {
 		s.sendContentModerationBanFeishu(ctx, cfg, log)
 	}
 	log.EmailSent = emailSent
+}
+
+func (s *ContentModerationService) sendContentModerationViolationFeishu(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog) {
+	if s == nil || s.feishuNotificationService == nil || cfg == nil || log == nil {
+		return
+	}
+	userID := contentModerationEmailUserID(log)
+	if userID <= 0 {
+		return
+	}
+	input := s.contentModerationFeishuInput(cfg, log)
+	if err := s.feishuNotificationService.SendContentModerationViolation(ctx, FeishuContentModerationViolationNotification(input)); err != nil {
+		slog.Warn("content_moderation.violation_feishu_failed", "user_id", userID, "error", err)
+	}
 }
 
 func (s *ContentModerationService) sendContentModerationBanFeishu(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog) {
@@ -2872,21 +3234,35 @@ func (s *ContentModerationService) sendContentModerationBanFeishu(ctx context.Co
 	if userID <= 0 {
 		return
 	}
+	input := s.contentModerationFeishuInput(cfg, log)
+	if err := s.feishuNotificationService.SendContentModerationBan(ctx, FeishuContentModerationBanNotification{
+		UserID:         input.UserID,
+		UserName:       input.UserName,
+		UserEmail:      input.UserEmail,
+		GroupName:      input.GroupName,
+		Category:       input.Category,
+		Score:          input.Score,
+		ViolationCount: input.ViolationCount,
+		BanThreshold:   input.BanThreshold,
+		BanDurationMin: cfg.BanDurationMinutes,
+	}); err != nil {
+		slog.Warn("content_moderation.ban_feishu_failed", "user_id", userID, "error", err)
+	}
+}
+
+func (s *ContentModerationService) contentModerationFeishuInput(cfg *ContentModerationConfig, log *ContentModerationLog) FeishuContentModerationViolationNotification {
 	banThreshold := cfg.BanThreshold
 	if log.EffectiveBanThreshold > 0 {
 		banThreshold = log.EffectiveBanThreshold
 	}
-	if err := s.feishuNotificationService.SendContentModerationBan(ctx, FeishuContentModerationBanNotification{
-		UserID:         userID,
+	return FeishuContentModerationViolationNotification{
+		UserID:         contentModerationEmailUserID(log),
 		UserEmail:      log.UserEmail,
 		GroupName:      log.GroupName,
-		Category:       log.HighestCategory,
+		Category:       contentModerationClientVisibleCategory(log.HighestCategory),
 		Score:          log.HighestScore,
 		ViolationCount: log.ViolationCount,
 		BanThreshold:   banThreshold,
-		BanDurationMin: cfg.BanDurationMinutes,
-	}); err != nil {
-		slog.Warn("content_moderation.ban_feishu_failed", "user_id", userID, "error", err)
 	}
 }
 
@@ -3352,9 +3728,20 @@ func normalizeContentModerationAuditModels(models []ContentModerationAuditModelC
 		if model.Protocol == "" {
 			model.Protocol = ContentModerationAuditProtocolOpenAICompatible
 		}
+		if model.Protocol != ContentModerationAuditProtocolInternalGroup {
+			model.Protocol = ContentModerationAuditProtocolOpenAICompatible
+			model.GroupID = nil
+			model.GroupName = ""
+			model.InternalAPIKeyID = nil
+		}
 		model.BaseURL = strings.TrimRight(strings.TrimSpace(model.BaseURL), "/")
 		model.APIKey = strings.TrimSpace(model.APIKey)
 		model.Model = strings.TrimSpace(model.Model)
+		model.GroupName = strings.TrimSpace(model.GroupName)
+		if model.Protocol == ContentModerationAuditProtocolInternalGroup {
+			model.BaseURL = ""
+			model.APIKey = ""
+		}
 		if model.TimeoutMS <= 0 {
 			model.TimeoutMS = defaultContentModerationTimeoutMS
 		}
@@ -3393,6 +3780,9 @@ func mergeContentModerationAuditModelSecrets(existing []ContentModerationAuditMo
 	}
 	out := normalizeContentModerationAuditModels(incoming)
 	for i := range out {
+		if out[i].Protocol == ContentModerationAuditProtocolInternalGroup {
+			continue
+		}
 		previous, ok := byID[out[i].ID]
 		if !ok || strings.TrimSpace(previous.APIKey) == "" {
 			continue

@@ -351,7 +351,7 @@
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.apiKey') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.endpoint') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.result') }}</th>
-                  <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.highest') }}</th>
+                  <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.trigger') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.actionMeta') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.latency') }}</th>
                   <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.input') }}</th>
@@ -383,8 +383,8 @@
                       </span>
                     </td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm text-gray-700 dark:text-gray-300">
-                      <div>{{ row.highest_category || '-' }}</div>
-                      <div class="text-xs text-gray-400">{{ percent(row.highest_score) }}</div>
+                      <div>{{ triggerSummary(row) }}</div>
+                      <div class="text-xs text-gray-400">{{ triggerScoreText(row) }}</div>
                     </td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm text-gray-700 dark:text-gray-300">
                       <div>{{ violationCountText(row) }}</div>
@@ -1169,22 +1169,77 @@
                           class="input h-9 min-w-[220px] max-w-sm flex-1"
                           :placeholder="t('admin.riskControl.auditModelName')"
                         />
-                      </div>
-                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.auditModelProtocolHint') }}</p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                      <Toggle v-model="model.enabled" />
+	                      </div>
+	                      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ auditModelSourceHint(model) }}</p>
+	                    </div>
+	                    <div class="flex items-center gap-3">
+	                      <Toggle v-model="model.enabled" />
                       <button type="button" class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-300" @click="removeAuditModel(index)">
                         <Icon name="trash" size="sm" />
                       </button>
-                    </div>
-                  </div>
+	                    </div>
+	                  </div>
 
-                  <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    <div>
-                      <label class="input-label">{{ t('admin.riskControl.auditModelBaseUrl') }}</label>
-                      <input v-model.trim="model.base_url" type="url" class="input" placeholder="https://api.example.com" />
-                    </div>
+	                  <div class="mb-4 flex flex-wrap gap-2">
+	                    <button
+	                      type="button"
+	                      class="btn btn-sm"
+	                      :class="model.protocol === 'openai_compatible' ? 'btn-primary' : 'btn-secondary'"
+	                      @click="setAuditModelProtocol(model, 'openai_compatible')"
+	                    >
+	                      {{ t('admin.riskControl.auditModelSourceExternal') }}
+	                    </button>
+	                    <button
+	                      type="button"
+	                      class="btn btn-sm"
+	                      :class="model.protocol === 'internal_group' ? 'btn-primary' : 'btn-secondary'"
+	                      @click="setAuditModelProtocol(model, 'internal_group')"
+	                    >
+	                      {{ t('admin.riskControl.auditModelSourceInternalGroup') }}
+	                    </button>
+	                  </div>
+
+	                  <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+	                    <template v-if="model.protocol === 'internal_group'">
+	                      <div>
+	                        <label class="input-label">{{ t('admin.riskControl.auditModelGroup') }}</label>
+	                        <Select
+	                          v-model="model.group_id"
+	                          :options="auditModelGroupOptions"
+	                          :placeholder="t('admin.riskControl.auditModelGroupPlaceholder')"
+	                          searchable
+	                          @change="onAuditModelGroupChange(model)"
+	                        />
+	                      </div>
+	                      <div>
+	                        <label class="input-label">{{ t('admin.riskControl.auditModelModel') }}</label>
+	                        <Select
+	                          v-if="auditModelCandidateOptions(model).length > 0"
+	                          v-model="model.model"
+	                          :options="auditModelCandidateOptions(model)"
+	                          :placeholder="auditModelModelPlaceholder(model)"
+	                          searchable
+	                          creatable
+	                          :creatable-prefix="t('admin.riskControl.auditModelUseCustomModel')"
+	                        />
+	                        <input
+	                          v-else
+	                          v-model.trim="model.model"
+	                          type="text"
+	                          class="input"
+	                          :placeholder="auditModelModelPlaceholder(model)"
+	                          @focus="loadAuditModelCandidates(model)"
+	                        />
+	                        <p v-if="model.internal_api_key_id" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+	                          {{ t('admin.riskControl.auditModelInternalKeyReady') }}
+	                        </p>
+	                      </div>
+	                    </template>
+	                    <template v-else>
+	                    <div>
+	                      <label class="input-label">{{ t('admin.riskControl.auditModelBaseUrl') }}</label>
+	                      <input v-model.trim="model.base_url" type="url" class="input" placeholder="https://api.example.com" />
+	                    </div>
                     <div>
                       <label class="input-label">{{ t('admin.riskControl.auditModelModel') }}</label>
                       <input v-model.trim="model.model" type="text" class="input" placeholder="qwen-moderation" />
@@ -1199,10 +1254,11 @@
                         autocomplete="new-password"
                       />
                       <p v-if="model.api_key_masked" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {{ t('admin.riskControl.auditModelApiKeyConfigured', { key: model.api_key_masked }) }}
-                      </p>
-                    </div>
-                    <div class="grid grid-cols-3 gap-3">
+	                        {{ t('admin.riskControl.auditModelApiKeyConfigured', { key: model.api_key_masked }) }}
+	                      </p>
+	                    </div>
+	                    </template>
+	                    <div class="grid grid-cols-3 gap-3">
                       <div>
                         <label class="input-label">{{ t('admin.riskControl.auditModelWeight') }}</label>
                         <input v-model.number="model.weight" type="number" min="0.01" step="0.1" class="input" />
@@ -1463,10 +1519,25 @@
               </span>
             </div>
             <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.highest') }}</p>
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.table.trigger') }}</p>
               <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">
-                {{ inputDetailRow.highest_category || '-' }} / {{ percent(inputDetailRow.highest_score) }}
+                {{ triggerSummary(inputDetailRow) }} / {{ triggerScoreText(inputDetailRow) }}
               </p>
+            </div>
+          </div>
+
+          <div v-if="inputDetailKeywordHits.length > 0" class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
+            <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.inputDetailKeywordHits') }}</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <span
+                v-for="hit in inputDetailKeywordHits"
+                :key="`${hit.rule_id}:${hit.field}:${hit.keyword}:${hit.matched_text}`"
+                class="inline-flex max-w-full items-center gap-1 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/20 dark:text-red-300"
+                :title="keywordHitTitle(hit)"
+              >
+                <span class="truncate">{{ hit.keyword || hit.matched_text || '-' }}</span>
+                <span v-if="hit.field" class="text-red-400 dark:text-red-500">· {{ hit.field }}</span>
+              </span>
             </div>
           </div>
 
@@ -1482,7 +1553,8 @@
                 {{ inputDetailRow.group_name }}
               </span>
             </div>
-            <pre class="mt-4 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-950 p-4 text-sm leading-6 text-gray-100 shadow-inner dark:bg-black/50">{{ inputDetailText }}</pre>
+            <div v-if="inputDetailLoading" class="mt-4 rounded-lg bg-gray-950 p-4 text-sm leading-6 text-gray-100 shadow-inner dark:bg-black/50">{{ t('common.loading') }}</div>
+            <pre v-else class="mt-4 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-950 p-4 text-sm leading-6 text-gray-100 shadow-inner dark:bg-black/50">{{ inputDetailText }}</pre>
           </div>
 
           <div v-if="inputDetailMetadataText" class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
@@ -1540,6 +1612,8 @@ import type {
   ContentModerationCyberuseUserScopeMode,
   ContentModerationDecisionRule,
   ContentModerationDecisionRuleType,
+  ContentModerationContext,
+  ContentModerationKeywordHit,
   ContentModerationLog,
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
@@ -1559,9 +1633,12 @@ type SettingsTab = 'basic' | 'scope' | 'runtime' | 'riskProfile' | 'response' | 
 type WorkerSlotState = 'active' | 'idle' | 'disabled'
 type APIKeysWriteMode = 'append' | 'replace'
 type OverviewIcon = 'shield' | 'key' | 'users' | 'document'
+type AuditModelProtocol = ContentModerationAuditModelConfig['protocol']
 type AuditModelForm = Omit<ContentModerationAuditModelConfig, 'api_key'> & {
   api_key_masked: string
   api_key_input: string
+  model_candidates: string[]
+  model_candidates_loading: boolean
 }
 type OverviewItem = {
   key: string
@@ -1622,6 +1699,7 @@ const activeSettingsTab = ref<SettingsTab>('basic')
 const groupSearch = ref('')
 const flaggedHashInput = ref('')
 const groups = ref<AdminGroup[]>([])
+const auditModelCandidatesCache = reactive<Record<number, string[]>>({})
 const logs = ref<ContentModerationLog[]>([])
 const status = ref<ContentModerationRuntimeStatus | null>(null)
 const testedApiKeyStatuses = ref<ContentModerationAPIKeyStatus[]>([])
@@ -1631,6 +1709,8 @@ const moderationTestPrompt = ref('')
 const moderationTestImages = ref<string[]>([])
 const moderationTestResult = ref<ContentModerationTestAuditResult | null>(null)
 const inputDetailRow = ref<ContentModerationLog | null>(null)
+const inputDetailContext = ref<ContentModerationContext | null>(null)
+const inputDetailLoading = ref(false)
 let statusTimer: number | null = null
 
 const configForm = reactive({
@@ -1753,6 +1833,11 @@ const cyberuseUserScopeOptions = computed<SelectOption[]>(() => [
   { value: 'include', label: t('admin.riskControl.cyberuseUserScopeInclude') },
   { value: 'exclude', label: t('admin.riskControl.cyberuseUserScopeExclude') },
 ])
+
+const auditModelGroupOptions = computed<SelectOption[]>(() => groups.value.map((group) => ({
+  value: group.id,
+  label: `${group.name} · ${group.platform}`,
+})))
 
 const keywordBlockingModeOptions = computed<Array<{ value: KeywordBlockingMode; label: string; description: string }>>(() => [
   {
@@ -2075,8 +2160,13 @@ const riskThresholdRows = computed<RiskThresholdRow[]>(() => (
 
 const inputDetailText = computed(() => {
   if (!inputDetailRow.value) return '-'
+  if (inputDetailContext.value?.plain_context) {
+    return formatPlainContext(inputDetailContext.value.plain_context)
+  }
   return inputDetailRow.value.input_excerpt || inputDetailRow.value.error || '-'
 })
+
+const inputDetailKeywordHits = computed<ContentModerationKeywordHit[]>(() => inputDetailRow.value?.keyword_hits ?? [])
 
 const inputDetailMetadataText = computed(() => {
   if (!inputDetailRow.value?.audit_context) return ''
@@ -2291,13 +2381,14 @@ async function loadAll() {
       adminAPI.groups.getAll(),
       adminAPI.riskControl.getStatus(),
     ])
-    applyConfig(config)
     groups.value = groupItems
+    applyConfig(config)
     status.value = runtimeStatus
     if (Array.isArray(runtimeStatus.api_key_statuses)) {
       configForm.api_key_statuses = [...runtimeStatus.api_key_statuses]
       prunePendingDeleteAPIKeyHashes()
     }
+    await Promise.all(configForm.audit_models.map((model) => loadAuditModelCandidates(model)))
     await loadLogs()
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.loadFailed')))
@@ -2445,12 +2536,24 @@ function inputSummaryText(row: ContentModerationLog): string {
   return row.input_excerpt || row.error || '-'
 }
 
-function openInputDetail(row: ContentModerationLog) {
+async function openInputDetail(row: ContentModerationLog) {
   inputDetailRow.value = row
+  inputDetailContext.value = null
+  if (!row.context_id) return
+  inputDetailLoading.value = true
+  try {
+    inputDetailContext.value = await adminAPI.riskControl.getContextDetail(row.context_id)
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.riskContextLoadFailed')))
+  } finally {
+    inputDetailLoading.value = false
+  }
 }
 
 function closeInputDetail() {
   inputDetailRow.value = null
+  inputDetailContext.value = null
+  inputDetailLoading.value = false
 }
 
 async function unbanUser(row: ContentModerationLog) {
@@ -2710,6 +2813,48 @@ function resultLabel(row: ContentModerationLog): string {
   return t('admin.riskControl.result.pass')
 }
 
+function triggerSummary(row: ContentModerationLog): string {
+  if ((row.keyword_hits?.length ?? 0) > 0) {
+    return t('admin.riskControl.keywordHitCount', { count: row.keyword_hits?.length ?? 0 })
+  }
+  return row.highest_category || '-'
+}
+
+function triggerScoreText(row: ContentModerationLog): string {
+  if ((row.keyword_hits?.length ?? 0) > 0) {
+    return uniqueKeywordHitKeywords(row.keyword_hits ?? []).join(', ') || '-'
+  }
+  return percent(row.highest_score)
+}
+
+function uniqueKeywordHitKeywords(hits: ContentModerationKeywordHit[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const hit of hits) {
+    const value = String(hit.keyword || hit.matched_text || '').trim()
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    out.push(value)
+  }
+  return out
+}
+
+function keywordHitTitle(hit: ContentModerationKeywordHit): string {
+  return [
+    hit.group ? `${t('admin.riskControl.keywordHitGroup')}: ${hit.group}` : '',
+    hit.field ? `${t('admin.riskControl.keywordHitField')}: ${hit.field}` : '',
+    hit.matched_text ? `${t('admin.riskControl.keywordHitText')}: ${hit.matched_text}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+function formatPlainContext(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+}
+
 function resultBadgeClass(row: ContentModerationLog): string {
   if (row.action === 'block' || row.action === 'keyword_block') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (row.action === 'error' || row.error) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
@@ -2884,29 +3029,117 @@ function createAuditModelForm(index: number): AuditModelForm {
     api_key_masked: '',
     api_key_input: '',
     model: '',
+    group_id: null,
+    group_name: '',
+    internal_api_key_id: null,
     temperature: 0,
     timeout_ms: 3000,
     prompt_template: defaultAuditModelPrompt,
     weight: 1,
+    model_candidates: [],
+    model_candidates_loading: false,
   }
 }
 
 function auditModelsFromConfig(models: ContentModerationAuditModelConfig[] | null | undefined): AuditModelForm[] {
   if (!Array.isArray(models)) return []
-  return models.map((model, index) => ({
-    id: String(model.id || `model_${index + 1}`),
-    name: String(model.name || t('admin.riskControl.auditModelDefaultName', { index: index + 1 })),
-    enabled: model.enabled ?? true,
-    protocol: 'openai_compatible',
-    base_url: model.base_url || '',
-    api_key_masked: model.api_key || '',
-    api_key_input: '',
-    model: model.model || '',
-    temperature: Number.isFinite(model.temperature) ? Number(model.temperature) : 0,
-    timeout_ms: Number(model.timeout_ms) || 3000,
-    prompt_template: model.prompt_template || defaultAuditModelPrompt,
-    weight: Number(model.weight) || 1,
-  }))
+  return models.map((model, index) => {
+    const protocol = normalizeAuditModelProtocol(model.protocol)
+    const groupID = Number(model.group_id)
+    return {
+      id: String(model.id || `model_${index + 1}`),
+      name: String(model.name || t('admin.riskControl.auditModelDefaultName', { index: index + 1 })),
+      enabled: model.enabled ?? true,
+      protocol,
+      base_url: protocol === 'internal_group' ? '' : (model.base_url || ''),
+      api_key_masked: protocol === 'internal_group' ? '' : (model.api_key || ''),
+      api_key_input: '',
+      model: model.model || '',
+      group_id: Number.isFinite(groupID) && groupID > 0 ? groupID : null,
+      group_name: model.group_name || '',
+      internal_api_key_id: model.internal_api_key_id || null,
+      temperature: Number.isFinite(model.temperature) ? Number(model.temperature) : 0,
+      timeout_ms: Number(model.timeout_ms) || 3000,
+      prompt_template: model.prompt_template || defaultAuditModelPrompt,
+      weight: Number(model.weight) || 1,
+      model_candidates: [],
+      model_candidates_loading: false,
+    }
+  })
+}
+
+function normalizeAuditModelProtocol(value: unknown): AuditModelProtocol {
+  return value === 'internal_group' ? 'internal_group' : 'openai_compatible'
+}
+
+function auditModelSourceHint(model: AuditModelForm): string {
+  return model.protocol === 'internal_group'
+    ? t('admin.riskControl.auditModelInternalGroupHint')
+    : t('admin.riskControl.auditModelProtocolHint')
+}
+
+function setAuditModelProtocol(model: AuditModelForm, protocol: AuditModelProtocol) {
+  model.protocol = protocol
+  if (protocol === 'internal_group') {
+    model.base_url = ''
+    model.api_key_input = ''
+    model.api_key_masked = ''
+    void loadAuditModelCandidates(model)
+    return
+  }
+  model.group_id = null
+  model.group_name = ''
+  model.internal_api_key_id = null
+  model.model_candidates = []
+}
+
+function selectedAuditModelGroup(model: AuditModelForm): AdminGroup | null {
+  const groupID = Number(model.group_id)
+  if (!Number.isFinite(groupID) || groupID <= 0) return null
+  return groups.value.find((group) => group.id === groupID) || null
+}
+
+function auditModelCandidateOptions(model: AuditModelForm): SelectOption[] {
+  return model.model_candidates.map((item) => ({ value: item, label: item }))
+}
+
+function auditModelModelPlaceholder(model: AuditModelForm): string {
+  if (model.model_candidates_loading) return t('common.loading')
+  return t('admin.riskControl.auditModelModelPlaceholder')
+}
+
+async function onAuditModelGroupChange(model: AuditModelForm) {
+  const group = selectedAuditModelGroup(model)
+  model.group_name = group?.name || ''
+  model.internal_api_key_id = null
+  await loadAuditModelCandidates(model)
+}
+
+async function loadAuditModelCandidates(model: AuditModelForm) {
+  if (model.protocol !== 'internal_group') return
+  const group = selectedAuditModelGroup(model)
+  if (!group) {
+    model.model_candidates = []
+    return
+  }
+  const cached = auditModelCandidatesCache[group.id]
+  if (cached) {
+    model.model_candidates = cached
+    return
+  }
+  model.model_candidates_loading = true
+  try {
+    const candidates = normalizeModelNames(await adminAPI.groups.getModelsListCandidates(group.id, group.platform))
+    auditModelCandidatesCache[group.id] = candidates
+    model.model_candidates = candidates
+    if (!model.model && candidates.length > 0) {
+      model.model = candidates[0]
+    }
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.auditModelCandidatesLoadFailed')))
+  } finally {
+    model.model_candidates_loading = false
+  }
 }
 
 function normalizeDecisionRule(rule: ContentModerationDecisionRule | null | undefined): ContentModerationDecisionRule {
@@ -3016,21 +3249,28 @@ function buildModelFilterPayload(): ContentModerationModelFilter {
 
 function buildAuditModelsPayload(): ContentModerationAuditModelConfig[] {
   return configForm.audit_models.map((model, index) => {
+    const protocol = normalizeAuditModelProtocol(model.protocol)
     const payload: ContentModerationAuditModelConfig = {
       id: model.id.trim() || `model_${index + 1}`,
       name: model.name.trim(),
       enabled: model.enabled,
-      protocol: 'openai_compatible',
-      base_url: model.base_url.trim(),
+      protocol,
+      base_url: protocol === 'internal_group' ? '' : model.base_url.trim(),
       model: model.model.trim(),
       temperature: Number(model.temperature) || 0,
       timeout_ms: Number(model.timeout_ms) || 3000,
       prompt_template: model.prompt_template.trim() || defaultAuditModelPrompt,
       weight: Number(model.weight) || 1,
     }
-    const apiKey = model.api_key_input.trim()
-    if (apiKey) {
-      payload.api_key = apiKey
+    if (protocol === 'internal_group') {
+      payload.group_id = Number(model.group_id) || null
+      payload.group_name = model.group_name || selectedAuditModelGroup(model)?.name || ''
+      payload.internal_api_key_id = model.internal_api_key_id || null
+    } else {
+      const apiKey = model.api_key_input.trim()
+      if (apiKey) {
+        payload.api_key = apiKey
+      }
     }
     return payload
   })

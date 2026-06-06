@@ -50,12 +50,16 @@ func ProvideContentModerationService(
 	hashCache ContentModerationHashCache,
 	groupRepo GroupRepository,
 	userRepo UserRepository,
+	apiKeyRepo APIKeyRepository,
 	authCacheInvalidator APIKeyAuthCacheInvalidator,
 	emailService *EmailService,
 	feishuNotificationService *FeishuNotificationService,
 	encryptor SecretEncryptor,
+	cfg *config.Config,
 ) *ContentModerationService {
 	svc := NewContentModerationService(settingRepo, repo, hashCache, groupRepo, userRepo, authCacheInvalidator, emailService, encryptor)
+	svc.SetAPIKeyRepository(apiKeyRepo)
+	svc.SetConfig(cfg)
 	svc.SetFeishuNotificationService(feishuNotificationService)
 	return svc
 }
@@ -534,6 +538,7 @@ var ProviderSet = wire.NewSet(
 	NewAdminService,
 	NewGatewayService,
 	NewOpenAIGatewayService,
+	NewSpeedService,
 	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
 	NewOAuthService,
 	ProvideOpenAIOAuthService,

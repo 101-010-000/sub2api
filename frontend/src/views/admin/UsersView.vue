@@ -431,6 +431,18 @@
             </button>
           </template>
 
+          <template #cell-risk_weight="{ row }">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:text-gray-300 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+              :title="t('admin.users.riskControlDetail')"
+              @click="handleRiskControl(row)"
+            >
+              <Icon name="shield" size="xs" class="text-amber-500 dark:text-amber-300" />
+              <span>{{ formatRiskWeight(riskWeightStats[row.id] ?? 0) }}</span>
+            </button>
+          </template>
+
           <!-- 用量列自定义表头：列名 + 单个排序图标按钮，点击展开"今日/近30天"菜单。
                column.sortable=false，DataTable 内置点击逻辑不会触发；
                菜单项三态循环：desc → asc → off。 -->
@@ -989,6 +1001,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'subscriptions', label: t('admin.users.columns.subscriptions'), sortable: false },
   { key: 'balance', label: t('admin.users.columns.balance'), sortable: true },
   { key: 'balance_platform_quota', label: t('admin.users.columns.balancePlatformQuota'), sortable: false },
+  { key: 'risk_weight', label: t('admin.users.columns.riskWeight'), sortable: false },
   { key: 'usage', label: t('admin.users.columns.usage'), sortable: false },
   { key: 'usage_anthropic', label: t('admin.users.columns.usageAnthropic'), sortable: false },
   { key: 'usage_openai', label: t('admin.users.columns.usageOpenAI'), sortable: false },
@@ -1095,7 +1108,7 @@ const toggleColumn = (key: string) => {
     hiddenColumns.add(key)
   }
   saveColumnsToStorage()
-  if (wasHidden && (key === 'usage' || key.startsWith('usage_') || key.startsWith('attr_') || key === 'balance_platform_quota')) {
+  if (wasHidden && (key === 'usage' || key.startsWith('usage_') || key.startsWith('attr_') || key === 'balance_platform_quota' || key === 'risk_weight')) {
     refreshCurrentPageSecondaryData()
   }
   if (key === 'subscriptions') {
@@ -1126,6 +1139,7 @@ const hasVisibleUsageColumn = computed(
 )
 const hasVisibleGroupsColumn = computed(() => !hiddenColumns.has('groups'))
 const hasVisiblePlatformQuotaColumn = computed(() => !hiddenColumns.has('balance_platform_quota'))
+const hasVisibleRiskWeightColumn = computed(() => !hiddenColumns.has('risk_weight'))
 const hasVisibleAttributeColumns = computed(() =>
   attributeDefinitions.value.some((def) => def.enabled && !hiddenColumns.has(`attr_${def.id}`))
 )
@@ -1284,6 +1298,7 @@ const getAttributeDefinition = (attrId: number): UserAttributeDefinition | undef
 }
 const usageStats = ref<Record<string, BatchUserUsageStats>>({})
 const platformQuotaStats = ref<Record<number, PlatformQuotaItem[]>>({})
+const riskWeightStats = ref<Record<number, number>>({})
 
 const getPlatformUsage = (userId: number, platform: string) =>
   usageStats.value[userId]?.by_platform?.find((p) => p.platform === platform)
@@ -1489,6 +1504,36 @@ const loadUsersSecondaryData = async (
     )
   }
 
+  if (hasVisibleRiskWeightColumn.value) {
+    tasks.push(
+      (async () => {
+        try {
+          const CHUNK = 6
+          for (let i = 0; i < userIds.length; i += CHUNK) {
+            if (signal?.aborted) return
+            if (typeof expectedSeq === 'number' && expectedSeq !== secondaryDataSeq) return
+            const chunk = userIds.slice(i, i + CHUNK)
+            const results = await Promise.allSettled(
+              chunk.map((id) => adminAPI.riskControl.getUserRiskProfile(id))
+            )
+            if (signal?.aborted) return
+            if (typeof expectedSeq === 'number' && expectedSeq !== secondaryDataSeq) return
+            const merged = { ...riskWeightStats.value }
+            results.forEach((r, idx) => {
+              if (r.status === 'fulfilled') {
+                merged[chunk[idx]] = r.value.profile?.effective_weight ?? 0
+              }
+            })
+            riskWeightStats.value = merged
+          }
+        } catch (e) {
+          if (signal?.aborted) return
+          console.error('Failed to load risk weights:', e)
+        }
+      })()
+    )
+  }
+
   if (tasks.length > 0) {
     await Promise.allSettled(tasks)
   }
@@ -1674,6 +1719,7 @@ const loadUsers = async () => {
     usageStats.value = {}
     userAttributeValues.value = {}
     platformQuotaStats.value = {}
+    riskWeightStats.value = {}
 
     // Defer heavy secondary data so table can render first.
     if (response.items.length > 0) {
