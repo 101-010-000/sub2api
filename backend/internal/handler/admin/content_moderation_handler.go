@@ -71,6 +71,7 @@ type contentModerationConfigRequest struct {
 	BackgroundReviewRetryBackoffSeconds *int                                         `json:"background_review_retry_backoff_seconds"`
 	ContextCaptureEnabled               *bool                                        `json:"context_capture_enabled"`
 	ContextMaxBytes                     *int                                         `json:"context_max_bytes"`
+	CyberuseResponse                    *service.ContentModerationCyberuseConfig     `json:"cyberuse_response"`
 }
 
 type contentModerationAPIKeyTestRequest struct {
@@ -157,6 +158,7 @@ func (h *ContentModerationHandler) UpdateConfig(c *gin.Context) {
 		BackgroundReviewRetryBackoffSeconds: req.BackgroundReviewRetryBackoffSeconds,
 		ContextCaptureEnabled:               req.ContextCaptureEnabled,
 		ContextMaxBytes:                     req.ContextMaxBytes,
+		CyberuseResponse:                    req.CyberuseResponse,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

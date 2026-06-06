@@ -106,6 +106,8 @@ const (
 	defaultContentModerationViolationWindowHours = 720
 	defaultContentModerationBlockHTTPStatus      = http.StatusForbidden
 	defaultContentModerationBlockMessage         = "内容审计命中风险规则，请调整输入后重试"
+	defaultContentModerationCyberuseErrorCode    = "cyber_policy"
+	defaultContentModerationCyberuseMessage      = "Your request was blocked by local content moderation policy."
 	defaultContentModerationRetryCount           = 2
 	maxContentModerationRetryCount               = 5
 	defaultContentModerationHitRetentionDays     = 180
@@ -233,6 +235,7 @@ type ContentModerationConfig struct {
 	BackgroundReviewRetryBackoffSeconds int                                 `json:"background_review_retry_backoff_seconds"`
 	ContextCaptureEnabled               bool                                `json:"context_capture_enabled"`
 	ContextMaxBytes                     int                                 `json:"context_max_bytes"`
+	CyberuseResponse                    ContentModerationCyberuseConfig     `json:"cyberuse_response"`
 }
 
 type ContentModerationConfigView struct {
@@ -286,6 +289,7 @@ type ContentModerationConfigView struct {
 	BackgroundReviewRetryBackoffSeconds int                                 `json:"background_review_retry_backoff_seconds"`
 	ContextCaptureEnabled               bool                                `json:"context_capture_enabled"`
 	ContextMaxBytes                     int                                 `json:"context_max_bytes"`
+	CyberuseResponse                    ContentModerationCyberuseConfig     `json:"cyberuse_response"`
 }
 
 type ContentModerationAuditModelConfig struct {
@@ -313,6 +317,30 @@ type ContentModerationSelfUnbanConfig struct {
 	WindowMinutes            int  `json:"window_minutes"`
 	MaxAttempts              int  `json:"max_attempts"`
 	SecondAttemptWaitMinutes int  `json:"second_attempt_wait_minutes"`
+}
+
+const (
+	ContentModerationCyberuseUserScopeAll     = "all"
+	ContentModerationCyberuseUserScopeInclude = "include"
+	ContentModerationCyberuseUserScopeExclude = "exclude"
+)
+
+type ContentModerationCyberuseConfig struct {
+	Enabled              bool                                `json:"enabled"`
+	EmitToClient         bool                                `json:"emit_to_client"`
+	ErrorCode            string                              `json:"error_code"`
+	Message              string                              `json:"message"`
+	IncludeRequestID     bool                                `json:"include_request_id"`
+	AuditMetadataEnabled bool                                `json:"audit_metadata_enabled"`
+	AnnouncementEnabled  bool                                `json:"announcement_enabled"`
+	AnnouncementTitle    string                              `json:"announcement_title"`
+	AnnouncementContent  string                              `json:"announcement_content"`
+	UserScope            ContentModerationCyberuseUserScope  `json:"user_scope"`
+}
+
+type ContentModerationCyberuseUserScope struct {
+	Mode    string  `json:"mode"`
+	UserIDs []int64 `json:"user_ids"`
 }
 
 type ContentModerationKeywordRule struct {
@@ -346,7 +374,35 @@ type ContentModerationAuditContext struct {
 	KeywordHits []ContentModerationKeywordHit       `json:"keyword_hits,omitempty"`
 	ModelAudits []ContentModerationModelAuditDetail `json:"model_audits,omitempty"`
 	Decision    *ContentModerationAggregateDecision `json:"decision,omitempty"`
+	Metadata    *ContentModerationPolicyMetadata    `json:"metadata,omitempty"`
 	FinalAction string                              `json:"final_action"`
+}
+
+type ContentModerationPolicyMetadata struct {
+	Source                string `json:"source"`
+	Origin                string `json:"origin"`
+	PolicySignal          string `json:"policy_signal"`
+	UpstreamPolicy        bool   `json:"upstream_policy"`
+	RequestID             string `json:"request_id"`
+	UserID                int64  `json:"user_id"`
+	UserEmail             string `json:"user_email"`
+	APIKeyID              int64  `json:"api_key_id"`
+	APIKeyName            string `json:"api_key_name"`
+	GroupID               *int64 `json:"group_id,omitempty"`
+	GroupName             string `json:"group_name"`
+	Endpoint              string `json:"endpoint"`
+	Provider              string `json:"provider"`
+	Model                 string `json:"model"`
+	Protocol              string `json:"protocol"`
+	InputHash             string `json:"input_hash,omitempty"`
+	ContextID             *int64 `json:"context_id,omitempty"`
+	Action                string `json:"action"`
+	HighestCategory       string `json:"highest_category"`
+	ClientErrorCode       string `json:"client_error_code,omitempty"`
+	ClientMessage         string `json:"client_message,omitempty"`
+	AnnouncementEnabled   bool   `json:"announcement_enabled"`
+	AnnouncementTitle     string `json:"announcement_title,omitempty"`
+	AnnouncementContent   string `json:"announcement_content,omitempty"`
 }
 
 type ContentModerationRequestContext struct {
@@ -521,6 +577,7 @@ type UpdateContentModerationConfigInput struct {
 	BackgroundReviewRetryBackoffSeconds *int                                 `json:"background_review_retry_backoff_seconds"`
 	ContextCaptureEnabled               *bool                                `json:"context_capture_enabled"`
 	ContextMaxBytes                     *int                                 `json:"context_max_bytes"`
+	CyberuseResponse                    *ContentModerationCyberuseConfig     `json:"cyberuse_response"`
 }
 
 type ContentModerationModelFilter struct {
@@ -606,6 +663,7 @@ type ContentModerationDecision struct {
 	Blocked         bool                           `json:"blocked"`
 	Flagged         bool                           `json:"flagged"`
 	Message         string                         `json:"message"`
+	ErrorCode       string                         `json:"error_code,omitempty"`
 	StatusCode      int                            `json:"status_code"`
 	InputHash       string                         `json:"input_hash,omitempty"`
 	HighestCategory string                         `json:"highest_category"`
@@ -631,6 +689,7 @@ type ContentModerationLog struct {
 	Endpoint              string                         `json:"endpoint"`
 	Provider              string                         `json:"provider"`
 	Model                 string                         `json:"model"`
+	Protocol              string                         `json:"protocol,omitempty"`
 	Mode                  string                         `json:"mode"`
 	Action                string                         `json:"action"`
 	Flagged               bool                           `json:"flagged"`
@@ -1142,6 +1201,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	if input.ContextMaxBytes != nil {
 		cfg.ContextMaxBytes = *input.ContextMaxBytes
 	}
+	if input.CyberuseResponse != nil {
+		cfg.CyberuseResponse = *input.CyberuseResponse
+	}
 	if input.AllGroups != nil {
 		cfg.AllGroups = *input.AllGroups
 	}
@@ -1354,7 +1416,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		if strings.TrimSpace(message) == "" {
 			message = defaultContentModerationBlockMessage
 		}
-		return &ContentModerationDecision{
+		return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
 			Allowed:    false,
 			Blocked:    true,
 			Flagged:    true,
@@ -1362,7 +1424,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			StatusCode: cfg.BlockStatus,
 			Action:     ContentModerationActionBan,
 			BanStatus:  banStatus,
-		}, nil
+		}), nil
 	}
 	content := ExtractContentModerationInput(input.Protocol, input.Body)
 	if content.IsEmpty() {
@@ -1405,7 +1467,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 				log := s.buildLog(input, cfg, ContentModerationActionKeywordBlock, true, contentModerationKeywordCategory, 1.0, scores, content.ExcerptText(), nil, nil, "", keywordHits, nil)
 				s.decorateModerationLog(log, riskSnapshot, contextID, ContentModerationRiskEventSourceSync, ContentModerationReviewStageRealtime)
 				s.enqueueRecord(input, cfg, log, hashText, false, true)
-				return &ContentModerationDecision{
+				return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
 					Allowed:         false,
 					Blocked:         true,
 					Flagged:         true,
@@ -1418,7 +1480,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 					KeywordHits:     keywordHits,
 					ContextID:       contextID,
 					RiskSnapshot:    riskSnapshot,
-				}, nil
+				}), nil
 			}
 		}
 		if cfg.KeywordBlockingMode == ContentModerationKeywordModeKeywordOnly {
@@ -1456,7 +1518,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			log := s.buildLog(input, cfg, ContentModerationActionHashBlock, true, "hash", 1.0, scores, content.ExcerptText(), nil, nil, "", keywordHits, nil)
 			s.decorateModerationLog(log, riskSnapshot, contextID, ContentModerationRiskEventSourceHashBlock, ContentModerationReviewStageRealtime)
 			s.enqueueRecord(input, cfg, log, hashText, false, false)
-			return &ContentModerationDecision{
+			return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
 				Allowed:      false,
 				Blocked:      true,
 				Flagged:      true,
@@ -1466,7 +1528,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 				Action:       ContentModerationActionHashBlock,
 				ContextID:    contextID,
 				RiskSnapshot: riskSnapshot,
-			}, nil
+			}), nil
 		}
 	}
 	auditModels := cfg.enabledAuditModels()
@@ -1591,7 +1653,7 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 		allow.LogID = log.ID
 	}
 	if blocked {
-		return &ContentModerationDecision{
+		return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
 			Allowed:         false,
 			Blocked:         true,
 			Flagged:         true,
@@ -1604,7 +1666,7 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 			ContextID:       contextID,
 			LogID:           allow.LogID,
 			RiskSnapshot:    riskSnapshot,
-		}
+		})
 	}
 	return &ContentModerationDecision{
 		Allowed:         true,
@@ -1683,7 +1745,7 @@ func (s *ContentModerationService) checkModelAuditSync(ctx context.Context, inpu
 		allow.LogID = log.ID
 	}
 	if allowBlock && cfg.Mode == ContentModerationModePreBlock && agg.Flagged {
-		return &ContentModerationDecision{
+		return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
 			Allowed:         false,
 			Blocked:         true,
 			Flagged:         true,
@@ -1697,7 +1759,7 @@ func (s *ContentModerationService) checkModelAuditSync(ctx context.Context, inpu
 			ContextID:       contextID,
 			LogID:           allow.LogID,
 			RiskSnapshot:    riskSnapshot,
-		}
+		})
 	}
 	return &ContentModerationDecision{
 		Allowed:         true,
@@ -2389,6 +2451,9 @@ func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *Cont
 			}
 		}
 	}
+	if cfg.CyberuseResponse.Enabled && cfg.CyberuseResponse.UserScope.Mode == ContentModerationCyberuseUserScopeInclude && len(cfg.CyberuseResponse.UserScope.UserIDs) == 0 {
+		return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_CYBERUSE_SCOPE", "Cyberuse 用户范围为指定用户时至少需要 1 个用户 ID")
+	}
 	return nil
 }
 
@@ -2581,6 +2646,7 @@ func (s *ContentModerationService) buildLog(input ContentModerationCheckInput, c
 		Endpoint:          input.Endpoint,
 		Provider:          input.Provider,
 		Model:             input.Model,
+		Protocol:          input.Protocol,
 		Mode:              cfg.Mode,
 		Action:            action,
 		Flagged:           flagged,
@@ -2597,6 +2663,96 @@ func (s *ContentModerationService) buildLog(input ContentModerationCheckInput, c
 	}
 }
 
+func (s *ContentModerationService) decorateBlockedDecision(cfg *ContentModerationConfig, input ContentModerationCheckInput, decision *ContentModerationDecision) *ContentModerationDecision {
+	if decision == nil || cfg == nil || !cfg.cyberuseResponseApplies(input.UserID) || !cfg.CyberuseResponse.EmitToClient {
+		return decision
+	}
+	decision.ErrorCode = cfg.CyberuseResponse.ErrorCode
+	message := strings.TrimSpace(cfg.CyberuseResponse.Message)
+	if message == "" {
+		message = defaultContentModerationCyberuseMessage
+	}
+	if cfg.CyberuseResponse.IncludeRequestID && strings.TrimSpace(input.RequestID) != "" {
+		message = fmt.Sprintf("%s (request_id: %s)", message, strings.TrimSpace(input.RequestID))
+	}
+	decision.Message = message
+	return decision
+}
+
+func (s *ContentModerationService) decorateCyberuseAuditMetadata(cfg *ContentModerationConfig, log *ContentModerationLog, inputHash string) {
+	if cfg == nil || log == nil || !log.Flagged || !cfg.cyberuseResponseApplies(contentModerationEmailUserID(log)) || !cfg.CyberuseResponse.AuditMetadataEnabled {
+		return
+	}
+	if log.AuditContext == nil {
+		log.AuditContext = &ContentModerationAuditContext{
+			Request:     contentModerationRequestContextFromLog(log),
+			KeywordHits: cloneContentModerationKeywordHits(log.KeywordHits),
+			FinalAction: log.Action,
+		}
+	} else {
+		log.AuditContext.Request = contentModerationRequestContextFromLog(log)
+		if len(log.AuditContext.KeywordHits) == 0 {
+			log.AuditContext.KeywordHits = cloneContentModerationKeywordHits(log.KeywordHits)
+		}
+		if strings.TrimSpace(log.AuditContext.FinalAction) == "" {
+			log.AuditContext.FinalAction = log.Action
+		}
+	}
+	log.AuditContext.Metadata = &ContentModerationPolicyMetadata{
+		Source:              "sub2api",
+		Origin:              "local_content_moderation",
+		PolicySignal:        "cyberuse",
+		UpstreamPolicy:      false,
+		RequestID:           log.RequestID,
+		UserID:              contentModerationEmailUserID(log),
+		UserEmail:           log.UserEmail,
+		APIKeyID:            contentModerationLogAPIKeyID(log),
+		APIKeyName:          log.APIKeyName,
+		GroupID:             cloneInt64Ptr(log.GroupID),
+		GroupName:           log.GroupName,
+		Endpoint:            log.Endpoint,
+		Provider:            log.Provider,
+		Model:               log.Model,
+		Protocol:            log.Protocol,
+		InputHash:           strings.TrimSpace(inputHash),
+		ContextID:           cloneInt64Ptr(log.ContextID),
+		Action:              log.Action,
+		HighestCategory:     log.HighestCategory,
+		ClientErrorCode:     cfg.CyberuseResponse.ErrorCode,
+		ClientMessage:       cfg.CyberuseResponse.Message,
+		AnnouncementEnabled: cfg.CyberuseResponse.AnnouncementEnabled,
+		AnnouncementTitle:   cfg.CyberuseResponse.AnnouncementTitle,
+		AnnouncementContent: cfg.CyberuseResponse.AnnouncementContent,
+	}
+}
+
+func contentModerationRequestContextFromLog(log *ContentModerationLog) ContentModerationRequestContext {
+	if log == nil {
+		return ContentModerationRequestContext{}
+	}
+	return ContentModerationRequestContext{
+		RequestID:  log.RequestID,
+		UserID:     contentModerationEmailUserID(log),
+		UserEmail:  log.UserEmail,
+		APIKeyID:   contentModerationLogAPIKeyID(log),
+		APIKeyName: log.APIKeyName,
+		GroupID:    cloneInt64Ptr(log.GroupID),
+		GroupName:  log.GroupName,
+		Endpoint:   log.Endpoint,
+		Provider:   log.Provider,
+		Model:      log.Model,
+		Protocol:   log.Protocol,
+		Input:      log.InputExcerpt,
+	}
+}
+
+func contentModerationLogAPIKeyID(log *ContentModerationLog) int64 {
+	if log == nil || log.APIKeyID == nil {
+		return 0
+	}
+	return *log.APIKeyID
+}
+
 func (s *ContentModerationService) persistContentModerationLog(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog, hashText string, recordHash bool, applySideEffects bool) {
 	if s == nil || log == nil {
 		return
@@ -2611,6 +2767,7 @@ func (s *ContentModerationService) persistContentModerationLog(ctx context.Conte
 		autoBanJustApplied = s.applyFlaggedAccountSideEffects(ctx, cfg, log)
 		s.sendFlaggedNotificationSideEffects(ctx, cfg, log, autoBanJustApplied)
 	}
+	s.decorateCyberuseAuditMetadata(cfg, log, hashText)
 	if s.repo != nil {
 		if err := s.repo.CreateLog(ctx, log); err != nil {
 			slog.Warn("content_moderation.create_log_failed", "user_id", contentModerationEmailUserID(log), "endpoint", log.Endpoint, "action", log.Action, "error", err)
@@ -2835,9 +2992,28 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 		BackgroundReviewRetryBackoffSeconds: defaultContentModerationReviewBackoffSeconds,
 		ContextCaptureEnabled:               true,
 		ContextMaxBytes:                     defaultContentModerationContextMaxBytes,
+		CyberuseResponse:                    defaultContentModerationCyberuseConfig(),
 		ModelFilter: ContentModerationModelFilter{
 			Type:   ContentModerationModelFilterAll,
 			Models: []string{},
+		},
+	}
+}
+
+func defaultContentModerationCyberuseConfig() ContentModerationCyberuseConfig {
+	return ContentModerationCyberuseConfig{
+		Enabled:              false,
+		EmitToClient:         true,
+		ErrorCode:            defaultContentModerationCyberuseErrorCode,
+		Message:              defaultContentModerationCyberuseMessage,
+		IncludeRequestID:     true,
+		AuditMetadataEnabled: true,
+		AnnouncementEnabled:  false,
+		AnnouncementTitle:    "",
+		AnnouncementContent:  "",
+		UserScope: ContentModerationCyberuseUserScope{
+			Mode:    ContentModerationCyberuseUserScopeAll,
+			UserIDs: []int64{},
 		},
 	}
 }
@@ -2853,6 +3029,7 @@ func cloneContentModerationConfig(cfg *ContentModerationConfig) *ContentModerati
 	clone.KeywordRules = append([]ContentModerationKeywordRule(nil), cfg.KeywordRules...)
 	clone.AuditModels = append([]ContentModerationAuditModelConfig(nil), cfg.AuditModels...)
 	clone.Thresholds = cloneFloatMap(cfg.Thresholds)
+	clone.CyberuseResponse = cloneContentModerationCyberuseConfig(cfg.CyberuseResponse)
 	clone.ModelFilter = ContentModerationModelFilter{
 		Type:   cfg.ModelFilter.Type,
 		Models: append([]string(nil), cfg.ModelFilter.Models...),
@@ -2995,6 +3172,7 @@ func (cfg *ContentModerationConfig) normalize() {
 	if cfg.ContextMaxBytes > maxContentModerationContextMaxBytes {
 		cfg.ContextMaxBytes = maxContentModerationContextMaxBytes
 	}
+	cfg.CyberuseResponse.normalize()
 	cfg.ModelFilter = normalizeContentModerationModelFilter(cfg.ModelFilter)
 }
 
@@ -3026,6 +3204,13 @@ func (cfg *ContentModerationConfig) includesModel(model string) bool {
 	default:
 		return true
 	}
+}
+
+func (cfg *ContentModerationConfig) cyberuseResponseApplies(userID int64) bool {
+	if cfg == nil || !cfg.CyberuseResponse.Enabled {
+		return false
+	}
+	return cfg.CyberuseResponse.appliesToUser(userID)
 }
 
 func contentModerationLogGroupID(groupID *int64) int64 {
@@ -3699,6 +3884,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		BackgroundReviewRetryBackoffSeconds: cfg.BackgroundReviewRetryBackoffSeconds,
 		ContextCaptureEnabled:               cfg.ContextCaptureEnabled,
 		ContextMaxBytes:                     cfg.ContextMaxBytes,
+		CyberuseResponse:                    cloneContentModerationCyberuseConfig(cfg.CyberuseResponse),
 	}
 }
 
@@ -4073,6 +4259,84 @@ func cloneContentModerationModelFilter(filter ContentModerationModelFilter) Cont
 	normalized := normalizeContentModerationModelFilter(filter)
 	normalized.Models = append([]string(nil), normalized.Models...)
 	return normalized
+}
+
+func cloneContentModerationCyberuseConfig(in ContentModerationCyberuseConfig) ContentModerationCyberuseConfig {
+	in.normalize()
+	in.UserScope.UserIDs = append([]int64(nil), in.UserScope.UserIDs...)
+	return in
+}
+
+func (cfg *ContentModerationCyberuseConfig) normalize() {
+	if cfg == nil {
+		return
+	}
+	cfg.ErrorCode = normalizeContentModerationErrorCode(cfg.ErrorCode, defaultContentModerationCyberuseErrorCode)
+	cfg.Message = strings.TrimSpace(cfg.Message)
+	if cfg.Message == "" {
+		cfg.Message = defaultContentModerationCyberuseMessage
+	}
+	cfg.AnnouncementTitle = trimRunes(strings.TrimSpace(cfg.AnnouncementTitle), 120)
+	cfg.AnnouncementContent = trimRunes(strings.TrimSpace(cfg.AnnouncementContent), 1000)
+	cfg.UserScope.normalize()
+}
+
+func (scope *ContentModerationCyberuseUserScope) normalize() {
+	if scope == nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(scope.Mode)) {
+	case ContentModerationCyberuseUserScopeInclude:
+		scope.Mode = ContentModerationCyberuseUserScopeInclude
+	case ContentModerationCyberuseUserScopeExclude:
+		scope.Mode = ContentModerationCyberuseUserScopeExclude
+	default:
+		scope.Mode = ContentModerationCyberuseUserScopeAll
+	}
+	scope.UserIDs = normalizeInt64IDs(scope.UserIDs)
+}
+
+func (cfg ContentModerationCyberuseConfig) appliesToUser(userID int64) bool {
+	cfg.normalize()
+	switch cfg.UserScope.Mode {
+	case ContentModerationCyberuseUserScopeInclude:
+		return int64ListContains(cfg.UserScope.UserIDs, userID)
+	case ContentModerationCyberuseUserScopeExclude:
+		return !int64ListContains(cfg.UserScope.UserIDs, userID)
+	default:
+		return true
+	}
+}
+
+func int64ListContains(ids []int64, id int64) bool {
+	if id <= 0 {
+		return false
+	}
+	for _, candidate := range ids {
+		if candidate == id {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeContentModerationErrorCode(code string, fallback string) string {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		code = fallback
+	}
+	code = strings.ToLower(code)
+	var b strings.Builder
+	for _, r := range code {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			_ = b.WriteByte(byte(r))
+		}
+	}
+	out := strings.Trim(b.String(), "_-")
+	if out == "" {
+		return fallback
+	}
+	return trimRunes(out, 64)
 }
 
 func normalizeContentModerationModelFilterType(filterType string) string {

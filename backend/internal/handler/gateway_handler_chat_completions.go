@@ -323,6 +323,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 func (h *GatewayHandler) chatCompletionsErrorResponse(c *gin.Context, status int, errType, message string) {
 	c.JSON(status, gin.H{
 		"error": gin.H{
+			"code":    errType,
 			"type":    errType,
 			"message": message,
 		},

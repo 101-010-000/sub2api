@@ -1661,6 +1661,7 @@ func (h *GatewayHandler) errorResponse(c *gin.Context, status int, errType, mess
 	c.JSON(status, gin.H{
 		"type": "error",
 		"error": gin.H{
+			"code":    errType,
 			"type":    errType,
 			"message": message,
 		},

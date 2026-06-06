@@ -1715,6 +1715,80 @@ func TestContentModerationStatusTracksPreBlockLocalBlocks(t *testing.T) {
 	require.Equal(t, int64(0), status.PreBlockErrors)
 }
 
+func TestContentModerationCheck_CyberuseResponseMarksLocalPolicyMetadata(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.KeywordBlockingMode = ContentModerationKeywordModeKeywordOnly
+	cfg.BlockedKeywords = []string{"blocked"}
+	cfg.CyberuseResponse = ContentModerationCyberuseConfig{
+		Enabled:              true,
+		EmitToClient:         true,
+		ErrorCode:            "cyberuse_policy",
+		Message:              "Local cyberuse policy blocked this request.",
+		IncludeRequestID:     true,
+		AuditMetadataEnabled: true,
+		AnnouncementEnabled:  true,
+		AnnouncementTitle:    "Policy notice",
+		AnnouncementContent:  "Contact support with your request_id.",
+		UserScope: ContentModerationCyberuseUserScope{
+			Mode:    ContentModerationCyberuseUserScopeInclude,
+			UserIDs: []int64{1001},
+		},
+	}
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		repo,
+		&contentModerationTestHashCache{},
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		RequestID:  "req-local-cyberuse",
+		UserID:     1001,
+		UserEmail:  "user@example.com",
+		APIKeyID:   2002,
+		APIKeyName: "test-key",
+		Endpoint:   "/v1/responses",
+		Provider:   "openai",
+		Model:      "gpt-5.5",
+		Protocol:   ContentModerationProtocolOpenAIResponses,
+		Body:       []byte(`{"input":[{"role":"user","content":"blocked prompt"}]}`),
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Blocked)
+	require.Equal(t, "cyberuse_policy", decision.ErrorCode)
+	require.Contains(t, decision.Message, "Local cyberuse policy blocked this request.")
+	require.Contains(t, decision.Message, "req-local-cyberuse")
+
+	logs := requireContentModerationLogCount(t, repo, 1)
+	require.NotNil(t, logs[0].AuditContext)
+	require.NotNil(t, logs[0].AuditContext.Metadata)
+	metadata := logs[0].AuditContext.Metadata
+	require.Equal(t, "sub2api", metadata.Source)
+	require.Equal(t, "local_content_moderation", metadata.Origin)
+	require.Equal(t, "cyberuse", metadata.PolicySignal)
+	require.False(t, metadata.UpstreamPolicy)
+	require.Equal(t, "req-local-cyberuse", metadata.RequestID)
+	require.Equal(t, int64(1001), metadata.UserID)
+	require.Equal(t, int64(2002), metadata.APIKeyID)
+	require.Equal(t, "openai_responses", metadata.Protocol)
+	require.Equal(t, "cyberuse_policy", metadata.ClientErrorCode)
+	require.True(t, metadata.AnnouncementEnabled)
+	require.Equal(t, "Policy notice", metadata.AnnouncementTitle)
+	require.NotEmpty(t, metadata.InputHash)
+}
+
 func TestBuildContentModerationTestAuditResult_UsesConfiguredThresholdsOnly(t *testing.T) {
 	result := buildContentModerationTestAuditResult(&moderationAPIResult{
 		Flagged: true,
