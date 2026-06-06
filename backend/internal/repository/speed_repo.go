@@ -173,7 +173,7 @@ func (r *speedRepository) ListUserGroupSpeedStates(ctx context.Context, userID i
 	if r == nil || r.db == nil {
 		return []service.UserGroupSpeedState{}, nil
 	}
-	filter := "g.speed_config_enabled = TRUE"
+	filter := "g.speed_config_enabled = TRUE AND g.subscription_type = 'subscription' AND us.id IS NOT NULL"
 	if visibleOnly {
 		filter += " AND g.user_speed_config_allowed = TRUE"
 	}

@@ -24,7 +24,6 @@ const (
 	defaultMaxSlowRejectRate   = 0.50
 
 	speedBillingModeSubscription = "subscription"
-	speedBillingModeBalance      = "balance"
 )
 
 type SpeedRepository interface {
@@ -147,7 +146,13 @@ func (s *SpeedService) GetUserStatus(ctx context.Context, userID, groupID int64,
 	if err != nil {
 		return nil, err
 	}
-	if requireUserVisible && (state.Group == nil || !state.Group.SpeedConfigEnabled || !state.Group.UserSpeedConfigAllowed) {
+	if !speedSupportedGroup(state.Group) {
+		return nil, ErrSpeedConfigForbidden
+	}
+	if state.Subscription == nil {
+		return nil, ErrSpeedConfigForbidden
+	}
+	if requireUserVisible && !state.Group.UserSpeedConfigAllowed {
 		return nil, ErrSpeedConfigForbidden
 	}
 	return s.statusFromState(state, time.Now().UTC()), nil
@@ -176,7 +181,7 @@ func (s *SpeedService) UpdateUserConfig(ctx context.Context, actorIsAdmin bool, 
 	if err != nil {
 		return nil, err
 	}
-	if state.Group == nil || !state.Group.SpeedConfigEnabled {
+	if !speedSupportedGroup(state.Group) || state.Subscription == nil {
 		return nil, ErrSpeedConfigForbidden
 	}
 	if !actorIsAdmin && !state.Group.UserSpeedConfigAllowed {
@@ -203,6 +208,13 @@ func (s *SpeedService) ResetUsage(ctx context.Context, userID, groupID int64) er
 	if s == nil || s.repo == nil {
 		return nil
 	}
+	state, err := s.repo.GetUserGroupSpeedState(ctx, userID, groupID)
+	if err != nil {
+		return err
+	}
+	if !speedSupportedGroup(state.Group) || state.Subscription == nil {
+		return ErrSpeedConfigForbidden
+	}
 	return s.repo.ResetUserGroupUsage(ctx, userID, groupID, time.Now().UTC())
 }
 
@@ -214,7 +226,7 @@ func (s *SpeedService) ClearUserConfig(ctx context.Context, userID, groupID int6
 	if err != nil {
 		return nil, err
 	}
-	if state.Group == nil || !state.Group.SpeedConfigEnabled {
+	if !speedSupportedGroup(state.Group) || state.Subscription == nil {
 		return nil, ErrSpeedConfigForbidden
 	}
 	if err := s.repo.ClearUserGroupConfig(ctx, userID, groupID); err != nil {
@@ -231,15 +243,12 @@ func (s *SpeedService) RecordUsage(ctx context.Context, userID, groupID int64, c
 }
 
 func (s *SpeedService) Decide(ctx context.Context, user *User, group *Group, subscription *UserSubscription) (*SpeedDecision, error) {
-	if s == nil || s.repo == nil || user == nil || group == nil || !group.SpeedConfigEnabled {
+	if s == nil || s.repo == nil || user == nil || !speedSupportedGroup(group) || subscription == nil {
 		return &SpeedDecision{Enabled: false, State: "disabled"}, nil
 	}
 	state := &UserGroupSpeedState{Group: group, Subscription: subscription}
 	cfg, _ := s.repo.GetUserGroupConfig(ctx, user.ID, group.ID)
 	state.Config = cfg
-	if subscription == nil && group.IsSubscriptionType() {
-		return &SpeedDecision{Enabled: false, State: "disabled"}, nil
-	}
 	status := s.statusFromState(state, time.Now().UTC())
 	if status.State == "disabled" || status.State == "fast" {
 		return &SpeedDecision{Enabled: status.Enabled, State: status.State, Status: status}, nil
@@ -279,22 +288,24 @@ func (s *SpeedService) statusFromState(state *UserGroupSpeedState, now time.Time
 	} else if state.Subscription != nil {
 		status.UserID = state.Subscription.UserID
 	}
-	if !group.SpeedConfigEnabled {
+	if !speedSupportedGroup(group) {
+		status.Enabled = false
+		status.VisibleToUser = false
 		return status
 	}
-	if state.Subscription != nil {
-		status.BillingMode = speedBillingModeSubscription
-		status.Daily = speedWindow(group.DailyLimitUSD, state.Subscription.DailyUsageUSD, state.Subscription.DailyWindowStart, 24*time.Hour, cfg.FastQuotaRatio, now)
-		status.Weekly = speedWindow(group.WeeklyLimitUSD, state.Subscription.WeeklyUsageUSD, state.Subscription.WeeklyWindowStart, 7*24*time.Hour, cfg.FastQuotaRatio, now)
-		status.Monthly = speedWindow(group.MonthlyLimitUSD, state.Subscription.MonthlyUsageUSD, state.Subscription.MonthlyWindowStart, 30*24*time.Hour, cfg.FastQuotaRatio, now)
-	} else {
-		status.BillingMode = speedBillingModeBalance
-		status.Daily = speedWindow(group.DailyLimitUSD, usage(state.Config, "daily"), windowStart(state.Config, "daily"), 24*time.Hour, cfg.FastQuotaRatio, now)
-		status.Weekly = speedWindow(group.WeeklyLimitUSD, usage(state.Config, "weekly"), windowStart(state.Config, "weekly"), 7*24*time.Hour, cfg.FastQuotaRatio, now)
-		status.Monthly = speedWindow(group.MonthlyLimitUSD, usage(state.Config, "monthly"), windowStart(state.Config, "monthly"), 30*24*time.Hour, cfg.FastQuotaRatio, now)
+	if state.Subscription == nil {
+		return status
 	}
+	status.BillingMode = speedBillingModeSubscription
+	status.Daily = speedWindow(group.DailyLimitUSD, state.Subscription.DailyUsageUSD, state.Subscription.DailyWindowStart, 24*time.Hour, cfg.FastQuotaRatio, now)
+	status.Weekly = speedWindow(group.WeeklyLimitUSD, state.Subscription.WeeklyUsageUSD, state.Subscription.WeeklyWindowStart, 7*24*time.Hour, cfg.FastQuotaRatio, now)
+	status.Monthly = speedWindow(group.MonthlyLimitUSD, state.Subscription.MonthlyUsageUSD, state.Subscription.MonthlyWindowStart, 30*24*time.Hour, cfg.FastQuotaRatio, now)
 	status.State = resolveSpeedState(status.Daily, status.Weekly, status.Monthly)
 	return status
+}
+
+func speedSupportedGroup(group *Group) bool {
+	return group != nil && group.SpeedConfigEnabled && group.IsSubscriptionType()
 }
 
 func validateSpeedConfig(group *Group, cfg *UserGroupSpeedConfig) error {
@@ -470,37 +481,6 @@ func clampSpeedRatio(v float64) float64 {
 	return v
 }
 
-func usage(cfg *UserGroupSpeedConfig, window string) float64 {
-	if cfg == nil {
-		return 0
-	}
-	switch window {
-	case "daily":
-		return cfg.DailyUsageUSD
-	case "weekly":
-		return cfg.WeeklyUsageUSD
-	case "monthly":
-		return cfg.MonthlyUsageUSD
-	default:
-		return 0
-	}
-}
-
-func windowStart(cfg *UserGroupSpeedConfig, window string) *time.Time {
-	if cfg == nil {
-		return nil
-	}
-	switch window {
-	case "daily":
-		return cfg.DailyWindowStart
-	case "weekly":
-		return cfg.WeeklyWindowStart
-	case "monthly":
-		return cfg.MonthlyWindowStart
-	default:
-		return nil
-	}
-}
 
 func slowRequestCount(cfg *UserGroupSpeedConfig) int64 {
 	if cfg == nil {

@@ -509,14 +509,14 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
-        <div class="space-y-4 border-t pt-4">
+        <div v-if="createForm.subscription_type === 'subscription'" class="space-y-4 border-t pt-4">
           <div class="flex items-center justify-between gap-3">
             <div>
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
                 优速通
               </label>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                fast 额度正常转发，slow 额度随机延迟或按概率拒绝。
+                仅订阅制度开放，fast 额度正常转发，slow 额度随机延迟或按概率拒绝。
               </p>
             </div>
             <button
@@ -1868,14 +1868,14 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
-        <div class="space-y-4 border-t pt-4">
+        <div v-if="editForm.subscription_type === 'subscription'" class="space-y-4 border-t pt-4">
           <div class="flex items-center justify-between gap-3">
             <div>
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
                 优速通
               </label>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                fast 额度正常转发，slow 额度随机延迟或按概率拒绝。
+                仅订阅制度开放，fast 额度正常转发，slow 额度随机延迟或按概率拒绝。
               </p>
             </div>
             <button
@@ -4150,6 +4150,11 @@ const resetSpeedConfigForm = (
   form.max_slow_reject_rate = group?.max_slow_reject_rate ?? 0.5;
 };
 
+const disableSpeedConfig = (form: typeof createForm | typeof editForm) => {
+  form.speed_config_enabled = false;
+  form.user_speed_config_allowed = false;
+};
+
 const handleCreateGroup = async () => {
   if (!createForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
@@ -4188,6 +4193,10 @@ const handleCreateGroup = async () => {
             })
           : undefined,
     };
+    if (requestData.subscription_type !== "subscription") {
+      requestData.speed_config_enabled = false;
+      requestData.user_speed_config_allowed = false;
+    }
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);
     requestData.daily_limit_usd = emptyToNull(requestData.daily_limit_usd);
@@ -4328,6 +4337,10 @@ const handleUpdateGroup = async () => {
             })
           : undefined,
     };
+    if (payload.subscription_type !== "subscription") {
+      payload.speed_config_enabled = false;
+      payload.user_speed_config_allowed = false;
+    }
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);
     payload.daily_limit_usd = emptyToNull(payload.daily_limit_usd);
@@ -4413,6 +4426,17 @@ watch(
     if (newVal === "subscription") {
       createForm.is_exclusive = true;
       createForm.fallback_group_id_on_invalid_request = null;
+    } else {
+      disableSpeedConfig(createForm);
+    }
+  },
+);
+
+watch(
+  () => editForm.subscription_type,
+  (newVal) => {
+    if (newVal !== "subscription") {
+      disableSpeedConfig(editForm);
     }
   },
 );

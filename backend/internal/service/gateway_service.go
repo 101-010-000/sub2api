@@ -8769,6 +8769,9 @@ func recordSpeedUsage(ctx context.Context, p *postUsageBillingParams) {
 	if p == nil || p.SpeedService == nil || p.Cost == nil || p.User == nil || p.APIKey == nil || p.APIKey.GroupID == nil {
 		return
 	}
+	if !p.IsSubscriptionBill || p.Subscription == nil {
+		return
+	}
 	p.SpeedService.RecordUsage(ctx, p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
 }
 

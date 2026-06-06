@@ -1986,6 +1986,10 @@ func normalizeGroupSpeedConfig(group *Group) {
 	if group == nil {
 		return
 	}
+	if !group.IsSubscriptionType() {
+		group.SpeedConfigEnabled = false
+		group.UserSpeedConfigAllowed = false
+	}
 	if group.DefaultFastQuotaRatio <= 0 {
 		group.DefaultFastQuotaRatio = defaultFastQuotaRatio
 	}

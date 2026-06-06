@@ -347,16 +347,10 @@
                 <span
                   :class="[
                     'badge',
-                    row.speed_status.state === 'fast'
-                      ? 'badge-success'
-                      : row.speed_status.state === 'slow'
-                        ? 'badge-warning'
-                        : row.speed_status.state === 'exhausted'
-                          ? 'badge-danger'
-                          : 'badge-secondary'
+                    speedStateBadgeClass(row)
                   ]"
                 >
-                  {{ speedStateLabel(row.speed_status.state) }}
+                  {{ speedStateLabel(row) }}
                 </span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">
                   fast {{ formatPercent(row.speed_status.fast_quota_ratio) }}
@@ -383,6 +377,10 @@
                 <div class="pl-10 text-[10px] text-gray-500 dark:text-gray-400">
                   slow ${{ primarySpeedWindow(row)?.slow_used_usd.toFixed(2) }} / ${{ primarySpeedWindow(row)?.slow_limit_usd.toFixed(2) }}
                 </div>
+              </div>
+
+              <div v-else class="text-[10px] text-amber-600 dark:text-amber-300">
+                需配置分组日/周/月额度
               </div>
 
               <div class="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1373,11 +1371,22 @@ const formatPercent = (value: number | null | undefined): string => {
   return `${Math.round(normalized * 100)}%`
 }
 
-const speedStateLabel = (state: string): string => {
+const speedStateLabel = (subscription: UserSubscription): string => {
+  const state = subscription.speed_status?.state ?? ''
   if (state === 'fast') return 'fast'
   if (state === 'slow') return 'slow'
   if (state === 'exhausted') return '已耗尽'
+  if (subscription.speed_status?.enabled && !primarySpeedWindow(subscription)) return '未配置额度'
   return '未开启'
+}
+
+const speedStateBadgeClass = (subscription: UserSubscription): string => {
+  const state = subscription.speed_status?.state ?? ''
+  if (state === 'fast') return 'badge-success'
+  if (state === 'slow') return 'badge-warning'
+  if (state === 'exhausted') return 'badge-danger'
+  if (subscription.speed_status?.enabled && !primarySpeedWindow(subscription)) return 'badge-warning'
+  return 'badge-secondary'
 }
 
 const primarySpeedWindow = (subscription: UserSubscription): SubscriptionSpeedWindowStatus | null => {

@@ -45,6 +45,10 @@
       </div>
     </div>
 
+    <div v-else class="text-[11px] text-amber-600 dark:text-amber-300">
+      需配置分组日/周/月额度
+    </div>
+
     <div class="text-[11px] text-gray-500 dark:text-gray-400">
       slow {{ status.config.slow_delay_min_seconds }}-{{ status.config.slow_delay_max_seconds }}s
       · {{ formatPercent(status.config.slow_reject_rate) }}
@@ -99,6 +103,9 @@ const stateLabel = computed(() => {
     case 'exhausted':
       return '已耗尽'
     default:
+      if (props.status?.enabled && !window.value) {
+        return '未配置额度'
+      }
       return '未开启'
   }
 })
@@ -112,6 +119,9 @@ const stateClass = computed(() => {
     case 'exhausted':
       return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
     default:
+      if (props.status?.enabled && !window.value) {
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+      }
       return 'bg-gray-100 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
   }
 })
