@@ -1011,6 +1011,78 @@
                 <label class="input-label">{{ t('admin.riskControl.blockMessage') }}</label>
                 <input v-model.trim="configForm.block_message" type="text" class="input" />
               </div>
+              <div class="space-y-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberuseResponse') }}</h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberuseResponseHint') }}</p>
+                  </div>
+                  <Toggle v-model="configForm.cyberuse_response.enabled" />
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberuseEmitToClient') }}</p>
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberuseEmitToClientHint') }}</p>
+                    </div>
+                    <Toggle v-model="configForm.cyberuse_response.emit_to_client" />
+                  </div>
+                  <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberuseAuditMetadata') }}</p>
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberuseAuditMetadataHint') }}</p>
+                    </div>
+                    <Toggle v-model="configForm.cyberuse_response.audit_metadata_enabled" />
+                  </div>
+                  <div>
+                    <label class="input-label">{{ t('admin.riskControl.cyberuseErrorCode') }}</label>
+                    <input v-model.trim="configForm.cyberuse_response.error_code" type="text" class="input font-mono" placeholder="cyber_policy" />
+                  </div>
+                  <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberuseIncludeRequestID') }}</p>
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberuseIncludeRequestIDHint') }}</p>
+                    </div>
+                    <Toggle v-model="configForm.cyberuse_response.include_request_id" />
+                  </div>
+                  <div class="lg:col-span-2">
+                    <label class="input-label">{{ t('admin.riskControl.cyberuseMessage') }}</label>
+                    <input v-model.trim="configForm.cyberuse_response.message" type="text" class="input" />
+                  </div>
+                  <div>
+                    <label class="input-label">{{ t('admin.riskControl.cyberuseUserScope') }}</label>
+                    <Select v-model="configForm.cyberuse_response.user_scope.mode" :options="cyberuseUserScopeOptions" />
+                    <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberuseUserScopeHint') }}</p>
+                  </div>
+                  <div v-if="configForm.cyberuse_response.user_scope.mode !== 'all'">
+                    <label class="input-label">{{ t('admin.riskControl.cyberuseUserIDs') }}</label>
+                    <textarea
+                      v-model="configForm.cyberuse_user_ids_text"
+                      rows="4"
+                      class="input font-mono text-sm"
+                      :placeholder="t('admin.riskControl.cyberuseUserIDsPlaceholder')"
+                    ></textarea>
+                  </div>
+                  <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700 lg:col-span-2">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberuseAnnouncement') }}</p>
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberuseAnnouncementHint') }}</p>
+                    </div>
+                    <Toggle v-model="configForm.cyberuse_response.announcement_enabled" />
+                  </div>
+                  <template v-if="configForm.cyberuse_response.announcement_enabled">
+                    <div>
+                      <label class="input-label">{{ t('admin.riskControl.cyberuseAnnouncementTitle') }}</label>
+                      <input v-model.trim="configForm.cyberuse_response.announcement_title" type="text" class="input" />
+                    </div>
+                    <div>
+                      <label class="input-label">{{ t('admin.riskControl.cyberuseAnnouncementContent') }}</label>
+                      <textarea v-model.trim="configForm.cyberuse_response.announcement_content" rows="3" class="input"></textarea>
+                    </div>
+                  </template>
+                </div>
+              </div>
               <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
                 <div>
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.emailOnHit') }}</p>
@@ -1413,6 +1485,14 @@
             <pre class="mt-4 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-950 p-4 text-sm leading-6 text-gray-100 shadow-inner dark:bg-black/50">{{ inputDetailText }}</pre>
           </div>
 
+          <div v-if="inputDetailMetadataText" class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
+            <div>
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.policyMetadata') }}</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.policyMetadataHint') }}</p>
+            </div>
+            <pre class="mt-4 max-h-[320px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-950 p-4 font-mono text-xs leading-5 text-gray-100 shadow-inner dark:bg-black/50">{{ inputDetailMetadataText }}</pre>
+          </div>
+
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
               <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.riskWeightSnapshot') }}</p>
@@ -1456,6 +1536,8 @@ import type {
   ContentModerationAuditModelConfig,
   ContentModerationAuditModelRuntimeStatus,
   ContentModerationConfig,
+  ContentModerationCyberuseConfig,
+  ContentModerationCyberuseUserScopeMode,
   ContentModerationDecisionRule,
   ContentModerationDecisionRuleType,
   ContentModerationLog,
@@ -1585,6 +1667,22 @@ const configForm = reactive({
     max_attempts: 2,
     second_attempt_wait_minutes: 15,
   } as ContentModerationSelfUnbanConfig,
+  cyberuse_response: {
+    enabled: false,
+    emit_to_client: true,
+    error_code: 'cyber_policy',
+    message: 'Your request was blocked by local content moderation policy.',
+    include_request_id: true,
+    audit_metadata_enabled: true,
+    announcement_enabled: false,
+    announcement_title: '',
+    announcement_content: '',
+    user_scope: {
+      mode: 'all',
+      user_ids: [],
+    },
+  } as ContentModerationCyberuseConfig,
+  cyberuse_user_ids_text: '',
   hit_retention_days: 180,
   non_hit_retention_days: 3,
   context_retention_days: 180,
@@ -1648,6 +1746,12 @@ const modeOptions = computed<SelectOption[]>(() => [
   { value: 'pre_block', label: t('admin.riskControl.modePreBlock') },
   { value: 'observe', label: t('admin.riskControl.modeObserve') },
   { value: 'off', label: t('admin.riskControl.modeOff') },
+])
+
+const cyberuseUserScopeOptions = computed<SelectOption[]>(() => [
+  { value: 'all', label: t('admin.riskControl.cyberuseUserScopeAll') },
+  { value: 'include', label: t('admin.riskControl.cyberuseUserScopeInclude') },
+  { value: 'exclude', label: t('admin.riskControl.cyberuseUserScopeExclude') },
 ])
 
 const keywordBlockingModeOptions = computed<Array<{ value: KeywordBlockingMode; label: string; description: string }>>(() => [
@@ -1974,6 +2078,13 @@ const inputDetailText = computed(() => {
   return inputDetailRow.value.input_excerpt || inputDetailRow.value.error || '-'
 })
 
+const inputDetailMetadataText = computed(() => {
+  if (!inputDetailRow.value?.audit_context) return ''
+  const auditContext = inputDetailRow.value.audit_context as { metadata?: unknown }
+  if (!auditContext.metadata) return ''
+  return JSON.stringify(auditContext.metadata, null, 2)
+})
+
 const queueUsagePercent = computed(() => `${Math.min(100, Math.max(0, status.value?.queue_usage_percent ?? 0)).toFixed(1)}%`)
 
 const queueUsageStyle = computed(() => ({
@@ -2142,6 +2253,8 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.ban_duration_minutes = config.ban_duration_minutes || 60
   configForm.violation_window_hours = config.violation_window_hours || 720
   configForm.self_unban = normalizeSelfUnbanConfig(config.self_unban)
+  configForm.cyberuse_response = normalizeCyberuseConfig(config.cyberuse_response)
+  configForm.cyberuse_user_ids_text = configForm.cyberuse_response.user_scope.user_ids.join('\n')
   configForm.hit_retention_days = config.hit_retention_days || 180
   configForm.non_hit_retention_days = Math.min(Math.max(config.non_hit_retention_days || 3, 1), 3)
   configForm.context_retention_days = config.context_retention_days || 180
@@ -2219,6 +2332,11 @@ async function saveConfig() {
       appStore.showError(t('admin.riskControl.modelFilterModelsRequired'))
       return
     }
+    const cyberusePayload = buildCyberusePayload()
+    if (cyberusePayload.user_scope.mode === 'include' && cyberusePayload.user_scope.user_ids.length === 0) {
+      appStore.showError(t('admin.riskControl.cyberuseUserIDsRequired'))
+      return
+    }
     const payload: UpdateContentModerationConfig = {
       enabled: configForm.enabled,
       mode: configForm.mode,
@@ -2241,6 +2359,7 @@ async function saveConfig() {
       ban_duration_minutes: Number(configForm.ban_duration_minutes) || 60,
       violation_window_hours: Number(configForm.violation_window_hours) || 720,
       self_unban: buildSelfUnbanPayload(),
+      cyberuse_response: cyberusePayload,
       hit_retention_days: Number(configForm.hit_retention_days) || 180,
       non_hit_retention_days: Math.min(Math.max(Number(configForm.non_hit_retention_days) || 3, 1), 3),
       context_retention_days: Number(configForm.context_retention_days) || 180,
@@ -2812,6 +2931,75 @@ function normalizeSelfUnbanConfig(config: ContentModerationSelfUnbanConfig | nul
     window_minutes: Number(config?.window_minutes) || 300,
     max_attempts: Number(config?.max_attempts) || 2,
     second_attempt_wait_minutes: Number(config?.second_attempt_wait_minutes) || 15,
+  }
+}
+
+function normalizeCyberuseConfig(config: ContentModerationCyberuseConfig | null | undefined): ContentModerationCyberuseConfig {
+  return {
+    enabled: config?.enabled ?? false,
+    emit_to_client: config?.emit_to_client ?? true,
+    error_code: normalizeErrorCode(config?.error_code || 'cyber_policy'),
+    message: String(config?.message || 'Your request was blocked by local content moderation policy.').trim(),
+    include_request_id: config?.include_request_id ?? true,
+    audit_metadata_enabled: config?.audit_metadata_enabled ?? true,
+    announcement_enabled: config?.announcement_enabled ?? false,
+    announcement_title: String(config?.announcement_title || '').trim(),
+    announcement_content: String(config?.announcement_content || '').trim(),
+    user_scope: {
+      mode: normalizeCyberuseUserScopeMode(config?.user_scope?.mode),
+      user_ids: normalizeUserIDs(config?.user_scope?.user_ids || []),
+    },
+  }
+}
+
+function normalizeCyberuseUserScopeMode(value: unknown): ContentModerationCyberuseUserScopeMode {
+  if (value === 'include' || value === 'exclude' || value === 'all') {
+    return value
+  }
+  return 'all'
+}
+
+function normalizeErrorCode(value: string): string {
+  const code = value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').replace(/^[_-]+|[_-]+$/g, '')
+  return code || 'cyber_policy'
+}
+
+function normalizeUserIDs(values: number[]): number[] {
+  const seen = new Set<number>()
+  const out: number[] = []
+  for (const value of values) {
+    const id = Math.trunc(Number(value))
+    if (!Number.isFinite(id) || id <= 0 || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out.sort((a, b) => a - b)
+}
+
+function parseUserIDs(value: string): number[] {
+  return normalizeUserIDs(
+    value
+      .split(/[\s,，;；]+/)
+      .map((item) => Number(item.trim()))
+  )
+}
+
+function buildCyberusePayload(): ContentModerationCyberuseConfig {
+  const userIDs = parseUserIDs(configForm.cyberuse_user_ids_text)
+  return {
+    enabled: configForm.cyberuse_response.enabled,
+    emit_to_client: configForm.cyberuse_response.emit_to_client,
+    error_code: normalizeErrorCode(configForm.cyberuse_response.error_code),
+    message: configForm.cyberuse_response.message.trim() || 'Your request was blocked by local content moderation policy.',
+    include_request_id: configForm.cyberuse_response.include_request_id,
+    audit_metadata_enabled: configForm.cyberuse_response.audit_metadata_enabled,
+    announcement_enabled: configForm.cyberuse_response.announcement_enabled,
+    announcement_title: configForm.cyberuse_response.announcement_title.trim(),
+    announcement_content: configForm.cyberuse_response.announcement_content.trim(),
+    user_scope: {
+      mode: normalizeCyberuseUserScopeMode(configForm.cyberuse_response.user_scope.mode),
+      user_ids: userIDs,
+    },
   }
 }
 

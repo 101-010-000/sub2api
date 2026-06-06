@@ -39,6 +39,26 @@ export interface ContentModerationSelfUnbanConfig {
   second_attempt_wait_minutes: number
 }
 
+export type ContentModerationCyberuseUserScopeMode = 'all' | 'include' | 'exclude'
+
+export interface ContentModerationCyberuseUserScope {
+  mode: ContentModerationCyberuseUserScopeMode
+  user_ids: number[]
+}
+
+export interface ContentModerationCyberuseConfig {
+  enabled: boolean
+  emit_to_client: boolean
+  error_code: string
+  message: string
+  include_request_id: boolean
+  audit_metadata_enabled: boolean
+  announcement_enabled: boolean
+  announcement_title: string
+  announcement_content: string
+  user_scope: ContentModerationCyberuseUserScope
+}
+
 export interface ContentModerationKeywordRule {
   id: string
   group: string
@@ -140,6 +160,7 @@ export interface ContentModerationConfig {
   background_review_retry_backoff_seconds: number
   context_capture_enabled: boolean
   context_max_bytes: number
+  cyberuse_response: ContentModerationCyberuseConfig
 }
 
 export type ContentModerationAPIKeyStatusValue = 'unknown' | 'ok' | 'error' | 'frozen'
@@ -235,6 +256,7 @@ export interface UpdateContentModerationConfig {
   background_review_retry_backoff_seconds?: number
   context_capture_enabled?: boolean
   context_max_bytes?: number
+  cyberuse_response?: ContentModerationCyberuseConfig
 }
 
 export interface ContentModerationAuditModelRuntimeStatus {
