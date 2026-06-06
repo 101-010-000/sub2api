@@ -153,6 +153,21 @@ func (s *SpeedService) GetUserStatus(ctx context.Context, userID, groupID int64,
 	return s.statusFromState(state, time.Now().UTC()), nil
 }
 
+func (s *SpeedService) GetSubscriptionStatus(ctx context.Context, sub *UserSubscription) (*UserGroupSpeedStatus, error) {
+	if s == nil || s.repo == nil || sub == nil || sub.Group == nil || sub.User == nil {
+		return nil, nil
+	}
+	cfg, err := s.repo.GetUserGroupConfig(ctx, sub.User.ID, sub.Group.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.statusFromState(&UserGroupSpeedState{
+		Group:        sub.Group,
+		Config:       cfg,
+		Subscription: sub,
+	}, time.Now().UTC()), nil
+}
+
 func (s *SpeedService) UpdateUserConfig(ctx context.Context, actorIsAdmin bool, userID, groupID int64, input UserGroupSpeedConfig) (*UserGroupSpeedStatus, error) {
 	if s == nil || s.repo == nil {
 		return nil, ErrSpeedConfigForbidden

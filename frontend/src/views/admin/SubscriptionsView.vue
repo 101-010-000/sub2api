@@ -341,6 +341,59 @@
             </div>
           </template>
 
+          <template #cell-speed="{ row }">
+            <div v-if="row.speed_status?.enabled" class="min-w-[220px] space-y-2">
+              <div class="flex items-center gap-2">
+                <span
+                  :class="[
+                    'badge',
+                    row.speed_status.state === 'fast'
+                      ? 'badge-success'
+                      : row.speed_status.state === 'slow'
+                        ? 'badge-warning'
+                        : row.speed_status.state === 'exhausted'
+                          ? 'badge-danger'
+                          : 'badge-secondary'
+                  ]"
+                >
+                  {{ speedStateLabel(row.speed_status.state) }}
+                </span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  fast {{ formatPercent(row.speed_status.fast_quota_ratio) }}
+                </span>
+              </div>
+
+              <div v-if="primarySpeedWindow(row)" class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="w-8 flex-shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">
+                    {{ primarySpeedWindowLabel(row) }}
+                  </span>
+                  <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-dark-600">
+                    <div
+                      class="h-1.5 rounded-full bg-emerald-500 transition-all"
+                      :style="{ width: getSpeedFastWidth(primarySpeedWindow(row)) }"
+                    ></div>
+                  </div>
+                  <span class="whitespace-nowrap text-xs tabular-nums text-gray-600 dark:text-gray-300">
+                    ${{ primarySpeedWindow(row)?.fast_used_usd.toFixed(2) }}
+                    <span class="text-gray-400">/</span>
+                    ${{ primarySpeedWindow(row)?.fast_limit_usd.toFixed(2) }}
+                  </span>
+                </div>
+                <div class="pl-10 text-[10px] text-gray-500 dark:text-gray-400">
+                  slow ${{ primarySpeedWindow(row)?.slow_used_usd.toFixed(2) }} / ${{ primarySpeedWindow(row)?.slow_limit_usd.toFixed(2) }}
+                </div>
+              </div>
+
+              <div class="text-[10px] text-gray-500 dark:text-gray-400">
+                slow 延迟 {{ row.speed_status.slow_delay_min_seconds }}-{{ row.speed_status.slow_delay_max_seconds }}s，
+                拒绝率 {{ formatPercent(row.speed_status.slow_reject_rate) }}，
+                {{ row.speed_status.slow_reject_count }}/{{ row.speed_status.slow_request_count }} 拒绝
+              </div>
+            </div>
+            <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
+          </template>
+
           <template #cell-expires_at="{ value }">
             <div v-if="value">
               <span
@@ -742,7 +795,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
-import type { UserSubscription, Group, GroupPlatform, SubscriptionType } from '@/types'
+import type { UserSubscription, Group, GroupPlatform, SubscriptionType, SubscriptionSpeedWindowStatus } from '@/types'
 import type { SimpleUser } from '@/api/admin/usage'
 import type { Column } from '@/components/common/types'
 import { formatDateOnly } from '@/utils/format'
@@ -820,6 +873,7 @@ const allColumns = computed<Column[]>(() => [
   },
   { key: 'group', label: t('admin.subscriptions.columns.group'), sortable: false },
   { key: 'usage', label: t('admin.subscriptions.columns.usage'), sortable: false },
+  { key: 'speed', label: '优速通', sortable: false },
   { key: 'expires_at', label: t('admin.subscriptions.columns.expires'), sortable: true },
   { key: 'status', label: t('admin.subscriptions.columns.status'), sortable: true },
   { key: 'actions', label: t('admin.subscriptions.columns.actions'), sortable: false }
@@ -1312,6 +1366,38 @@ const getProgressClass = (used: number | null | undefined, limit: number | null)
   if (percentage >= 90) return 'bg-red-500'
   if (percentage >= 70) return 'bg-orange-500'
   return 'bg-green-500'
+}
+
+const formatPercent = (value: number | null | undefined): string => {
+  const normalized = Number.isFinite(value) ? Number(value) : 0
+  return `${Math.round(normalized * 100)}%`
+}
+
+const speedStateLabel = (state: string): string => {
+  if (state === 'fast') return 'fast'
+  if (state === 'slow') return 'slow'
+  if (state === 'exhausted') return '已耗尽'
+  return '未开启'
+}
+
+const primarySpeedWindow = (subscription: UserSubscription): SubscriptionSpeedWindowStatus | null => {
+  const status = subscription.speed_status
+  if (!status) return null
+  return status.daily || status.weekly || status.monthly || null
+}
+
+const primarySpeedWindowLabel = (subscription: UserSubscription): string => {
+  const status = subscription.speed_status
+  if (!status) return ''
+  if (status.daily) return t('admin.subscriptions.daily')
+  if (status.weekly) return t('admin.subscriptions.weekly')
+  if (status.monthly) return t('admin.subscriptions.monthly')
+  return ''
+}
+
+const getSpeedFastWidth = (window: SubscriptionSpeedWindowStatus | null): string => {
+  if (!window || !window.fast_limit_usd) return '0%'
+  return `${Math.min((window.fast_used_usd / window.fast_limit_usd) * 100, 100)}%`
 }
 
 const formatResetDuration = (parts: RemainingDurationParts): string => {

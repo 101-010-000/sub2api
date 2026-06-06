@@ -612,6 +612,35 @@ type AdminUserSubscription struct {
 	Notes      string    `json:"notes"`
 
 	AssignedByUser *User `json:"assigned_by_user,omitempty"`
+	SpeedStatus    *SubscriptionSpeedStatus `json:"speed_status,omitempty"`
+}
+
+type SubscriptionSpeedWindowStatus struct {
+	LimitUSD        float64    `json:"limit_usd"`
+	FastLimitUSD    float64    `json:"fast_limit_usd"`
+	FastUsedUSD     float64    `json:"fast_used_usd"`
+	SlowLimitUSD    float64    `json:"slow_limit_usd"`
+	SlowUsedUSD     float64    `json:"slow_used_usd"`
+	TotalUsedUSD    float64    `json:"total_used_usd"`
+	RemainingUSD    float64    `json:"remaining_usd"`
+	WindowStart     *time.Time `json:"window_start,omitempty"`
+	ResetsAt        *time.Time `json:"resets_at,omitempty"`
+	ResetsInSeconds int64      `json:"resets_in_seconds"`
+}
+
+type SubscriptionSpeedStatus struct {
+	Enabled          bool                           `json:"enabled"`
+	State            string                         `json:"state"`
+	FastQuotaRatio   float64                        `json:"fast_quota_ratio"`
+	SlowRejectRate   float64                        `json:"slow_reject_rate"`
+	SlowDelayMin     int                            `json:"slow_delay_min_seconds"`
+	SlowDelayMax     int                            `json:"slow_delay_max_seconds"`
+	Daily            *SubscriptionSpeedWindowStatus `json:"daily,omitempty"`
+	Weekly           *SubscriptionSpeedWindowStatus `json:"weekly,omitempty"`
+	Monthly          *SubscriptionSpeedWindowStatus `json:"monthly,omitempty"`
+	SlowRequestCount int64                          `json:"slow_request_count"`
+	SlowRejectCount  int64                          `json:"slow_reject_count"`
+	LastSlowAt       *time.Time                     `json:"last_slow_at,omitempty"`
 }
 
 type BulkAssignResult struct {

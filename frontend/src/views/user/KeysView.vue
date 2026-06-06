@@ -131,6 +131,12 @@
                   />
                 </svg>
               </button>
+              <SpeedStatusSummary
+                v-if="row.group && speedStatusesByGroup[row.group.id]"
+                :status="speedStatusesByGroup[row.group.id]"
+                compact
+                class="mt-2 w-[280px]"
+              />
             </div>
           </template>
 
@@ -1220,7 +1226,7 @@
             :key="option.value ?? 'null'"
             @click="changeGroup(selectedKeyForGroup!, option.value)"
             :class="[
-              'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors',
+              'flex w-full flex-col items-stretch rounded-lg px-3 py-2.5 text-sm transition-colors',
               'border-b border-gray-100 last:border-0 dark:border-dark-700',
               selectedKeyForGroup?.group_id === option.value ||
               (!selectedKeyForGroup?.group_id && option.value === null)
@@ -1240,6 +1246,12 @@
                 selectedKeyForGroup?.group_id === option.value ||
                 (!selectedKeyForGroup?.group_id && option.value === null)
               "
+            />
+            <SpeedStatusSummary
+              v-if="speedStatusesByGroup[option.value]"
+              :status="speedStatusesByGroup[option.value]"
+              compact
+              class="mt-2"
             />
           </button>
           <!-- Empty state when search has no results -->
@@ -1261,7 +1273,7 @@
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
-import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
+import { keysAPI, authAPI, usageAPI, userGroupsAPI, userAPI } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -1277,7 +1289,8 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import type { ApiKey, ApiKeyRuntimeStatus, Group, PublicSettings, SubscriptionType, GroupPlatform } from '@/types'
+	import SpeedStatusSummary from '@/components/common/SpeedStatusSummary.vue'
+	import type { ApiKey, ApiKeyRuntimeStatus, Group, PublicSettings, SubscriptionType, GroupPlatform, UserSpeedStatus } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1331,6 +1344,7 @@ const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const userGroupRates = ref<Record<number, number>>({})
+const speedStatusesByGroup = ref<Record<number, UserSpeedStatus>>({})
 
 const pagination = ref({
   page: 1,
@@ -1622,6 +1636,15 @@ const loadUserGroupRates = async () => {
     userGroupRates.value = await userGroupsAPI.getUserGroupRates()
   } catch (error) {
     console.error('Failed to load user group rates:', error)
+  }
+}
+
+const loadSpeedStatuses = async () => {
+  try {
+    const statuses = await userAPI.getSpeedStatuses()
+    speedStatusesByGroup.value = Object.fromEntries(statuses.map((status) => [status.group_id, status]))
+  } catch (error) {
+    console.error('Failed to load speed statuses:', error)
   }
 }
 
@@ -2140,6 +2163,7 @@ onMounted(() => {
   loadApiKeys()
   loadGroups()
   loadUserGroupRates()
+  loadSpeedStatuses()
   loadPublicSettings()
   document.addEventListener('click', closeGroupSelector)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)

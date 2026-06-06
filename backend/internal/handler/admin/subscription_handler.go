@@ -29,6 +29,7 @@ func toResponsePagination(p *pagination.PaginationResult) *response.PaginationRe
 // SubscriptionHandler handles admin subscription management
 type SubscriptionHandler struct {
 	subscriptionService *service.SubscriptionService
+	speedService        *service.SpeedService
 }
 
 // NewSubscriptionHandler creates a new admin subscription handler
@@ -36,6 +37,10 @@ func NewSubscriptionHandler(subscriptionService *service.SubscriptionService) *S
 	return &SubscriptionHandler{
 		subscriptionService: subscriptionService,
 	}
+}
+
+func (h *SubscriptionHandler) SetSpeedService(speedService *service.SpeedService) {
+	h.speedService = speedService
 }
 
 // AssignSubscriptionRequest represents assign subscription request
@@ -91,7 +96,12 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 
 	out := make([]dto.AdminUserSubscription, 0, len(subscriptions))
 	for i := range subscriptions {
-		out = append(out, *dto.UserSubscriptionFromServiceAdmin(&subscriptions[i]))
+		item, err := h.subscriptionDTO(c.Request.Context(), &subscriptions[i])
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		out = append(out, *item)
 	}
 	response.PaginatedWithResult(c, out, toResponsePagination(pagination))
 }
@@ -111,7 +121,12 @@ func (h *SubscriptionHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, dto.UserSubscriptionFromServiceAdmin(subscription))
+	out, err := h.subscriptionDTO(c.Request.Context(), subscription)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, out)
 }
 
 // GetProgress handles getting subscription usage progress
@@ -156,7 +171,12 @@ func (h *SubscriptionHandler) Assign(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, dto.UserSubscriptionFromServiceAdmin(subscription))
+	out, err := h.subscriptionDTO(c.Request.Context(), subscription)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, out)
 }
 
 // BulkAssign handles bulk assigning subscriptions to multiple users
@@ -213,7 +233,7 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
 		if execErr != nil {
 			return nil, execErr
 		}
-		return dto.UserSubscriptionFromServiceAdmin(subscription), nil
+		return h.subscriptionDTO(ctx, subscription)
 	})
 }
 
@@ -246,7 +266,12 @@ func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, dto.UserSubscriptionFromServiceAdmin(sub))
+	out, err := h.subscriptionDTO(c.Request.Context(), sub)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, out)
 }
 
 // Revoke handles revoking a subscription
@@ -286,7 +311,12 @@ func (h *SubscriptionHandler) ListByGroup(c *gin.Context) {
 
 	out := make([]dto.AdminUserSubscription, 0, len(subscriptions))
 	for i := range subscriptions {
-		out = append(out, *dto.UserSubscriptionFromServiceAdmin(&subscriptions[i]))
+		item, err := h.subscriptionDTO(c.Request.Context(), &subscriptions[i])
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		out = append(out, *item)
 	}
 	response.PaginatedWithResult(c, out, toResponsePagination(pagination))
 }
@@ -308,9 +338,27 @@ func (h *SubscriptionHandler) ListByUser(c *gin.Context) {
 
 	out := make([]dto.AdminUserSubscription, 0, len(subscriptions))
 	for i := range subscriptions {
-		out = append(out, *dto.UserSubscriptionFromServiceAdmin(&subscriptions[i]))
+		item, err := h.subscriptionDTO(c.Request.Context(), &subscriptions[i])
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		out = append(out, *item)
 	}
 	response.Success(c, out)
+}
+
+func (h *SubscriptionHandler) subscriptionDTO(ctx context.Context, sub *service.UserSubscription) (*dto.AdminUserSubscription, error) {
+	out := dto.UserSubscriptionFromServiceAdmin(sub)
+	if out == nil || h.speedService == nil {
+		return out, nil
+	}
+	status, err := h.speedService.GetSubscriptionStatus(ctx, sub)
+	if err != nil {
+		return nil, err
+	}
+	out.SpeedStatus = dto.SubscriptionSpeedStatusFromService(status)
+	return out, nil
 }
 
 // Helper function to get admin ID from context

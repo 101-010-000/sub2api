@@ -750,6 +750,44 @@ func UserSubscriptionFromServiceAdmin(sub *service.UserSubscription) *AdminUserS
 	}
 }
 
+func SubscriptionSpeedStatusFromService(status *service.UserGroupSpeedStatus) *SubscriptionSpeedStatus {
+	if status == nil {
+		return nil
+	}
+	return &SubscriptionSpeedStatus{
+		Enabled:          status.Enabled,
+		State:            status.State,
+		FastQuotaRatio:   status.Config.FastQuotaRatio,
+		SlowRejectRate:   status.Config.SlowRejectRate,
+		SlowDelayMin:     status.Config.SlowDelayMinSeconds,
+		SlowDelayMax:     status.Config.SlowDelayMaxSeconds,
+		Daily:            subscriptionSpeedWindowFromService(status.Daily),
+		Weekly:           subscriptionSpeedWindowFromService(status.Weekly),
+		Monthly:          subscriptionSpeedWindowFromService(status.Monthly),
+		SlowRequestCount: status.SlowRequestCount,
+		SlowRejectCount:  status.SlowRejectCount,
+		LastSlowAt:       status.LastSlowAt,
+	}
+}
+
+func subscriptionSpeedWindowFromService(w *service.SpeedWindowStatus) *SubscriptionSpeedWindowStatus {
+	if w == nil {
+		return nil
+	}
+	return &SubscriptionSpeedWindowStatus{
+		LimitUSD:        w.LimitUSD,
+		FastLimitUSD:    w.FastLimitUSD,
+		FastUsedUSD:     w.FastUsedUSD,
+		SlowLimitUSD:    w.SlowLimitUSD,
+		SlowUsedUSD:     w.SlowUsedUSD,
+		TotalUsedUSD:    w.TotalUsedUSD,
+		RemainingUSD:    w.RemainingUSD,
+		WindowStart:     w.WindowStart,
+		ResetsAt:        w.ResetsAt,
+		ResetsInSeconds: w.ResetsInSeconds,
+	}
+}
+
 func userSubscriptionFromServiceBase(sub *service.UserSubscription) UserSubscription {
 	return UserSubscription{
 		ID:                 sub.ID,

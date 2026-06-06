@@ -108,6 +108,12 @@ func ProvideAdminUserHandler(adminService service.AdminService, concurrencyServi
 	return h
 }
 
+func ProvideAdminSubscriptionHandler(subscriptionService *service.SubscriptionService, speedService *service.SpeedService) *admin.SubscriptionHandler {
+	h := admin.NewSubscriptionHandler(subscriptionService)
+	h.SetSpeedService(speedService)
+	return h
+}
+
 func ProvideGatewayHandler(gatewayService *service.GatewayService, geminiCompatService *service.GeminiMessagesCompatService, antigravityGatewayService *service.AntigravityGatewayService, userService *service.UserService, concurrencyService *service.ConcurrencyService, billingCacheService *service.BillingCacheService, usageService *service.UsageService, apiKeyService *service.APIKeyService, usageRecordWorkerPool *service.UsageRecordWorkerPool, errorPassthroughService *service.ErrorPassthroughService, contentModerationService *service.ContentModerationService, userMsgQueueService *service.UserMessageQueueService, cfg *config.Config, settingService *service.SettingService, speedService *service.SpeedService) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, geminiCompatService, antigravityGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
 	h.SetSpeedService(speedService)
@@ -205,7 +211,7 @@ var ProviderSet = wire.NewSet(
 	ProvideAdminSettingHandler,
 	admin.NewOpsHandler,
 	ProvideSystemHandler,
-	admin.NewSubscriptionHandler,
+	ProvideAdminSubscriptionHandler,
 	admin.NewUsageHandler,
 	admin.NewUserAttributeHandler,
 	admin.NewErrorPassthroughHandler,

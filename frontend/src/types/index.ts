@@ -1640,6 +1640,67 @@ export interface UserSubscription {
   expires_at: string | null
   user?: User
   group?: Group
+  speed_status?: SubscriptionSpeedStatus | null
+}
+
+export interface SubscriptionSpeedWindowStatus {
+  limit_usd: number
+  fast_limit_usd: number
+  fast_used_usd: number
+  slow_limit_usd: number
+  slow_used_usd: number
+  total_used_usd: number
+  remaining_usd: number
+  window_start?: string | null
+  resets_at?: string | null
+  resets_in_seconds: number
+}
+
+export interface SubscriptionSpeedStatus {
+  enabled: boolean
+  state: 'fast' | 'slow' | 'exhausted' | 'disabled' | string
+  fast_quota_ratio: number
+  slow_reject_rate: number
+  slow_delay_min_seconds: number
+  slow_delay_max_seconds: number
+  daily?: SubscriptionSpeedWindowStatus | null
+  weekly?: SubscriptionSpeedWindowStatus | null
+  monthly?: SubscriptionSpeedWindowStatus | null
+  slow_request_count: number
+  slow_reject_count: number
+  last_slow_at?: string | null
+}
+
+export interface UserSpeedStatus {
+  user_id: number
+  group_id: number
+  group_name: string
+  visible_to_user: boolean
+  enabled: boolean
+  billing_mode: 'subscription' | 'balance' | string
+  state: 'fast' | 'slow' | 'exhausted' | 'disabled' | string
+  config: {
+    fast_quota_ratio: number
+    slow_delay_min_seconds: number
+    slow_delay_max_seconds: number
+    slow_reject_rate: number
+  }
+  limits: {
+    min_fast_quota_ratio: number
+    max_fast_quota_ratio: number
+    max_slow_delay_seconds: number
+    max_slow_reject_rate: number
+  }
+  daily?: SubscriptionSpeedWindowStatus | null
+  weekly?: SubscriptionSpeedWindowStatus | null
+  monthly?: SubscriptionSpeedWindowStatus | null
+  slow_request_count: number
+  slow_reject_count: number
+  last_slow_at?: string | null
+}
+
+export interface UserSpeedListResponse {
+  speed: UserSpeedStatus[]
 }
 
 export interface SubscriptionProgress {
