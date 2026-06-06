@@ -240,6 +240,11 @@ type CreateGroupInput struct {
 	MaxSlowDelaySeconds        int
 	DefaultSlowRejectRate      float64
 	MaxSlowRejectRate          float64
+	// 随速通配置
+	SuisuEnabled         bool
+	SuisuFallbackGroupID *int64
+	SuisuSlowRouteRatio  float64
+	SuisuBusyRouteRatio  float64
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -292,6 +297,11 @@ type UpdateGroupInput struct {
 	MaxSlowDelaySeconds        *int
 	DefaultSlowRejectRate      *float64
 	MaxSlowRejectRate          *float64
+	// 随速通配置
+	SuisuEnabled         *bool
+	SuisuFallbackGroupID *int64
+	SuisuSlowRouteRatio  *float64
+	SuisuBusyRouteRatio  *float64
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -1927,8 +1937,15 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MaxSlowDelaySeconds:             input.MaxSlowDelaySeconds,
 		DefaultSlowRejectRate:           input.DefaultSlowRejectRate,
 		MaxSlowRejectRate:               input.MaxSlowRejectRate,
+		SuisuEnabled:                    input.SuisuEnabled,
+		SuisuFallbackGroupID:            input.SuisuFallbackGroupID,
+		SuisuSlowRouteRatio:             input.SuisuSlowRouteRatio,
+		SuisuBusyRouteRatio:             input.SuisuBusyRouteRatio,
 	}
 	normalizeGroupSpeedConfig(group)
+	if err := s.normalizeAndValidateSuisuGroup(ctx, 0, group); err != nil {
+		return nil, err
+	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if err := s.groupRepo.Create(ctx, group); err != nil {
 		return nil, err
@@ -2031,6 +2048,71 @@ func normalizeGroupSpeedConfig(group *Group) {
 	}
 	if group.DefaultSlowRejectRate > group.MaxSlowRejectRate {
 		group.DefaultSlowRejectRate = group.MaxSlowRejectRate
+	}
+}
+
+func normalizeSuisuRatio(value float64) (float64, error) {
+	if value < 0 || value > 1 {
+		return 0, fmt.Errorf("suisu route ratio must be between 0 and 1")
+	}
+	return value, nil
+}
+
+func (s *adminServiceImpl) normalizeAndValidateSuisuGroup(ctx context.Context, currentGroupID int64, group *Group) error {
+	if group == nil {
+		return nil
+	}
+	var err error
+	group.SuisuSlowRouteRatio, err = normalizeSuisuRatio(group.SuisuSlowRouteRatio)
+	if err != nil {
+		return err
+	}
+	group.SuisuBusyRouteRatio, err = normalizeSuisuRatio(group.SuisuBusyRouteRatio)
+	if err != nil {
+		return err
+	}
+	if !group.SuisuEnabled {
+		return nil
+	}
+	if group.Platform != PlatformOpenAI {
+		return fmt.Errorf("suisu only supports openai groups")
+	}
+	if group.SuisuFallbackGroupID == nil || *group.SuisuFallbackGroupID <= 0 {
+		return fmt.Errorf("suisu fallback group is required")
+	}
+	return s.validateSuisuFallbackGroup(ctx, currentGroupID, *group.SuisuFallbackGroupID)
+}
+
+func (s *adminServiceImpl) validateSuisuFallbackGroup(ctx context.Context, currentGroupID, fallbackGroupID int64) error {
+	if currentGroupID > 0 && currentGroupID == fallbackGroupID {
+		return fmt.Errorf("cannot set self as suisu fallback group")
+	}
+
+	visited := map[int64]struct{}{}
+	nextID := fallbackGroupID
+	for {
+		if _, seen := visited[nextID]; seen {
+			return fmt.Errorf("suisu fallback group cycle detected")
+		}
+		visited[nextID] = struct{}{}
+		if currentGroupID > 0 && nextID == currentGroupID {
+			return fmt.Errorf("suisu fallback group cycle detected")
+		}
+
+		fallbackGroup, err := s.groupRepo.GetByIDLite(ctx, nextID)
+		if err != nil {
+			return fmt.Errorf("suisu fallback group not found: %w", err)
+		}
+		if fallbackGroup.Status != StatusActive {
+			return fmt.Errorf("suisu fallback group must be active")
+		}
+		if fallbackGroup.Platform != PlatformOpenAI {
+			return fmt.Errorf("suisu fallback group must be openai platform")
+		}
+		if fallbackGroup.SuisuFallbackGroupID == nil {
+			return nil
+		}
+		nextID = *fallbackGroup.SuisuFallbackGroupID
 	}
 }
 
@@ -2263,6 +2345,25 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		group.MaxSlowRejectRate = *input.MaxSlowRejectRate
 	}
 	normalizeGroupSpeedConfig(group)
+	if input.SuisuEnabled != nil {
+		group.SuisuEnabled = *input.SuisuEnabled
+	}
+	if input.SuisuFallbackGroupID != nil {
+		if *input.SuisuFallbackGroupID > 0 {
+			group.SuisuFallbackGroupID = input.SuisuFallbackGroupID
+		} else {
+			group.SuisuFallbackGroupID = nil
+		}
+	}
+	if input.SuisuSlowRouteRatio != nil {
+		group.SuisuSlowRouteRatio = *input.SuisuSlowRouteRatio
+	}
+	if input.SuisuBusyRouteRatio != nil {
+		group.SuisuBusyRouteRatio = *input.SuisuBusyRouteRatio
+	}
+	if err := s.normalizeAndValidateSuisuGroup(ctx, id, group); err != nil {
+		return nil, err
+	}
 	sanitizeGroupMessagesDispatchFields(group)
 
 	if err := s.groupRepo.Update(ctx, group); err != nil {

@@ -509,6 +509,54 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
+        <div v-if="createForm.platform === 'openai'" class="space-y-4 border-t pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">随速通</label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                后台隐藏备用 OpenAI 分组；slow 或主池繁忙时按比例路由，用户仍按原分组计费。
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="createForm.suisu_enabled = !createForm.suisu_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                createForm.suisu_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  createForm.suisu_enabled ? 'translate-x-6' : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+          <div v-if="createForm.suisu_enabled" class="grid gap-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800 sm:grid-cols-3">
+            <div>
+              <label class="input-label">备用分组</label>
+              <select v-model.number="createForm.suisu_fallback_group_id" class="input">
+                <option :value="null">请选择备用分组</option>
+                <option
+                  v-for="option in suisuFallbackGroupOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label">slow 路由比例</label>
+              <input v-model.number="createForm.suisu_slow_route_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+            </div>
+            <div>
+              <label class="input-label">繁忙路由比例</label>
+              <input v-model.number="createForm.suisu_busy_route_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+            </div>
+          </div>
+        </div>
         <div v-if="createForm.subscription_type === 'subscription'" class="space-y-4 border-t pt-4">
           <div class="flex items-center justify-between gap-3">
             <div>
@@ -1867,6 +1915,54 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+        <div v-if="editForm.platform === 'openai'" class="space-y-4 border-t pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">随速通</label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                后台隐藏备用 OpenAI 分组；slow 或主池繁忙时按比例路由，用户仍按原分组计费。
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="editForm.suisu_enabled = !editForm.suisu_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                editForm.suisu_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  editForm.suisu_enabled ? 'translate-x-6' : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+          <div v-if="editForm.suisu_enabled" class="grid gap-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800 sm:grid-cols-3">
+            <div>
+              <label class="input-label">备用分组</label>
+              <select v-model.number="editForm.suisu_fallback_group_id" class="input">
+                <option :value="null">请选择备用分组</option>
+                <option
+                  v-for="option in suisuFallbackGroupOptionsForEdit"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label">slow 路由比例</label>
+              <input v-model.number="editForm.suisu_slow_route_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+            </div>
+            <div>
+              <label class="input-label">繁忙路由比例</label>
+              <input v-model.number="editForm.suisu_busy_route_ratio" type="number" min="0" max="1" step="0.01" class="input" />
+            </div>
+          </div>
         </div>
         <div v-if="editForm.subscription_type === 'subscription'" class="space-y-4 border-t pt-4">
           <div class="flex items-center justify-between gap-3">
@@ -3404,6 +3500,30 @@ const copyAccountsGroupOptionsForEdit = computed(() => {
   }));
 });
 
+const suisuFallbackGroupOptions = computed(() => {
+  return groups.value
+    .filter((g) => g.platform === "openai" && g.status === "active")
+    .map((g) => ({
+      value: g.id,
+      label: `${g.name} (${g.account_count || 0} 个账号)`,
+    }));
+});
+
+const suisuFallbackGroupOptionsForEdit = computed(() => {
+  const currentId = editingGroup.value?.id;
+  return groups.value
+    .filter(
+      (g) =>
+        g.platform === "openai" &&
+        g.status === "active" &&
+        g.id !== currentId,
+    )
+    .map((g) => ({
+      value: g.id,
+      label: `${g.name} (${g.account_count || 0} 个账号)`,
+    }));
+});
+
 const groups = ref<AdminGroup[]>([]);
 const loading = ref(false);
 const usageMap = ref<Map<number, { today_cost: number; total_cost: number }>>(
@@ -3519,6 +3639,10 @@ const createForm = reactive({
   max_slow_delay_seconds: 30,
   default_slow_reject_rate: 0,
   max_slow_reject_rate: 0.5,
+  suisu_enabled: false,
+  suisu_fallback_group_id: null as number | null,
+  suisu_slow_route_ratio: 0,
+  suisu_busy_route_ratio: 0,
 });
 
 // 简单账号类型（用于模型路由选择）
@@ -3861,6 +3985,10 @@ const editForm = reactive({
   max_slow_delay_seconds: 30,
   default_slow_reject_rate: 0,
   max_slow_reject_rate: 0.5,
+  suisu_enabled: false,
+  suisu_fallback_group_id: null as number | null,
+  suisu_slow_route_ratio: 0,
+  suisu_busy_route_ratio: 0,
 });
 
 type ImagePricingFormState = {
@@ -4099,6 +4227,7 @@ const closeCreateModal = () => {
   createForm.copy_accounts_from_group_ids = [];
   createForm.rpm_limit = 0;
   resetSpeedConfigForm(createForm);
+  resetSuisuConfigForm(createForm);
   resetModelsListState(createModelsListState);
   createModelRoutingRules.value = [];
 };
@@ -4155,6 +4284,23 @@ const disableSpeedConfig = (form: typeof createForm | typeof editForm) => {
   form.user_speed_config_allowed = false;
 };
 
+const resetSuisuConfigForm = (
+  form: typeof createForm | typeof editForm,
+  group?: Partial<AdminGroup>,
+) => {
+  form.suisu_enabled = group?.suisu_enabled ?? false;
+  form.suisu_fallback_group_id = group?.suisu_fallback_group_id ?? null;
+  form.suisu_slow_route_ratio = group?.suisu_slow_route_ratio ?? 0;
+  form.suisu_busy_route_ratio = group?.suisu_busy_route_ratio ?? 0;
+};
+
+const disableSuisuConfig = (form: typeof createForm | typeof editForm) => {
+  form.suisu_enabled = false;
+  form.suisu_fallback_group_id = null;
+  form.suisu_slow_route_ratio = 0;
+  form.suisu_busy_route_ratio = 0;
+};
+
 const handleCreateGroup = async () => {
   if (!createForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
@@ -4196,6 +4342,12 @@ const handleCreateGroup = async () => {
     if (requestData.subscription_type !== "subscription") {
       requestData.speed_config_enabled = false;
       requestData.user_speed_config_allowed = false;
+    }
+    if (requestData.platform !== "openai") {
+      requestData.suisu_enabled = false;
+      requestData.suisu_fallback_group_id = null;
+      requestData.suisu_slow_route_ratio = 0;
+      requestData.suisu_busy_route_ratio = 0;
     }
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);
@@ -4269,6 +4421,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
   resetSpeedConfigForm(editForm, group);
+  resetSuisuConfigForm(editForm, group);
   resetModelsListState(editModelsListState, group.models_list_config);
   // 加载模型路由规则（异步加载账号名称）
   editModelRoutingRules.value = await convertApiFormatToRoutingRules(
@@ -4340,6 +4493,14 @@ const handleUpdateGroup = async () => {
     if (payload.subscription_type !== "subscription") {
       payload.speed_config_enabled = false;
       payload.user_speed_config_allowed = false;
+    }
+    if (payload.platform !== "openai") {
+      payload.suisu_enabled = false;
+      payload.suisu_fallback_group_id = 0;
+      payload.suisu_slow_route_ratio = 0;
+      payload.suisu_busy_route_ratio = 0;
+    } else if (payload.suisu_fallback_group_id === null) {
+      payload.suisu_fallback_group_id = 0;
     }
     // v-model.number 清空输入框时产生 ""，转为 null 让后端设为无限制
     const emptyToNull = (v: any) => (v === "" ? null : v);
@@ -4449,6 +4610,7 @@ watch(
     }
     if (newVal !== "openai") {
       resetMessagesDispatchFormState(createForm);
+      disableSuisuConfig(createForm);
     }
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
       createForm.require_oauth_only = false;
@@ -4467,6 +4629,7 @@ watch(
     }
     if (newVal !== "openai") {
       resetMessagesDispatchFormState(editForm);
+      disableSuisuConfig(editForm);
     }
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
       editForm.require_oauth_only = false;

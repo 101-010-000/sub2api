@@ -21,6 +21,7 @@ type groupRepoStubForAdmin struct {
 	updated *Group // 记录 Update 调用的参数
 	getByID *Group // GetByID 返回值
 	getErr  error  // GetByID 返回的错误
+	groups  map[int64]*Group
 
 	listWithFiltersCalls       int
 	listWithFiltersParams      pagination.PaginationParams
@@ -43,16 +44,19 @@ func (s *groupRepoStubForAdmin) Update(_ context.Context, g *Group) error {
 	return nil
 }
 
-func (s *groupRepoStubForAdmin) GetByID(_ context.Context, _ int64) (*Group, error) {
+func (s *groupRepoStubForAdmin) GetByID(ctx context.Context, id int64) (*Group, error) {
+	return s.GetByIDLite(ctx, id)
+}
+
+func (s *groupRepoStubForAdmin) GetByIDLite(_ context.Context, id int64) (*Group, error) {
 	if s.getErr != nil {
 		return nil, s.getErr
 	}
-	return s.getByID, nil
-}
-
-func (s *groupRepoStubForAdmin) GetByIDLite(_ context.Context, _ int64) (*Group, error) {
-	if s.getErr != nil {
-		return nil, s.getErr
+	if s.groups != nil {
+		if g, ok := s.groups[id]; ok {
+			return g, nil
+		}
+		return nil, ErrGroupNotFound
 	}
 	return s.getByID, nil
 }
@@ -196,6 +200,149 @@ func TestAdminService_CreateGroup_NilImagePricing(t *testing.T) {
 	require.Nil(t, repo.created.ImagePrice1K)
 	require.Nil(t, repo.created.ImagePrice2K)
 	require.Nil(t, repo.created.ImagePrice4K)
+}
+
+func TestAdminService_NormalizeAndValidateSuisuGroup(t *testing.T) {
+	fallbackID := int64(20)
+	selfID := int64(10)
+	nextID := int64(30)
+
+	tests := []struct {
+		name        string
+		currentID   int64
+		group       *Group
+		groups      map[int64]*Group
+		wantMessage string
+	}{
+		{
+			name: "disabled_allows_empty_fallback",
+			group: &Group{
+				Platform:            PlatformAnthropic,
+				SuisuEnabled:        false,
+				SuisuSlowRouteRatio: 1,
+				SuisuBusyRouteRatio: 0,
+			},
+		},
+		{
+			name: "ratio_below_zero_rejected",
+			group: &Group{
+				Platform:            PlatformOpenAI,
+				SuisuEnabled:        false,
+				SuisuSlowRouteRatio: -0.01,
+			},
+			wantMessage: "suisu route ratio must be between 0 and 1",
+		},
+		{
+			name: "ratio_above_one_rejected",
+			group: &Group{
+				Platform:            PlatformOpenAI,
+				SuisuEnabled:        false,
+				SuisuBusyRouteRatio: 1.01,
+			},
+			wantMessage: "suisu route ratio must be between 0 and 1",
+		},
+		{
+			name: "non_openai_source_rejected",
+			group: &Group{
+				Platform:             PlatformAnthropic,
+				SuisuEnabled:         true,
+				SuisuFallbackGroupID: &fallbackID,
+			},
+			wantMessage: "suisu only supports openai groups",
+		},
+		{
+			name: "missing_fallback_rejected",
+			group: &Group{
+				Platform:     PlatformOpenAI,
+				SuisuEnabled: true,
+			},
+			wantMessage: "suisu fallback group is required",
+		},
+		{
+			name:      "self_fallback_rejected",
+			currentID: selfID,
+			group: &Group{
+				ID:                   selfID,
+				Platform:             PlatformOpenAI,
+				SuisuEnabled:         true,
+				SuisuFallbackGroupID: &selfID,
+			},
+			wantMessage: "cannot set self as suisu fallback group",
+		},
+		{
+			name:      "inactive_fallback_rejected",
+			currentID: selfID,
+			group: &Group{
+				ID:                   selfID,
+				Platform:             PlatformOpenAI,
+				SuisuEnabled:         true,
+				SuisuFallbackGroupID: &fallbackID,
+			},
+			groups: map[int64]*Group{
+				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusInactive},
+			},
+			wantMessage: "suisu fallback group must be active",
+		},
+		{
+			name:      "non_openai_fallback_rejected",
+			currentID: selfID,
+			group: &Group{
+				ID:                   selfID,
+				Platform:             PlatformOpenAI,
+				SuisuEnabled:         true,
+				SuisuFallbackGroupID: &fallbackID,
+			},
+			groups: map[int64]*Group{
+				fallbackID: {ID: fallbackID, Platform: PlatformAnthropic, Status: StatusActive},
+			},
+			wantMessage: "suisu fallback group must be openai platform",
+		},
+		{
+			name:      "cycle_rejected",
+			currentID: selfID,
+			group: &Group{
+				ID:                   selfID,
+				Platform:             PlatformOpenAI,
+				SuisuEnabled:         true,
+				SuisuFallbackGroupID: &fallbackID,
+			},
+			groups: map[int64]*Group{
+				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusActive, SuisuFallbackGroupID: &nextID},
+				nextID:     {ID: nextID, Platform: PlatformOpenAI, Status: StatusActive, SuisuFallbackGroupID: &selfID},
+			},
+			wantMessage: "suisu fallback group cycle detected",
+		},
+		{
+			name:      "valid_openai_fallback",
+			currentID: selfID,
+			group: &Group{
+				ID:                   selfID,
+				Platform:             PlatformOpenAI,
+				SuisuEnabled:         true,
+				SuisuFallbackGroupID: &fallbackID,
+				SuisuSlowRouteRatio:  1,
+				SuisuBusyRouteRatio:  0.5,
+			},
+			groups: map[int64]*Group{
+				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusActive},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &groupRepoStubForAdmin{groups: tt.groups}
+			svc := &adminServiceImpl{groupRepo: repo}
+
+			err := svc.normalizeAndValidateSuisuGroup(context.Background(), tt.currentID, tt.group)
+			if tt.wantMessage != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantMessage)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 // TestAdminService_UpdateGroup_WithImagePricing 测试更新分组时 ImagePrice 字段正确更新

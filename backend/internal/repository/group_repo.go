@@ -85,6 +85,9 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 		if err := r.saveSpeedSettings(ctx, groupIn); err != nil {
 			return err
 		}
+		if err := r.saveSuisuSettings(ctx, groupIn); err != nil {
+			return err
+		}
 		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 			logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group create failed: group=%d err=%v", groupIn.ID, err)
 		}
@@ -117,6 +120,7 @@ func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.G
 	}
 	out := groupEntityToService(m)
 	_ = r.loadSpeedSettings(ctx, []*service.Group{out})
+	_ = r.loadSuisuSettings(ctx, []*service.Group{out})
 	return out, nil
 }
 
@@ -213,6 +217,9 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 	if err := r.saveSpeedSettings(ctx, groupIn); err != nil {
 		return err
 	}
+	if err := r.saveSuisuSettings(ctx, groupIn); err != nil {
+		return err
+	}
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
 	}
@@ -286,6 +293,7 @@ func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination
 		groupPtrs = append(groupPtrs, &outGroups[i])
 	}
 	_ = r.loadSpeedSettings(ctx, groupPtrs)
+	_ = r.loadSuisuSettings(ctx, groupPtrs)
 
 	counts, err := r.loadAccountCounts(ctx, groupIDs)
 	if err == nil {
@@ -390,6 +398,7 @@ func (r *groupRepository) listWithAccountCountSort(ctx context.Context, q *dbent
 		}
 	}
 	_ = r.loadSpeedSettings(ctx, groupPtrs)
+	_ = r.loadSuisuSettings(ctx, groupPtrs)
 
 	return outGroups, paginationResultFromTotal(int64(total), params), nil
 }
@@ -469,6 +478,7 @@ func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, erro
 		groupPtrs = append(groupPtrs, &outGroups[i])
 	}
 	_ = r.loadSpeedSettings(ctx, groupPtrs)
+	_ = r.loadSuisuSettings(ctx, groupPtrs)
 
 	counts, err := r.loadAccountCounts(ctx, groupIDs)
 	if err == nil {
@@ -504,6 +514,7 @@ func (r *groupRepository) ListActiveByPlatform(ctx context.Context, platform str
 		groupPtrs = append(groupPtrs, &outGroups[i])
 	}
 	_ = r.loadSpeedSettings(ctx, groupPtrs)
+	_ = r.loadSuisuSettings(ctx, groupPtrs)
 
 	counts, err := r.loadAccountCounts(ctx, groupIDs)
 	if err == nil {
@@ -670,6 +681,79 @@ func (r *groupRepository) loadSpeedSettings(ctx context.Context, groups []*servi
 			g.MaxSlowDelaySeconds = maxSlowDelaySeconds
 			g.DefaultSlowRejectRate = defaultSlowRejectRate
 			g.MaxSlowRejectRate = maxSlowRejectRate
+		}
+	}
+	return rows.Err()
+}
+
+func (r *groupRepository) saveSuisuSettings(ctx context.Context, groupIn *service.Group) error {
+	if r == nil || r.sql == nil || groupIn == nil || groupIn.ID <= 0 {
+		return nil
+	}
+	_, err := r.sql.ExecContext(ctx, `
+		UPDATE groups SET
+			suisu_enabled = $2,
+			suisu_fallback_group_id = $3,
+			suisu_slow_route_ratio = $4,
+			suisu_busy_route_ratio = $5
+		WHERE id = $1
+	`, groupIn.ID,
+		groupIn.SuisuEnabled,
+		groupIn.SuisuFallbackGroupID,
+		groupIn.SuisuSlowRouteRatio,
+		groupIn.SuisuBusyRouteRatio,
+	)
+	return err
+}
+
+func (r *groupRepository) loadSuisuSettings(ctx context.Context, groups []*service.Group) error {
+	if r == nil || r.sql == nil || len(groups) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(groups))
+	byID := make(map[int64]*service.Group, len(groups))
+	for _, g := range groups {
+		if g == nil || g.ID <= 0 {
+			continue
+		}
+		ids = append(ids, g.ID)
+		byID[g.ID] = g
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT
+			id,
+			suisu_enabled,
+			suisu_fallback_group_id,
+			suisu_slow_route_ratio,
+			suisu_busy_route_ratio
+		FROM groups
+		WHERE id = ANY($1)
+	`, pq.Array(ids))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		var enabled bool
+		var fallbackGroupID sql.NullInt64
+		var slowRatio, busyRatio float64
+		if err := rows.Scan(&id, &enabled, &fallbackGroupID, &slowRatio, &busyRatio); err != nil {
+			return err
+		}
+		if g := byID[id]; g != nil {
+			g.SuisuEnabled = enabled
+			if fallbackGroupID.Valid {
+				value := fallbackGroupID.Int64
+				g.SuisuFallbackGroupID = &value
+			} else {
+				g.SuisuFallbackGroupID = nil
+			}
+			g.SuisuSlowRouteRatio = slowRatio
+			g.SuisuBusyRouteRatio = busyRatio
 		}
 	}
 	return rows.Err()

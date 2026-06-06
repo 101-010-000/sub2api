@@ -5753,6 +5753,7 @@ type OpenAIRecordUsageInput struct {
 	IPAddress          string // 请求的客户端 IP 地址
 	RequestPayloadHash string
 	APIKeyService      APIKeyQuotaUpdater
+	ScheduledGroupID   *int64
 	ChannelUsageFields
 }
 
@@ -5946,9 +5947,13 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
-	if apiKey.GroupID != nil {
+	accountStatsGroupID := apiKey.GroupID
+	if input.ScheduledGroupID != nil {
+		accountStatsGroupID = input.ScheduledGroupID
+	}
+	if accountStatsGroupID != nil {
 		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
-			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
+			account.ID, *accountStatsGroupID, result.UpstreamModel, result.Model,
 			tokens, cost.TotalCost,
 		)
 	}

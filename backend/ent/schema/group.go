@@ -164,6 +164,23 @@ func (Group) Fields() []ent.Field {
 		field.Int("rpm_limit").
 			Default(0).
 			Comment("分组 RPM 上限，0 表示不限制；设置后接管该分组用户的限流"),
+
+		// 随速通配置：后台隐藏备用 OpenAI 分组路由。
+		field.Bool("suisu_enabled").
+			Default(false).
+			Comment("是否启用随速通备用分组路由"),
+		field.Int64("suisu_fallback_group_id").
+			Optional().
+			Nillable().
+			Comment("随速通备用 OpenAI 分组 ID"),
+		field.Float("suisu_slow_route_ratio").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(6,4)"}).
+			Default(0.0).
+			Comment("优速通 slow 态路由到随速通的比例，0-1"),
+		field.Float("suisu_busy_route_ratio").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(6,4)"}).
+			Default(0.0).
+			Comment("主池繁忙/无账号时路由到随速通的比例，0-1"),
 	}
 }
 

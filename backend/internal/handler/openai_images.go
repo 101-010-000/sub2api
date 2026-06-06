@@ -133,6 +133,22 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
+	speedDecision := h.applySpeedDecision(c, apiKey, subscription, &streamStarted, reqLog, false)
+	if !speedDecision.OK {
+		return
+	}
+	effectiveGroupID := apiKey.GroupID
+	var slowSuisuGroupID *int64
+	if speedDecision.Decision != nil && speedDecision.Decision.State == "slow" {
+		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
+			effectiveGroupID = suisuGroupID
+			slowSuisuGroupID = suisuGroupID
+		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, parsed.Stream, &streamStarted, reqLog, false) {
+			return
+		}
+	} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, parsed.Stream, &streamStarted, reqLog, false) {
+		return
+	}
 
 	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, body)
 	requestCtx := service.WithOpenAIImageGenerationIntent(c.Request.Context())
@@ -145,14 +161,35 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 
 	for {
 		reqLog.Debug("openai.images.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForImages(
-			requestCtx,
+		selection, scheduleDecision, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
+			apiKey.Group,
 			apiKey.GroupID,
-			sessionHash,
-			requestModel,
-			failedAccountIDs,
-			parsed.RequiredCapability,
+			effectiveGroupID,
+			len(failedAccountIDs) == 0,
+			reqLog,
+			func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error) {
+				return h.gatewayService.SelectAccountWithSchedulerForImages(
+					requestCtx,
+					groupID,
+					sessionHash,
+					requestModel,
+					failedAccountIDs,
+					parsed.RequiredCapability,
+				)
+			},
 		)
+		effectiveGroupID = newEffectiveGroupID
+		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
+			if reqLog != nil {
+				reqLog.Info("openai.suisu_route_unavailable", zap.String("reason", "slow"), zap.Int64("suisu_group_id", *slowSuisuGroupID), zap.Error(err))
+			}
+			if !h.finalizeOpenAISpeedDecision(c, speedDecision, parsed.Stream, &streamStarted, reqLog, false) {
+				return
+			}
+			effectiveGroupID = apiKey.GroupID
+			slowSuisuGroupID = nil
+			continue
+		}
 		if err != nil {
 			reqLog.Warn("openai.images.account_select_failed",
 				zap.Error(err),
@@ -175,6 +212,10 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 			h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available compatible accounts", streamStarted)
 			return
 		}
+		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) {
+			logSuisuRoute(reqLog, "slow", apiKey.GroupID, effectiveGroupID)
+			slowSuisuGroupID = nil
+		}
 
 		reqLog.Debug("openai.images.account_schedule_decision",
 			zap.String("layer", scheduleDecision.Layer),
@@ -187,13 +228,13 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 
 		account := selection.Account
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
-		reqLog.Debug("openai.images.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
-		setOpsSelectedAccount(c, account.ID, account.Platform)
+			reqLog.Debug("openai.images.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
+			setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, parsed.Stream, &streamStarted, reqLog)
-		if !acquired {
-			return
-		}
+			accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, sessionHash, selection, parsed.Stream, &streamStarted, reqLog)
+			if !acquired {
+				return
+			}
 
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
@@ -329,11 +370,12 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				InboundEndpoint:    inboundEndpoint,
 				UpstreamEndpoint:   upstreamEndpoint,
 				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMapping.ToUsageFields(requestModel, upstreamModel),
-			}); err != nil {
+					IPAddress:          clientIP,
+					RequestPayloadHash: requestPayloadHash,
+					APIKeyService:      h.apiKeyService,
+					ScheduledGroupID:   effectiveGroupID,
+					ChannelUsageFields: channelMapping.ToUsageFields(requestModel, upstreamModel),
+				}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.images"),
 					zap.Int64("user_id", subject.UserID),

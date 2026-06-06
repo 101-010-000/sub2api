@@ -127,6 +127,11 @@ type CreateGroupRequest struct {
 	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
 	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
 	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
+	// 随速通配置
+	SuisuEnabled         bool    `json:"suisu_enabled"`
+	SuisuFallbackGroupID *int64  `json:"suisu_fallback_group_id"`
+	SuisuSlowRouteRatio  float64 `json:"suisu_slow_route_ratio"`
+	SuisuBusyRouteRatio  float64 `json:"suisu_busy_route_ratio"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -179,6 +184,11 @@ type UpdateGroupRequest struct {
 	MaxSlowDelaySeconds        *int     `json:"max_slow_delay_seconds"`
 	DefaultSlowRejectRate      *float64 `json:"default_slow_reject_rate"`
 	MaxSlowRejectRate          *float64 `json:"max_slow_reject_rate"`
+	// 随速通配置
+	SuisuEnabled         *bool    `json:"suisu_enabled"`
+	SuisuFallbackGroupID *int64   `json:"suisu_fallback_group_id"`
+	SuisuSlowRouteRatio  *float64 `json:"suisu_slow_route_ratio"`
+	SuisuBusyRouteRatio  *float64 `json:"suisu_busy_route_ratio"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -333,6 +343,10 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		MaxSlowDelaySeconds:             req.MaxSlowDelaySeconds,
 		DefaultSlowRejectRate:           req.DefaultSlowRejectRate,
 		MaxSlowRejectRate:               req.MaxSlowRejectRate,
+		SuisuEnabled:                    req.SuisuEnabled,
+		SuisuFallbackGroupID:            req.SuisuFallbackGroupID,
+		SuisuSlowRouteRatio:             req.SuisuSlowRouteRatio,
+		SuisuBusyRouteRatio:             req.SuisuBusyRouteRatio,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
@@ -399,6 +413,10 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		MaxSlowDelaySeconds:             req.MaxSlowDelaySeconds,
 		DefaultSlowRejectRate:           req.DefaultSlowRejectRate,
 		MaxSlowRejectRate:               req.MaxSlowRejectRate,
+		SuisuEnabled:                    req.SuisuEnabled,
+		SuisuFallbackGroupID:            req.SuisuFallbackGroupID,
+		SuisuSlowRouteRatio:             req.SuisuSlowRouteRatio,
+		SuisuBusyRouteRatio:             req.SuisuBusyRouteRatio,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {

@@ -80,6 +80,12 @@ type Group struct {
 	DefaultSlowRejectRate         float64
 	MaxSlowRejectRate             float64
 
+	// 随速通配置：后台隐藏备用 OpenAI 分组路由，用户侧不可见。
+	SuisuEnabled         bool
+	SuisuFallbackGroupID *int64
+	SuisuSlowRouteRatio  float64
+	SuisuBusyRouteRatio  float64
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

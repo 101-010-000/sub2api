@@ -593,6 +593,12 @@ export interface AdminGroup extends Group {
 
   // 分组排序
   sort_order: number
+
+  // 随速通配置（仅管理员可见）
+  suisu_enabled?: boolean
+  suisu_fallback_group_id?: number | null
+  suisu_slow_route_ratio?: number
+  suisu_busy_route_ratio?: number
 }
 
 export interface ModelsListConfig {
@@ -723,6 +729,10 @@ export interface CreateGroupRequest {
   max_slow_delay_seconds?: number
   default_slow_reject_rate?: number
   max_slow_reject_rate?: number
+  suisu_enabled?: boolean
+  suisu_fallback_group_id?: number | null
+  suisu_slow_route_ratio?: number
+  suisu_busy_route_ratio?: number
   // 从指定分组复制账号
   copy_accounts_from_group_ids?: number[]
 }
@@ -768,6 +778,10 @@ export interface UpdateGroupRequest {
   max_slow_delay_seconds?: number
   default_slow_reject_rate?: number
   max_slow_reject_rate?: number
+  suisu_enabled?: boolean
+  suisu_fallback_group_id?: number | null
+  suisu_slow_route_ratio?: number
+  suisu_busy_route_ratio?: number
   copy_accounts_from_group_ids?: number[]
 }
 

@@ -133,6 +133,79 @@ func TestOpenAIHandleStreamingAwareError_NonStreaming(t *testing.T) {
 	assert.Equal(t, "test error", errorObj["message"])
 }
 
+func TestResolveSuisuGroupID(t *testing.T) {
+	fallbackID := int64(200)
+
+	t.Run("disabled", func(t *testing.T) {
+		got := resolveSuisuGroupID(&service.Group{
+			SuisuEnabled:         false,
+			SuisuFallbackGroupID: &fallbackID,
+			SuisuSlowRouteRatio:  1,
+		}, "slow")
+		require.Nil(t, got)
+	})
+
+	t.Run("slow_ratio_zero_misses", func(t *testing.T) {
+		got := resolveSuisuGroupID(&service.Group{
+			SuisuEnabled:         true,
+			SuisuFallbackGroupID: &fallbackID,
+			SuisuSlowRouteRatio:  0,
+		}, "slow")
+		require.Nil(t, got)
+	})
+
+	t.Run("slow_ratio_one_hits", func(t *testing.T) {
+		got := resolveSuisuGroupID(&service.Group{
+			SuisuEnabled:         true,
+			SuisuFallbackGroupID: &fallbackID,
+			SuisuSlowRouteRatio:  1,
+		}, "slow")
+		require.NotNil(t, got)
+		require.Equal(t, fallbackID, *got)
+	})
+
+	t.Run("busy_ratio_one_hits", func(t *testing.T) {
+		got := resolveSuisuGroupID(&service.Group{
+			SuisuEnabled:         true,
+			SuisuFallbackGroupID: &fallbackID,
+			SuisuBusyRouteRatio:  1,
+		}, "busy")
+		require.NotNil(t, got)
+		require.Equal(t, fallbackID, *got)
+	})
+
+	t.Run("unknown_reason_misses", func(t *testing.T) {
+		got := resolveSuisuGroupID(&service.Group{
+			SuisuEnabled:         true,
+			SuisuFallbackGroupID: &fallbackID,
+			SuisuSlowRouteRatio:  1,
+			SuisuBusyRouteRatio:  1,
+		}, "other")
+		require.Nil(t, got)
+	})
+}
+
+func TestOpenAIFinalizeSpeedDecisionSlowReject(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, EndpointResponses, nil)
+
+	h := &OpenAIGatewayHandler{}
+	ok := h.finalizeOpenAISpeedDecision(c, openAISpeedDecisionResult{
+		OK: true,
+		Decision: &service.SpeedDecision{
+			State:    "slow",
+			Rejected: true,
+		},
+		Err: service.ErrSpeedSlowRejected,
+	}, false, nil, nil, false)
+
+	require.False(t, ok)
+	require.Equal(t, http.StatusTooManyRequests, w.Code)
+	require.Contains(t, w.Body.String(), "优速通慢速请求被限流")
+}
+
 func TestReadRequestBodyWithPrealloc(t *testing.T) {
 	payload := `{"model":"gpt-5","input":"hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(payload))

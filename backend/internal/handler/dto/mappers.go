@@ -165,6 +165,10 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		ActiveAccountCount:          g.ActiveAccountCount,
 		RateLimitedAccountCount:     g.RateLimitedAccountCount,
 		SortOrder:                   g.SortOrder,
+		SuisuEnabled:                g.SuisuEnabled,
+		SuisuFallbackGroupID:        g.SuisuFallbackGroupID,
+		SuisuSlowRouteRatio:         g.SuisuSlowRouteRatio,
+		SuisuBusyRouteRatio:         g.SuisuBusyRouteRatio,
 	}
 	if len(g.AccountGroups) > 0 {
 		out.AccountGroups = make([]AccountGroup, 0, len(g.AccountGroups))

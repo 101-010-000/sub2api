@@ -171,6 +171,12 @@ type AdminGroup struct {
 
 	// 分组排序
 	SortOrder int `json:"sort_order"`
+
+	// 随速通配置（仅管理员可见）
+	SuisuEnabled         bool    `json:"suisu_enabled"`
+	SuisuFallbackGroupID *int64  `json:"suisu_fallback_group_id"`
+	SuisuSlowRouteRatio  float64 `json:"suisu_slow_route_ratio"`
+	SuisuBusyRouteRatio  float64 `json:"suisu_busy_route_ratio"`
 }
 
 type Account struct {

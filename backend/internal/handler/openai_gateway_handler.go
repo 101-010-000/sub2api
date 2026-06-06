@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -75,6 +76,153 @@ func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecord
 
 func (h *OpenAIGatewayHandler) SetSpeedService(speedService *service.SpeedService) {
 	h.speedService = speedService
+}
+
+type openAISpeedDecisionResult struct {
+	OK       bool
+	Decision *service.SpeedDecision
+	Err      error
+}
+
+func suisuRatioHit(ratio float64) bool {
+	if ratio <= 0 {
+		return false
+	}
+	if ratio >= 1 {
+		return true
+	}
+	return rand.Float64() < ratio
+}
+
+func resolveSuisuGroupID(group *service.Group, reason string) *int64 {
+	if group == nil || !group.SuisuEnabled || group.SuisuFallbackGroupID == nil || *group.SuisuFallbackGroupID <= 0 {
+		return nil
+	}
+	switch reason {
+	case "slow":
+		if !suisuRatioHit(group.SuisuSlowRouteRatio) {
+			return nil
+		}
+	case "busy":
+		if !suisuRatioHit(group.SuisuBusyRouteRatio) {
+			return nil
+		}
+	default:
+		return nil
+	}
+	return group.SuisuFallbackGroupID
+}
+
+func sameGroupID(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func logSuisuRoute(reqLog *zap.Logger, reason string, fromGroupID, toGroupID *int64) {
+	if reqLog == nil || toGroupID == nil {
+		return
+	}
+	fields := []zap.Field{
+		zap.String("reason", reason),
+		zap.Int64("suisu_group_id", *toGroupID),
+	}
+	if fromGroupID != nil {
+		fields = append(fields, zap.Int64("original_group_id", *fromGroupID))
+	}
+	reqLog.Info("openai.suisu_route_selected", fields...)
+}
+
+type openAIAccountSelectFunc func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error)
+
+func openAISelectionNeedsImmediateFallback(selection *service.AccountSelectionResult, err error) bool {
+	if err != nil {
+		return true
+	}
+	if selection == nil || selection.Account == nil {
+		return true
+	}
+	return !selection.Acquired
+}
+
+func selectOpenAIAccountWithSuisuBusyFallback(
+	originalGroup *service.Group,
+	originalGroupID *int64,
+	effectiveGroupID *int64,
+	allowFallback bool,
+	reqLog *zap.Logger,
+	selectFn openAIAccountSelectFunc,
+) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, *int64, error) {
+	selection, decision, err := selectFn(effectiveGroupID)
+	if !allowFallback || !sameGroupID(effectiveGroupID, originalGroupID) || !openAISelectionNeedsImmediateFallback(selection, err) {
+		return selection, decision, effectiveGroupID, err
+	}
+
+	suisuGroupID := resolveSuisuGroupID(originalGroup, "busy")
+	if suisuGroupID == nil {
+		return selection, decision, effectiveGroupID, err
+	}
+
+	fallbackSelection, fallbackDecision, fallbackErr := selectFn(suisuGroupID)
+	if fallbackErr != nil || fallbackSelection == nil || fallbackSelection.Account == nil || !fallbackSelection.Acquired {
+		if reqLog != nil {
+			reqLog.Info("openai.suisu_route_unavailable", zap.String("reason", "busy"), zap.Int64("suisu_group_id", *suisuGroupID), zap.Error(fallbackErr))
+		}
+		return selection, decision, effectiveGroupID, err
+	}
+
+	logSuisuRoute(reqLog, "busy", originalGroupID, suisuGroupID)
+	return fallbackSelection, fallbackDecision, suisuGroupID, nil
+}
+
+func (h *OpenAIGatewayHandler) applyOpenAISpeedDelay(
+	c *gin.Context,
+	decision *service.SpeedDecision,
+	isStream bool,
+	streamStarted *bool,
+	reqLog *zap.Logger,
+	anthropicFormat bool,
+) bool {
+	if decision == nil || decision.Delay <= 0 {
+		return true
+	}
+	if reqLog != nil {
+		reqLog.Info("openai.speed_slow_delay", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
+	}
+	if err := waitWithOptionalPing(c, decision.Delay, isStream, streamStarted, SSEPingFormatComment, h.concurrencyHelper.pingInterval); err != nil {
+		started := streamStarted != nil && *streamStarted
+		if anthropicFormat {
+			h.anthropicStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", started)
+		} else {
+			h.handleStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", started)
+		}
+		return false
+	}
+	return true
+}
+
+func (h *OpenAIGatewayHandler) finalizeOpenAISpeedDecision(
+	c *gin.Context,
+	result openAISpeedDecisionResult,
+	isStream bool,
+	streamStarted *bool,
+	reqLog *zap.Logger,
+	anthropicFormat bool,
+) bool {
+	if !result.OK {
+		return false
+	}
+	if errors.Is(result.Err, service.ErrSpeedSlowRejected) {
+		started := streamStarted != nil && *streamStarted
+		if anthropicFormat {
+			h.anthropicStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
+		} else {
+			h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
+		}
+		return false
+	}
+	return h.applyOpenAISpeedDelay(c, result.Decision, isStream, streamStarted, reqLog, anthropicFormat)
 }
 
 // NewOpenAIGatewayHandler creates a new OpenAIGatewayHandler
@@ -223,6 +371,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
 
 	if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, body); decision != nil && decision.Blocked {
+		if writeContentModerationResponsesStreamError(c, decision, reqStream) {
+			return
+		}
 		h.errorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
 		return
 	}
@@ -282,7 +433,20 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
-	if !h.applySpeedDecision(c, apiKey, subscription, reqStream, &streamStarted, reqLog, false) {
+	speedDecision := h.applySpeedDecision(c, apiKey, subscription, &streamStarted, reqLog, false)
+	if !speedDecision.OK {
+		return
+	}
+	effectiveGroupID := apiKey.GroupID
+	var slowSuisuGroupID *int64
+	if speedDecision.Decision != nil && speedDecision.Decision.State == "slow" {
+		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
+			effectiveGroupID = suisuGroupID
+			slowSuisuGroupID = suisuGroupID
+		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, false) {
+			return
+		}
+	} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, false) {
 		return
 	}
 
@@ -299,17 +463,38 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	for {
 		// Select account supporting the requested model
 		reqLog.Debug("openai.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
-			c.Request.Context(),
+		selection, scheduleDecision, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
+			apiKey.Group,
 			apiKey.GroupID,
-			previousResponseID,
-			sessionHash,
-			reqModel,
-			failedAccountIDs,
-			service.OpenAIUpstreamTransportAny,
-			service.OpenAIEndpointCapabilityChatCompletions,
-			requireCompact,
+			effectiveGroupID,
+			len(failedAccountIDs) == 0,
+			reqLog,
+			func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error) {
+				return h.gatewayService.SelectAccountWithSchedulerForCapability(
+					c.Request.Context(),
+					groupID,
+					previousResponseID,
+					sessionHash,
+					reqModel,
+					failedAccountIDs,
+					service.OpenAIUpstreamTransportAny,
+					service.OpenAIEndpointCapabilityChatCompletions,
+					requireCompact,
+				)
+			},
 		)
+		effectiveGroupID = newEffectiveGroupID
+		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
+			if reqLog != nil {
+				reqLog.Info("openai.suisu_route_unavailable", zap.String("reason", "slow"), zap.Int64("suisu_group_id", *slowSuisuGroupID), zap.Error(err))
+			}
+			if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, false) {
+				return
+			}
+			effectiveGroupID = apiKey.GroupID
+			slowSuisuGroupID = nil
+			continue
+		}
 		if err != nil {
 			reqLog.Warn("openai.account_select_failed",
 				zap.Error(err),
@@ -336,6 +521,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", streamStarted)
 			return
 		}
+		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) {
+			logSuisuRoute(reqLog, "slow", apiKey.GroupID, effectiveGroupID)
+			slowSuisuGroupID = nil
+		}
 		if previousResponseID != "" && selection != nil && selection.Account != nil {
 			reqLog.Debug("openai.account_selected_with_previous_response_id", zap.Int64("account_id", selection.Account.ID))
 		}
@@ -353,7 +542,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		reqLog.Debug("openai.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
 		if !acquired {
 			return
 		}
@@ -486,11 +675,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				InboundEndpoint:    inboundEndpoint,
 				UpstreamEndpoint:   upstreamEndpoint,
 				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
-			}); err != nil {
+					IPAddress:          clientIP,
+					RequestPayloadHash: requestPayloadHash,
+					APIKeyService:      h.apiKeyService,
+					ScheduledGroupID:   effectiveGroupID,
+					ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.responses"),
 					zap.Int64("user_id", subject.UserID),
@@ -696,7 +886,20 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
-	if !h.applySpeedDecision(c, apiKey, subscription, reqStream, &streamStarted, reqLog, true) {
+	speedDecision := h.applySpeedDecision(c, apiKey, subscription, &streamStarted, reqLog, true)
+	if !speedDecision.OK {
+		return
+	}
+	effectiveGroupID := apiKey.GroupID
+	var slowSuisuGroupID *int64
+	if speedDecision.Decision != nil && speedDecision.Decision.State == "slow" {
+		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
+			effectiveGroupID = suisuGroupID
+			slowSuisuGroupID = suisuGroupID
+		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, true) {
+			return
+		}
+	} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, true) {
 		return
 	}
 
@@ -717,17 +920,38 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			currentRoutingModel = effectiveMappedModel
 		}
 		reqLog.Debug("openai_messages.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
-			c.Request.Context(),
+		selection, scheduleDecision, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
+			apiKey.Group,
 			apiKey.GroupID,
-			"", // no previous_response_id
-			sessionHash,
-			currentRoutingModel,
-			failedAccountIDs,
-			service.OpenAIUpstreamTransportAny,
-			service.OpenAIEndpointCapabilityChatCompletions,
-			false,
+			effectiveGroupID,
+			len(failedAccountIDs) == 0,
+			reqLog,
+			func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error) {
+				return h.gatewayService.SelectAccountWithSchedulerForCapability(
+					c.Request.Context(),
+					groupID,
+					"", // no previous_response_id
+					sessionHash,
+					currentRoutingModel,
+					failedAccountIDs,
+					service.OpenAIUpstreamTransportAny,
+					service.OpenAIEndpointCapabilityChatCompletions,
+					false,
+				)
+			},
 		)
+		effectiveGroupID = newEffectiveGroupID
+		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
+			if reqLog != nil {
+				reqLog.Info("openai.suisu_route_unavailable", zap.String("reason", "slow"), zap.Int64("suisu_group_id", *slowSuisuGroupID), zap.Error(err))
+			}
+			if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, true) {
+				return
+			}
+			effectiveGroupID = apiKey.GroupID
+			slowSuisuGroupID = nil
+			continue
+		}
 		if err != nil {
 			reqLog.Warn("openai_messages.account_select_failed",
 				zap.Error(err),
@@ -753,13 +977,17 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			h.anthropicStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", streamStarted)
 			return
 		}
+		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) {
+			logSuisuRoute(reqLog, "slow", apiKey.GroupID, effectiveGroupID)
+			slowSuisuGroupID = nil
+		}
 		account := selection.Account
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
 		reqLog.Debug("openai_messages.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		_ = scheduleDecision
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
 		if !acquired {
 			return
 		}
@@ -886,11 +1114,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				InboundEndpoint:    inboundEndpoint,
 				UpstreamEndpoint:   upstreamEndpoint,
 				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMappingMsg.ToUsageFields(reqModel, result.UpstreamModel),
-			}); err != nil {
+					IPAddress:          clientIP,
+					RequestPayloadHash: requestPayloadHash,
+					APIKeyService:      h.apiKeyService,
+					ScheduledGroupID:   effectiveGroupID,
+					ChannelUsageFields: channelMappingMsg.ToUsageFields(reqModel, result.UpstreamModel),
+				}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.messages"),
 					zap.Int64("user_id", subject.UserID),
@@ -1848,47 +2077,31 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareError(c *gin.Context, status 
 	h.errorResponse(c, status, errType, message)
 }
 
-func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription, isStream bool, streamStarted *bool, reqLog *zap.Logger, anthropicFormat bool) bool {
+func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription, streamStarted *bool, reqLog *zap.Logger, anthropicFormat bool) openAISpeedDecisionResult {
 	if h.speedService == nil || apiKey == nil {
-		return true
+		return openAISpeedDecisionResult{OK: true}
 	}
 	decision, err := h.speedService.Decide(c.Request.Context(), apiKey.User, apiKey.Group, subscription)
 	if err != nil {
-		started := streamStarted != nil && *streamStarted
 		if errors.Is(err, service.ErrSpeedSlowRejected) {
-			if anthropicFormat {
-				h.anthropicStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
-			} else {
-				h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
-			}
-			return false
+			return openAISpeedDecisionResult{OK: true, Decision: decision, Err: err}
 		}
 		status, code, message, retryAfter := billingErrorDetails(err)
 		if retryAfter > 0 {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
+		started := streamStarted != nil && *streamStarted
 		if anthropicFormat {
 			h.anthropicStreamingAwareError(c, status, code, message, started)
 		} else {
 			h.handleStreamingAwareError(c, status, code, message, started)
 		}
-		return false
+		return openAISpeedDecisionResult{}
 	}
-	if decision == nil || decision.Delay <= 0 {
-		return true
+	if reqLog != nil && decision != nil && decision.Delay > 0 {
+		reqLog.Debug("openai.speed_slow_decision", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
 	}
-	if reqLog != nil {
-		reqLog.Info("openai.speed_slow_delay", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
-	}
-	if err := waitWithOptionalPing(c, decision.Delay, isStream, streamStarted, SSEPingFormatComment, h.concurrencyHelper.pingInterval); err != nil {
-		if anthropicFormat {
-			h.anthropicStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", streamStarted != nil && *streamStarted)
-		} else {
-			h.handleStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", streamStarted != nil && *streamStarted)
-		}
-		return false
-	}
-	return true
+	return openAISpeedDecisionResult{OK: true, Decision: decision}
 }
 
 // ensureForwardErrorResponse 在 Forward 返回错误但尚未写响应时补写统一错误响应。
