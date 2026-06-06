@@ -12,7 +12,7 @@ func UserFromServiceShallow(u *service.User) *User {
 	if u == nil {
 		return nil
 	}
-	return &User{
+	out := &User{
 		ID:                         u.ID,
 		Email:                      u.Email,
 		Username:                   u.Username,
@@ -32,6 +32,12 @@ func UserFromServiceShallow(u *service.User) *User {
 		RPMLimit:                   u.RPMLimit,
 		DeletedAt:                  u.DeletedAt,
 	}
+	if u.APIKeyMaxActiveIPsVisible {
+		maxActiveIPs := u.APIKeyMaxActiveIPs
+		out.APIKeyMaxActiveIPs = &maxActiveIPs
+		out.APIKeyMaxActiveIPsVisible = true
+	}
+	return out
 }
 
 func UserFromService(u *service.User) *User {
@@ -67,10 +73,12 @@ func UserFromServiceAdmin(u *service.User) *AdminUser {
 		return nil
 	}
 	return &AdminUser{
-		User:       *base,
-		Notes:      u.Notes,
-		LastUsedAt: u.LastUsedAt,
-		GroupRates: u.GroupRates,
+		User:                      *base,
+		Notes:                     u.Notes,
+		LastUsedAt:                u.LastUsedAt,
+		APIKeyMaxActiveIPs:        u.APIKeyMaxActiveIPs,
+		APIKeyMaxActiveIPsVisible: u.APIKeyMaxActiveIPsVisible,
+		GroupRates:                u.GroupRates,
 	}
 }
 

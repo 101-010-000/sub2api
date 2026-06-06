@@ -541,6 +541,17 @@
             />
           </template>
 
+          <template #cell-api_key_max_active_ips="{ row }">
+            <div class="flex flex-col gap-0.5 text-sm">
+              <span class="font-medium text-gray-900 dark:text-gray-100">
+                {{ row.api_key_max_active_ips > 0 ? row.api_key_max_active_ips : t('keys.runtimeUnlimited') }}
+              </span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                {{ row.api_key_max_active_ips_visible ? t('admin.users.visibleToUser') : t('admin.users.hiddenFromUser') }}
+              </span>
+            </div>
+          </template>
+
           <template #cell-status="{ value }">
             <div class="flex items-center gap-1.5">
               <span
@@ -702,6 +713,14 @@
                 {{ t('admin.users.balanceHistory') }}
               </button>
 
+              <button
+                @click="handleRiskControl(user); closeActionMenu()"
+                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+              >
+                <Icon name="shield" size="sm" class="text-gray-400" :stroke-width="2" />
+                {{ t('admin.users.riskControlDetail') }}
+              </button>
+
               <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
 
               <!-- Delete (not for admin) -->
@@ -733,6 +752,140 @@
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
+    <BaseDialog
+      :show="showRiskControlModal"
+      :title="riskControlUser ? t('admin.users.riskControlDetailTitle', { email: riskControlUser.email }) : t('admin.users.riskControlDetail')"
+      width="extra-wide"
+      @close="closeRiskControlModal"
+    >
+      <div v-if="riskControlLoading" class="flex items-center justify-center py-16">
+        <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
+      </div>
+      <div v-else-if="riskControlDetail" class="space-y-5">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.riskWeight') }}</p>
+            <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ formatRiskWeight(riskControlDetail.profile?.effective_weight ?? 0) }}</p>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.effectiveSampleRate') }}</p>
+            <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ riskControlDetail.effective_sample_rate }}%</p>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.effectiveBanThreshold') }}</p>
+            <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ riskControlDetail.effective_ban_threshold }}</p>
+          </div>
+          <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.banStatus') }}</p>
+            <p class="mt-2 text-sm font-semibold" :class="riskControlDetail.ban_status?.banned ? 'text-red-600 dark:text-red-300' : 'text-emerald-600 dark:text-emerald-300'">
+              {{ riskControlDetail.ban_status?.banned ? t('admin.users.banned') : t('admin.users.notBanned') }}
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div class="space-y-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.users.manualSuspicious') }}</p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.manualSuspiciousHint') }}</p>
+              </div>
+              <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium" :class="riskControlDetail.profile?.manual_suspicious ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300' : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'">
+                {{ riskControlDetail.profile?.manual_suspicious ? t('common.enabled') : t('common.disabled') }}
+              </span>
+            </div>
+            <textarea v-model="riskSuspicionReason" class="input min-h-20 resize-y text-sm" :placeholder="t('admin.users.riskReasonPlaceholder')"></textarea>
+            <button
+              type="button"
+              class="btn btn-secondary inline-flex w-full items-center justify-center gap-2"
+              :disabled="riskSuspicionSaving"
+              @click="toggleRiskSuspicion"
+            >
+              <Icon name="shield" size="sm" :class="riskSuspicionSaving ? 'animate-pulse' : ''" />
+              {{ riskControlDetail.profile?.manual_suspicious ? t('admin.users.clearSuspicious') : t('admin.users.markSuspicious') }}
+            </button>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.flaggedCount') }}</p>
+                <p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ riskControlDetail.profile?.cumulative_flagged_count ?? 0 }}</p>
+              </div>
+              <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.banCount') }}</p>
+                <p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ riskControlDetail.profile?.cumulative_ban_count ?? 0 }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.users.riskEvents') }}</p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.riskEventsHint') }}</p>
+              </div>
+            </div>
+            <div v-if="riskControlDetail.events.length > 0" class="max-h-72 overflow-y-auto">
+              <div v-for="event in riskControlDetail.events" :key="event.id" class="border-b border-gray-100 py-3 last:border-b-0 dark:border-dark-700">
+                <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ event.event_type }} · {{ event.source || '-' }}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ formatDateTime(event.created_at) }}</p>
+                </div>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.users.riskEventWeight', { before: formatRiskWeight(event.effective_weight_before), after: formatRiskWeight(event.effective_weight_after), delta: formatRiskWeight(event.weight_delta) }) }}
+                </p>
+                <p v-if="event.reason" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ event.reason }}</p>
+              </div>
+            </div>
+            <p v-else class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500 dark:bg-dark-700/50 dark:text-gray-400">{{ t('admin.users.noRiskEvents') }}</p>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.users.riskContexts') }}</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.users.riskContextsHint') }}</p>
+            </div>
+          </div>
+          <div v-if="riskControlContexts.length > 0" class="space-y-3">
+            <div v-for="contextItem in riskControlContexts" :key="contextItem.id" class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ contextItem.context_summary || '-' }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    #{{ contextItem.id }} · {{ contextItem.status }} · {{ contextItem.review_attempts }}/{{ contextItem.max_review_attempts }} · {{ formatDateTime(contextItem.created_at) }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm inline-flex items-center gap-1"
+                  :disabled="riskContextLoadingID === contextItem.id"
+                  @click="loadRiskContextDetail(contextItem.id)"
+                >
+                  <Icon name="eye" size="xs" :class="riskContextLoadingID === contextItem.id ? 'animate-pulse' : ''" />
+                  {{ t('admin.users.viewContext') }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500 dark:bg-dark-700/50 dark:text-gray-400">{{ t('admin.users.noRiskContexts') }}</p>
+
+          <div v-if="riskContextDetail" class="mt-4 rounded-lg border border-gray-100 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.users.contextDetail') }} #{{ riskContextDetail.id }}</p>
+              <button type="button" class="btn btn-secondary btn-sm" @click="riskContextDetail = null">{{ t('common.close') }}</button>
+            </div>
+            <pre class="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-950 p-4 text-sm leading-6 text-gray-100 shadow-inner dark:bg-black/50">{{ prettyRiskContextDetail }}</pre>
+          </div>
+        </div>
+      </div>
+      <p v-else class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.users.riskControlEmpty') }}</p>
+
+      <template #footer>
+        <div class="flex justify-end">
+          <button type="button" class="btn btn-secondary" @click="closeRiskControlModal">{{ t('common.close') }}</button>
+        </div>
+      </template>
+    </BaseDialog>
     <UserAttributesConfigModal :show="showAttributesModal" @close="handleAttributesModalClose" />
   </AppLayout>
 </template>
@@ -750,12 +903,14 @@ import { adminAPI } from '@/api/admin'
 import type { AdminUser, AdminGroup, UserAttributeDefinition } from '@/types'
 import type { BatchUserUsageStats } from '@/api/admin/dashboard'
 import type { PlatformQuotaItem } from '@/api/admin/users'
+import type { ContentModerationContext, ContentModerationUserRiskDetail } from '@/api/admin/riskControl'
 import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import Select from '@/components/common/Select.vue'
@@ -840,6 +995,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'usage_gemini', label: t('admin.users.columns.usageGemini'), sortable: false },
   { key: 'usage_antigravity', label: t('admin.users.columns.usageAntigravity'), sortable: false },
   { key: 'concurrency', label: t('admin.users.columns.concurrency'), sortable: true },
+  { key: 'api_key_max_active_ips', label: t('admin.users.columns.apiKeyMaxActiveIPs'), sortable: false },
   { key: 'status', label: t('admin.users.columns.status'), sortable: true },
   { key: 'last_active_at', label: t('admin.users.columns.lastActive'), sortable: true },
   { key: 'last_used_at', label: t('admin.users.columns.lastUsed'), sortable: true },
@@ -860,7 +1016,7 @@ const hiddenColumns = reactive<Set<string>>(new Set())
 const DEFAULT_HIDDEN_COLUMNS = [
   'notes', 'groups', 'subscriptions', 'usage', 'concurrency',
   'usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity',
-  'balance_platform_quota'
+  'balance_platform_quota', 'api_key_max_active_ips'
 ]
 const REMOVED_COLUMNS = new Set(['last_login_at'])
 // 强制可见列：加载时会被强制移出 hiddenColumns，并在列设置 UI 上 disabled。
@@ -1235,10 +1391,19 @@ const showDeleteDialog = ref(false)
 const showApiKeysModal = ref(false)
 const showAttributesModal = ref(false)
 const showPlatformQuotaModal = ref(false)
+const showRiskControlModal = ref(false)
+const riskControlLoading = ref(false)
+const riskSuspicionSaving = ref(false)
+const riskContextLoadingID = ref<number | null>(null)
 const editingUser = ref<AdminUser | null>(null)
 const deletingUser = ref<AdminUser | null>(null)
 const viewingUser = ref<AdminUser | null>(null)
 const platformQuotaUser = ref<AdminUser | null>(null)
+const riskControlUser = ref<AdminUser | null>(null)
+const riskControlDetail = ref<ContentModerationUserRiskDetail | null>(null)
+const riskControlContexts = ref<ContentModerationContext[]>([])
+const riskContextDetail = ref<ContentModerationContext | null>(null)
+const riskSuspicionReason = ref('')
 
 const handlePlatformQuota = (user: AdminUser) => {
   platformQuotaUser.value = user
@@ -1711,6 +1876,79 @@ const handleBalanceHistory = (user: AdminUser) => {
 const closeBalanceHistoryModal = () => {
   showBalanceHistoryModal.value = false
   balanceHistoryUser.value = null
+}
+
+const prettyRiskContextDetail = computed(() => {
+  const raw = riskContextDetail.value?.plain_context
+  if (!raw) return '-'
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+})
+
+const handleRiskControl = async (user: AdminUser) => {
+  riskControlUser.value = user
+  showRiskControlModal.value = true
+  riskControlLoading.value = true
+  riskContextDetail.value = null
+  riskSuspicionReason.value = ''
+  try {
+    const [detail, contexts] = await Promise.all([
+      adminAPI.riskControl.getUserRiskProfile(user.id),
+      adminAPI.riskControl.listUserContexts(user.id),
+    ])
+    riskControlDetail.value = detail
+    riskControlContexts.value = contexts
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || error.message || t('admin.users.riskControlLoadFailed'))
+  } finally {
+    riskControlLoading.value = false
+  }
+}
+
+const closeRiskControlModal = () => {
+  showRiskControlModal.value = false
+  riskControlUser.value = null
+  riskControlDetail.value = null
+  riskControlContexts.value = []
+  riskContextDetail.value = null
+  riskSuspicionReason.value = ''
+}
+
+const toggleRiskSuspicion = async () => {
+  if (!riskControlUser.value || !riskControlDetail.value || riskSuspicionSaving.value) return
+  riskSuspicionSaving.value = true
+  try {
+    const suspicious = !riskControlDetail.value.profile?.manual_suspicious
+    riskControlDetail.value = await adminAPI.riskControl.setUserSuspicion(riskControlUser.value.id, {
+      suspicious,
+      reason: riskSuspicionReason.value,
+    })
+    riskSuspicionReason.value = ''
+    appStore.showSuccess(t('admin.users.riskSuspicionSaved'))
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || error.message || t('admin.users.riskSuspicionSaveFailed'))
+  } finally {
+    riskSuspicionSaving.value = false
+  }
+}
+
+const loadRiskContextDetail = async (contextID: number) => {
+  riskContextLoadingID.value = contextID
+  try {
+    riskContextDetail.value = await adminAPI.riskControl.getContextDetail(contextID)
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || error.message || t('admin.users.riskContextLoadFailed'))
+  } finally {
+    riskContextLoadingID.value = null
+  }
+}
+
+const formatRiskWeight = (value: number): string => {
+  if (!Number.isFinite(value)) return '0.0'
+  return value.toFixed(1)
 }
 
 // Handle deposit from balance history modal

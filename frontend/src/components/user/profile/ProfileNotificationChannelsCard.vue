@@ -122,7 +122,11 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import type { FeishuNotificationStatus } from '@/types'
 
-const { locale } = useI18n()
+const i18n = useI18n()
+const locale = computed(() => {
+  const current = (i18n as { locale?: { value?: unknown } }).locale?.value
+  return typeof current === 'string' ? current : 'en'
+})
 const appStore = useAppStore()
 
 const loading = ref(false)
@@ -189,7 +193,7 @@ async function loadNotificationSettings() {
     feishuStatus.value = settings.feishu
     notifyEnabled.value = settings.feishu.notification_enabled ?? settings.feishu.enabled
   } catch (err: unknown) {
-    appStore.showError(extractApiErrorMessage(err, localText('加载通知渠道失败', 'Failed to load notification channels')))
+    appStore.showError?.(extractApiErrorMessage(err, localText('加载通知渠道失败', 'Failed to load notification channels')))
   } finally {
     loading.value = false
   }
@@ -208,10 +212,10 @@ async function toggleFeishu() {
     })
     feishuStatus.value = settings.feishu
     notifyEnabled.value = settings.feishu.notification_enabled ?? settings.feishu.enabled
-    appStore.showSuccess(localText('已保存通知渠道', 'Notification channel saved'))
+    appStore.showSuccess?.(localText('已保存通知渠道', 'Notification channel saved'))
   } catch (err: unknown) {
     notifyEnabled.value = !nextEnabled
-    appStore.showError(extractApiErrorMessage(err, localText('保存通知渠道失败', 'Failed to save notification channel')))
+    appStore.showError?.(extractApiErrorMessage(err, localText('保存通知渠道失败', 'Failed to save notification channel')))
   } finally {
     saving.value = false
   }
@@ -224,7 +228,7 @@ async function bindFeishu() {
     await userAPI.startFeishuNotifyBinding('/profile', feishuStatus.value?.bind_start_path)
   } catch (err: unknown) {
     binding.value = false
-    appStore.showError(extractApiErrorMessage(err, localText('发起飞书绑定失败', 'Failed to start Feishu binding')))
+    appStore.showError?.(extractApiErrorMessage(err, localText('发起飞书绑定失败', 'Failed to start Feishu binding')))
   }
 }
 

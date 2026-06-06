@@ -151,6 +151,9 @@ type GeminiTierQuotaConfig struct {
 }
 
 type UpdateConfig struct {
+	// Repo is the GitHub repository used for update checks and release assets.
+	// Format: "owner/repo". Defaults to this fork.
+	Repo string `mapstructure:"repo"`
 	// ProxyURL 用于访问 GitHub 的代理地址
 	// 支持 http/https/socks5/socks5h 协议
 	// 例如: "http://127.0.0.1:7890", "socks5://127.0.0.1:1080"
@@ -1809,6 +1812,9 @@ func setDefaults() {
 	viper.SetDefault("usage_cleanup.batch_size", 5000)
 	viper.SetDefault("usage_cleanup.worker_interval_seconds", 10)
 	viper.SetDefault("usage_cleanup.task_timeout_seconds", 1800)
+
+	// Update
+	viper.SetDefault("update.repo", "TalexDreamSoul/sub2api")
 
 	// Idempotency
 	viper.SetDefault("idempotency.observe_only", true)

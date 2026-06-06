@@ -112,6 +112,13 @@ func (User) Fields() []ent.Field {
 		// 用户级每分钟请求数上限（0 = 不限制）。仅当所在分组未设置 rpm_limit 时作为兜底生效。
 		field.Int("rpm_limit").
 			Default(0),
+		// 用户级 API Key 动态活跃 IP 上限（0 = 不限制）。普通用户创建/编辑 Key 时生效。
+		field.Int("api_key_max_active_ips").
+			Default(0).
+			NonNegative(),
+		// 是否向普通用户展示用户级 API Key 动态活跃 IP 上限。
+		field.Bool("api_key_max_active_ips_visible").
+			Default(false),
 	}
 }
 

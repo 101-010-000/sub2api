@@ -53,6 +53,74 @@
           </div>
         </div>
 
+        <div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
+          <div class="card" data-test="background-review-status-card">
+            <div class="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.backgroundReviewStatus') }}</h2>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.backgroundReviewStatusHint') }}</p>
+              </div>
+              <span class="inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium" :class="configForm.background_review_enabled ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'">
+                {{ configForm.background_review_enabled ? t('common.enabled') : t('common.disabled') }}
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-3 p-6">
+              <div v-for="item in backgroundReviewMetricItems" :key="item.key" class="rounded-lg bg-gray-50 p-4 dark:bg-dark-700/50">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ item.label }}</p>
+                <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{{ item.value }}</p>
+              </div>
+              <div class="col-span-2 rounded-lg bg-gray-50 p-4 dark:bg-dark-700/50">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.lastBackgroundReviewAt') }}</p>
+                <p class="mt-2 truncate text-sm font-semibold text-gray-900 dark:text-white">{{ status?.last_background_review_at ? formatDateTime(status.last_background_review_at) : '-' }}</p>
+                <p v-if="status?.context_capture_error" class="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs leading-5 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                  {{ status.context_capture_error }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" data-test="audit-model-health-card">
+            <div class="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.auditModelHealth') }}</h2>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.auditModelHealthHint') }}</p>
+              </div>
+              <span class="inline-flex w-fit items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300">
+                {{ t('admin.riskControl.auditModelHealthSummary', { count: auditModelRuntimeRows.length }) }}
+              </span>
+            </div>
+            <div class="p-6">
+              <div v-if="auditModelRuntimeRows.length > 0" class="max-h-[300px] space-y-3 overflow-y-auto pr-1">
+                <div v-for="row in auditModelRuntimeRows" :key="row.model_id" class="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-dark-700 dark:bg-dark-700/50">
+                  <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0">
+                      <div class="flex min-w-0 items-center gap-2">
+                        <span class="h-2 w-2 flex-shrink-0 rounded-full" :class="auditModelStatusDotClass(row.status)"></span>
+                        <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ row.name || row.model_id }}</p>
+                      </div>
+                      <p class="mt-1 truncate font-mono text-xs text-gray-500 dark:text-gray-400">{{ row.model || '-' }}</p>
+                    </div>
+                    <span class="inline-flex w-fit flex-shrink-0 rounded-md px-2 py-1 text-xs font-medium" :class="auditModelStatusBadgeClass(row.status)">
+                      {{ auditModelStatusLabel(row.status) }}
+                    </span>
+                  </div>
+                  <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400 sm:grid-cols-5">
+                    <div><span>{{ t('admin.riskControl.auditModelCalls') }}</span><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ formatNumber(row.total_calls) }}</p></div>
+                    <div><span>{{ t('admin.riskControl.auditModelFailures') }}</span><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ formatNumber(row.failure_count) }}</p></div>
+                    <div><span>{{ t('admin.riskControl.auditModelFlagged') }}</span><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ formatNumber(row.flagged_count) }}</p></div>
+                    <div><span>{{ t('admin.riskControl.auditModelDisagreements') }}</span><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ formatNumber(row.disagreement_count) }}</p></div>
+                    <div><span>{{ t('admin.riskControl.auditModelAvgLatency') }}</span><p class="mt-1 font-semibold text-gray-900 dark:text-white">{{ formatNumber(row.avg_latency_ms) }} ms</p></div>
+                  </div>
+                  <p v-if="row.last_error" class="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs leading-5 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">{{ row.last_error }}</p>
+                </div>
+              </div>
+              <p v-else class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500 dark:bg-dark-700/50 dark:text-gray-400">
+                {{ t('admin.riskControl.auditModelHealthEmpty') }}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div
           v-if="showPreBlockRuntimeCard"
           data-test="pre-block-runtime-cards"
@@ -323,6 +391,9 @@
                       <div class="text-xs text-gray-400">
                         {{ row.email_sent ? t('admin.riskControl.emailSent') : t('admin.riskControl.emailNotSent') }}
                         <span v-if="row.auto_banned"> / {{ t('admin.riskControl.autoBanned') }}</span>
+                      </div>
+                      <div v-if="row.effective_sample_rate || row.effective_ban_threshold" class="mt-1 text-xs text-gray-400">
+                        {{ t('admin.riskControl.riskSnapshotMeta', { weight: formatWeight(row.risk_weight_snapshot), sample: row.effective_sample_rate || '-', threshold: row.effective_ban_threshold || '-' }) }}
                       </div>
                       <button
                         v-if="canUnbanRow(row)"
@@ -857,6 +928,79 @@
             </div>
           </div>
 
+          <div v-else-if="activeSettingsTab === 'riskProfile'" class="space-y-5">
+            <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.riskWeightEnabled') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.riskWeightEnabledHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.risk_weight_enabled" />
+              </div>
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.contextCaptureEnabled') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.contextCaptureEnabledHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.context_capture_enabled" />
+              </div>
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.backgroundReviewEnabled') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.backgroundReviewEnabledHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.background_review_enabled" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.contextMaxBytes') }}</label>
+                <input v-model.number="configForm.context_max_bytes" type="number" min="1024" max="2097152" step="1024" class="input" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.flaggedWeight') }}</label>
+                <input v-model.number="configForm.flagged_weight" type="number" min="0.01" step="0.1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.banWeight') }}</label>
+                <input v-model.number="configForm.ban_weight" type="number" min="0.01" step="0.1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.manualSuspiciousWeight') }}</label>
+                <input v-model.number="configForm.manual_suspicious_weight" type="number" min="0.01" step="0.1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.decayHalfLifeDays') }}</label>
+                <input v-model.number="configForm.decay_half_life_days" type="number" min="1" max="3650" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.maxSampleRate') }}</label>
+                <input v-model.number="configForm.max_sample_rate" type="number" min="0" max="100" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.banThresholdWeightStep') }}</label>
+                <input v-model.number="configForm.ban_threshold_weight_step" type="number" min="1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.minEffectiveBanThreshold') }}</label>
+                <input v-model.number="configForm.min_effective_ban_threshold" type="number" min="1" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.backgroundReviewBatchSize') }}</label>
+                <input v-model.number="configForm.background_review_batch_size" type="number" min="1" max="100" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.backgroundReviewMaxAttempts') }}</label>
+                <input v-model.number="configForm.background_review_max_attempts" type="number" min="1" max="20" class="input" />
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.riskControl.backgroundReviewRetryBackoffSeconds') }}</label>
+                <input v-model.number="configForm.background_review_retry_backoff_seconds" type="number" min="1" class="input" />
+              </div>
+            </div>
+          </div>
+
           <div v-else-if="activeSettingsTab === 'response'" class="space-y-5">
             <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <div>
@@ -1199,6 +1343,10 @@
               <label class="input-label">{{ t('admin.riskControl.nonHitRetentionDays') }}</label>
               <input v-model.number="configForm.non_hit_retention_days" type="number" min="1" max="3" class="input" />
             </div>
+            <div>
+              <label class="input-label">{{ t('admin.riskControl.contextRetentionDays') }}</label>
+              <input v-model.number="configForm.context_retention_days" type="number" min="1" max="3650" class="input" />
+            </div>
             <div class="rounded-lg border border-gray-100 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400 lg:col-span-2">
               <div class="flex flex-wrap items-center gap-3">
                 <Icon name="database" size="md" class="text-gray-400" />
@@ -1264,6 +1412,21 @@
             </div>
             <pre class="mt-4 max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-950 p-4 text-sm leading-6 text-gray-100 shadow-inner dark:bg-black/50">{{ inputDetailText }}</pre>
           </div>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.riskWeightSnapshot') }}</p>
+              <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ formatWeight(inputDetailRow.risk_weight_snapshot) }}</p>
+            </div>
+            <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.effectiveSampleRate') }}</p>
+              <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ inputDetailRow.effective_sample_rate || '-' }}%</p>
+            </div>
+            <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.effectiveBanThreshold') }}</p>
+              <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ inputDetailRow.effective_ban_threshold || '-' }}</p>
+            </div>
+          </div>
         </div>
 
         <template #footer>
@@ -1291,6 +1454,7 @@ import type {
   ContentModerationAPIKeyLoad,
   ContentModerationAPIKeyStatus,
   ContentModerationAuditModelConfig,
+  ContentModerationAuditModelRuntimeStatus,
   ContentModerationConfig,
   ContentModerationDecisionRule,
   ContentModerationDecisionRuleType,
@@ -1309,7 +1473,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
 
-type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'auditModels' | 'riskThresholds' | 'retention' | 'keywords'
+type SettingsTab = 'basic' | 'scope' | 'runtime' | 'riskProfile' | 'response' | 'auditModels' | 'riskThresholds' | 'retention' | 'keywords'
 type WorkerSlotState = 'active' | 'idle' | 'disabled'
 type APIKeysWriteMode = 'append' | 'replace'
 type OverviewIcon = 'shield' | 'key' | 'users' | 'document'
@@ -1423,7 +1587,22 @@ const configForm = reactive({
   } as ContentModerationSelfUnbanConfig,
   hit_retention_days: 180,
   non_hit_retention_days: 3,
+  context_retention_days: 180,
   pre_hash_check_enabled: false,
+  risk_weight_enabled: true,
+  flagged_weight: 10,
+  ban_weight: 40,
+  manual_suspicious_weight: 60,
+  decay_half_life_days: 90,
+  max_sample_rate: 100,
+  ban_threshold_weight_step: 30,
+  min_effective_ban_threshold: 1,
+  background_review_enabled: true,
+  background_review_batch_size: 5,
+  background_review_max_attempts: 3,
+  background_review_retry_backoff_seconds: 300,
+  context_capture_enabled: true,
+  context_max_bytes: 262144,
   thresholds: { ...riskThresholdDefaults } as Record<string, number>,
   blocked_keywords_text: '',
   keyword_blocking_mode: 'keyword_and_api' as KeywordBlockingMode,
@@ -1457,6 +1636,7 @@ const settingsTabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'basic', label: t('admin.riskControl.tabs.basic') },
   { id: 'scope', label: t('admin.riskControl.tabs.scope') },
   { id: 'runtime', label: t('admin.riskControl.tabs.runtime') },
+  { id: 'riskProfile', label: t('admin.riskControl.tabs.riskProfile') },
   { id: 'response', label: t('admin.riskControl.tabs.response') },
   { id: 'auditModels', label: t('admin.riskControl.tabs.auditModels') },
   { id: 'riskThresholds', label: t('admin.riskControl.tabs.riskThresholds') },
@@ -1861,6 +2041,33 @@ const preBlockAPIKeyLoads = computed<ContentModerationAPIKeyLoad[]>(() => (
   [...(status.value?.pre_block_api_key_loads ?? [])].sort((a, b) => a.index - b.index)
 ))
 
+const backgroundReviewMetricItems = computed(() => [
+  {
+    key: 'pending',
+    label: t('admin.riskControl.pendingContexts'),
+    value: formatNumber(status.value?.pending_context_count ?? 0),
+  },
+  {
+    key: 'processing',
+    label: t('admin.riskControl.processingContexts'),
+    value: formatNumber(status.value?.processing_context_count ?? 0),
+  },
+  {
+    key: 'failed',
+    label: t('admin.riskControl.failedContexts'),
+    value: formatNumber(status.value?.failed_context_count ?? 0),
+  },
+  {
+    key: 'dropped',
+    label: t('admin.riskControl.contextDropCount'),
+    value: formatNumber(status.value?.context_drop_count ?? 0),
+  },
+])
+
+const auditModelRuntimeRows = computed<ContentModerationAuditModelRuntimeStatus[]>(() => (
+  [...(status.value?.audit_model_statuses ?? [])].sort((a, b) => (a.name || a.model_id).localeCompare(b.name || b.model_id))
+))
+
 const preBlockAPIKeyMaxTotal = computed(() => Math.max(1, ...preBlockAPIKeyLoads.value.map((item) => item.total || 0)))
 
 const preBlockAPIKeyLoadSummaryText = computed(() => t('admin.riskControl.preBlockAPIKeyLoadSummary', {
@@ -1937,7 +2144,22 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.self_unban = normalizeSelfUnbanConfig(config.self_unban)
   configForm.hit_retention_days = config.hit_retention_days || 180
   configForm.non_hit_retention_days = Math.min(Math.max(config.non_hit_retention_days || 3, 1), 3)
+  configForm.context_retention_days = config.context_retention_days || 180
   configForm.pre_hash_check_enabled = config.pre_hash_check_enabled ?? false
+  configForm.risk_weight_enabled = config.risk_weight_enabled ?? true
+  configForm.flagged_weight = config.flagged_weight ?? 10
+  configForm.ban_weight = config.ban_weight ?? 40
+  configForm.manual_suspicious_weight = config.manual_suspicious_weight ?? 60
+  configForm.decay_half_life_days = config.decay_half_life_days ?? 90
+  configForm.max_sample_rate = config.max_sample_rate ?? 100
+  configForm.ban_threshold_weight_step = config.ban_threshold_weight_step ?? 30
+  configForm.min_effective_ban_threshold = config.min_effective_ban_threshold ?? 1
+  configForm.background_review_enabled = config.background_review_enabled ?? true
+  configForm.background_review_batch_size = config.background_review_batch_size ?? 5
+  configForm.background_review_max_attempts = config.background_review_max_attempts ?? 3
+  configForm.background_review_retry_backoff_seconds = config.background_review_retry_backoff_seconds ?? 300
+  configForm.context_capture_enabled = config.context_capture_enabled ?? true
+  configForm.context_max_bytes = config.context_max_bytes ?? 262144
   configForm.thresholds = riskThresholdsFromConfig(config.thresholds)
   configForm.blocked_keywords_text = Array.isArray(config.blocked_keywords) ? config.blocked_keywords.join('\n') : ''
   configForm.keyword_blocking_mode = normalizeKeywordBlockingMode(config.keyword_blocking_mode)
@@ -2021,7 +2243,22 @@ async function saveConfig() {
       self_unban: buildSelfUnbanPayload(),
       hit_retention_days: Number(configForm.hit_retention_days) || 180,
       non_hit_retention_days: Math.min(Math.max(Number(configForm.non_hit_retention_days) || 3, 1), 3),
+      context_retention_days: Number(configForm.context_retention_days) || 180,
       pre_hash_check_enabled: configForm.pre_hash_check_enabled,
+      risk_weight_enabled: configForm.risk_weight_enabled,
+      flagged_weight: Math.max(0.01, Number(configForm.flagged_weight) || 10),
+      ban_weight: Math.max(0.01, Number(configForm.ban_weight) || 40),
+      manual_suspicious_weight: Math.max(0.01, Number(configForm.manual_suspicious_weight) || 60),
+      decay_half_life_days: Math.max(1, Number(configForm.decay_half_life_days) || 90),
+      max_sample_rate: Math.min(100, Math.max(0, Number(configForm.max_sample_rate) || 100)),
+      ban_threshold_weight_step: Math.max(1, Number(configForm.ban_threshold_weight_step) || 30),
+      min_effective_ban_threshold: Math.max(1, Number(configForm.min_effective_ban_threshold) || 1),
+      background_review_enabled: configForm.background_review_enabled,
+      background_review_batch_size: Math.min(100, Math.max(1, Number(configForm.background_review_batch_size) || 5)),
+      background_review_max_attempts: Math.max(1, Number(configForm.background_review_max_attempts) || 3),
+      background_review_retry_backoff_seconds: Math.max(1, Number(configForm.background_review_retry_backoff_seconds) || 300),
+      context_capture_enabled: configForm.context_capture_enabled,
+      context_max_bytes: Math.min(2097152, Math.max(1024, Number(configForm.context_max_bytes) || 262144)),
       thresholds: buildRiskThresholdPayload(),
       blocked_keywords: blockedKeywordList.value,
       keyword_blocking_mode: configForm.keyword_blocking_mode,
@@ -2426,6 +2663,33 @@ function apiKeyStatusDotClass(statusValue: ContentModerationAPIKeyStatus['status
   return classes[statusValue] ?? classes.unknown
 }
 
+function auditModelStatusLabel(statusValue: ContentModerationAuditModelRuntimeStatus['status']): string {
+  const labels: Record<ContentModerationAuditModelRuntimeStatus['status'], string> = {
+    ok: t('admin.riskControl.auditModelStatusOk'),
+    error: t('admin.riskControl.auditModelStatusError'),
+    unknown: t('admin.riskControl.auditModelStatusUnknown'),
+  }
+  return labels[statusValue] ?? labels.unknown
+}
+
+function auditModelStatusBadgeClass(statusValue: ContentModerationAuditModelRuntimeStatus['status']): string {
+  const classes: Record<ContentModerationAuditModelRuntimeStatus['status'], string> = {
+    ok: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+    error: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
+    unknown: 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300',
+  }
+  return classes[statusValue] ?? classes.unknown
+}
+
+function auditModelStatusDotClass(statusValue: ContentModerationAuditModelRuntimeStatus['status']): string {
+  const classes: Record<ContentModerationAuditModelRuntimeStatus['status'], string> = {
+    ok: 'bg-emerald-500',
+    error: 'bg-amber-500',
+    unknown: 'bg-gray-400',
+  }
+  return classes[statusValue] ?? classes.unknown
+}
+
 function apiKeyStatusMeta(row: ContentModerationAPIKeyStatus): string {
   const parts: string[] = []
   parts.push(t('admin.riskControl.apiKeyFailureCount', { count: row.failure_count || 0 }))
@@ -2669,6 +2933,11 @@ function formatDateTime(value: string): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
+}
+
+function formatWeight(value: number): string {
+  if (!Number.isFinite(value)) return '0.0'
+  return value.toFixed(1)
 }
 
 onMounted(() => {

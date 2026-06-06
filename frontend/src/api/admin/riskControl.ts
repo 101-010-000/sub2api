@@ -126,6 +126,20 @@ export interface ContentModerationConfig {
   audit_models: ContentModerationAuditModelConfig[]
   decision_rule: ContentModerationDecisionRule
   self_unban: ContentModerationSelfUnbanConfig
+  risk_weight_enabled: boolean
+  flagged_weight: number
+  ban_weight: number
+  manual_suspicious_weight: number
+  decay_half_life_days: number
+  max_sample_rate: number
+  ban_threshold_weight_step: number
+  min_effective_ban_threshold: number
+  background_review_enabled: boolean
+  background_review_batch_size: number
+  background_review_max_attempts: number
+  background_review_retry_backoff_seconds: number
+  context_capture_enabled: boolean
+  context_max_bytes: number
 }
 
 export type ContentModerationAPIKeyStatusValue = 'unknown' | 'ok' | 'error' | 'frozen'
@@ -207,6 +221,37 @@ export interface UpdateContentModerationConfig {
   audit_models?: ContentModerationAuditModelConfig[]
   decision_rule?: ContentModerationDecisionRule
   self_unban?: ContentModerationSelfUnbanConfig
+  risk_weight_enabled?: boolean
+  flagged_weight?: number
+  ban_weight?: number
+  manual_suspicious_weight?: number
+  decay_half_life_days?: number
+  max_sample_rate?: number
+  ban_threshold_weight_step?: number
+  min_effective_ban_threshold?: number
+  background_review_enabled?: boolean
+  background_review_batch_size?: number
+  background_review_max_attempts?: number
+  background_review_retry_backoff_seconds?: number
+  context_capture_enabled?: boolean
+  context_max_bytes?: number
+}
+
+export interface ContentModerationAuditModelRuntimeStatus {
+  model_id: string
+  name: string
+  model: string
+  status: 'unknown' | 'ok' | 'error'
+  success_count: number
+  failure_count: number
+  flagged_count: number
+  disagreement_count: number
+  total_calls: number
+  avg_latency_ms: number
+  last_latency_ms: number
+  last_http_status: number
+  last_error: string
+  last_checked_at?: string
 }
 
 export interface ContentModerationRuntimeStatus {
@@ -235,7 +280,15 @@ export interface ContentModerationRuntimeStatus {
   pre_block_api_key_total_calls: number
   pre_block_api_key_loads: ContentModerationAPIKeyLoad[]
   api_key_statuses: ContentModerationAPIKeyStatus[]
+  audit_model_statuses: ContentModerationAuditModelRuntimeStatus[]
   flagged_hash_count: number
+  pending_context_count: number
+  processing_context_count: number
+  failed_context_count: number
+  last_background_review_at?: string
+  context_drop_count: number
+  context_capture_error: string
+  last_context_capture_error_at?: string
   last_cleanup_at?: string
   last_cleanup_deleted_hit: number
   last_cleanup_deleted_non_hit: number
@@ -277,11 +330,17 @@ export interface ContentModerationLog {
   input_excerpt: string
   keyword_hits?: ContentModerationKeywordHit[]
   audit_context?: unknown
+  context_id?: number | null
   upstream_latency_ms: number | null
   error: string
   violation_count: number
   auto_banned: boolean
   email_sent: boolean
+  risk_weight_snapshot: number
+  effective_sample_rate: number
+  effective_ban_threshold: number
+  risk_event_source: string
+  review_stage: string
   user_status: string
   queue_delay_ms: number | null
   created_at: string
@@ -318,6 +377,75 @@ export interface DeleteFlaggedHashResponse {
 
 export interface ClearFlaggedHashesResponse {
   deleted: number
+}
+
+export interface ContentModerationUserRiskProfile {
+  user_id: number
+  current_weight: number
+  effective_weight: number
+  manual_suspicious: boolean
+  cumulative_flagged_count: number
+  cumulative_ban_count: number
+  last_event_at?: string
+  last_decay_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ContentModerationUserRiskEvent {
+  id: number
+  user_id: number
+  event_type: string
+  source: string
+  review_stage: string
+  weight_delta: number
+  effective_weight_before: number
+  effective_weight_after: number
+  reason: string
+  log_id?: number
+  context_id?: number
+  created_at: string
+}
+
+export interface ContentModerationContext {
+  id: number
+  request_id: string
+  user_id?: number | null
+  user_email: string
+  api_key_id?: number | null
+  api_key_name: string
+  group_id?: number | null
+  group_name: string
+  endpoint: string
+  provider: string
+  model: string
+  protocol: string
+  input_hash: string
+  context_hash: string
+  plain_context?: string
+  context_summary: string
+  context_bytes: number
+  status: string
+  review_stage: string
+  review_attempts: number
+  max_review_attempts: number
+  next_review_at: string
+  processing_started_at?: string
+  reviewed_at?: string
+  last_review_log_id?: number
+  last_review_flagged: boolean
+  last_review_error: string
+  last_capture_error: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ContentModerationUserRiskDetail {
+  profile: ContentModerationUserRiskProfile | null
+  events: ContentModerationUserRiskEvent[]
+  ban_status: ContentModerationBanStatus
+  effective_sample_rate: number
+  effective_ban_threshold: number
 }
 
 export async function getConfig(): Promise<ContentModerationConfig> {
@@ -360,6 +488,38 @@ export async function getUserBanStatus(userID: number): Promise<ContentModeratio
   return data
 }
 
+export async function getUserRiskProfile(userID: number): Promise<ContentModerationUserRiskDetail> {
+  const { data } = await apiClient.get<ContentModerationUserRiskDetail>(
+    `/admin/risk-control/users/${userID}/profile`
+  )
+  return data
+}
+
+export async function setUserSuspicion(
+  userID: number,
+  payload: { suspicious: boolean; reason?: string }
+): Promise<ContentModerationUserRiskDetail> {
+  const { data } = await apiClient.post<ContentModerationUserRiskDetail>(
+    `/admin/risk-control/users/${userID}/suspicion`,
+    payload
+  )
+  return data
+}
+
+export async function listUserContexts(userID: number): Promise<ContentModerationContext[]> {
+  const { data } = await apiClient.get<ContentModerationContext[]>(
+    `/admin/risk-control/users/${userID}/contexts`
+  )
+  return data
+}
+
+export async function getContextDetail(contextID: number): Promise<ContentModerationContext> {
+  const { data } = await apiClient.get<ContentModerationContext>(
+    `/admin/risk-control/contexts/${contextID}`
+  )
+  return data
+}
+
 export async function selfUnbanUser(userID: number): Promise<ContentModerationSelfUnbanResponse> {
   const { data } = await apiClient.post<ContentModerationSelfUnbanResponse>(
     `/admin/risk-control/users/${userID}/self-unban`
@@ -393,6 +553,10 @@ export const riskControlAPI = {
   testAPIKeys,
   listLogs,
   getUserBanStatus,
+  getUserRiskProfile,
+  setUserSuspicion,
+  listUserContexts,
+  getContextDetail,
   selfUnbanUser,
   unbanUser,
   deleteFlaggedHash,

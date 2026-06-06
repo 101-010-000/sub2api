@@ -331,6 +331,24 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 	response.Success(c, systemSettingsResponseData(payload, authSourceDefaults))
 }
 
+// DownloadSiteLogo 将远程 logo URL 下载为现有 site_logo 使用的 data URL 格式。
+// POST /api/v1/admin/settings/site-logo/download
+func (h *SettingHandler) DownloadSiteLogo(c *gin.Context) {
+	var req downloadSiteLogoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	siteLogo, err := h.settingService.DownloadSiteLogo(c.Request.Context(), req.URL)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"site_logo": siteLogo})
+}
+
 // openaiFastPolicySettingsToDTO converts service -> dto for OpenAI fast policy.
 func openaiFastPolicySettingsToDTO(s *service.OpenAIFastPolicySettings) *dto.OpenAIFastPolicySettings {
 	if s == nil {
@@ -698,6 +716,10 @@ type UpdateSettingsRequest struct {
 	AuthSourceGooglePlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_google_platform_quotas"`
 	AuthSourceDingTalkPlatformQuotas map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_dingtalk_platform_quotas"`
 	AuthSourceFeishuPlatformQuotas   map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_feishu_platform_quotas"`
+}
+
+type downloadSiteLogoRequest struct {
+	URL string `json:"url"`
 }
 
 // UpdateSettings 更新系统设置

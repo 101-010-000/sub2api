@@ -317,3 +317,19 @@ func addModerationText(parts *[]string, text string) {
 func normalizeContentModerationText(text string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
 }
+
+func normalizeContentModerationTextPreserveLines(text string) string {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.Join(strings.Fields(strings.TrimSpace(line)), " ")
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
+}

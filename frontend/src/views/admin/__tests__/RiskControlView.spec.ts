@@ -94,6 +94,7 @@ const baseConfig = (): ContentModerationConfig => ({
   retry_count: 2,
   hit_retention_days: 180,
   non_hit_retention_days: 3,
+  context_retention_days: 180,
   pre_hash_check_enabled: false,
   blocked_keywords: [],
   keyword_blocking_mode: 'keyword_and_api',

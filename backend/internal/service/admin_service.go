@@ -126,26 +126,30 @@ type AdminService interface {
 
 // CreateUserInput represents input for creating a new user via admin operations.
 type CreateUserInput struct {
-	Email         string
-	Password      string
-	Username      string
-	Notes         string
-	Balance       *float64
-	Concurrency   int
-	RPMLimit      int
-	AllowedGroups []int64
+	Email                     string
+	Password                  string
+	Username                  string
+	Notes                     string
+	Balance                   *float64
+	Concurrency               int
+	RPMLimit                  int
+	APIKeyMaxActiveIPs        int
+	APIKeyMaxActiveIPsVisible bool
+	AllowedGroups             []int64
 }
 
 type UpdateUserInput struct {
-	Email         string
-	Password      string
-	Username      *string
-	Notes         *string
-	Balance       *float64 // 使用指针区分"未提供"和"设置为0"
-	Concurrency   *int     // 使用指针区分"未提供"和"设置为0"
-	RPMLimit      *int     // 使用指针区分"未提供"和"设置为0"
-	Status        string
-	AllowedGroups *[]int64 // 使用指针区分"未提供"和"设置为空数组"
+	Email                     string
+	Password                  string
+	Username                  *string
+	Notes                     *string
+	Balance                   *float64 // 使用指针区分"未提供"和"设置为0"
+	Concurrency               *int     // 使用指针区分"未提供"和"设置为0"
+	RPMLimit                  *int     // 使用指针区分"未提供"和"设置为0"
+	APIKeyMaxActiveIPs        *int     // 使用指针区分"未提供"和"设置为0"
+	APIKeyMaxActiveIPsVisible *bool    // 使用指针区分"未提供"和"设置为 false"
+	Status                    string
+	AllowedGroups             *[]int64 // 使用指针区分"未提供"和"设置为空数组"
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64
@@ -693,17 +697,22 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	} else if s.settingService != nil {
 		balance = s.settingService.GetDefaultBalance(ctx)
 	}
+	if input.APIKeyMaxActiveIPs < 0 {
+		return nil, ErrInvalidRuntimeLimit
+	}
 
 	user := &User{
-		Email:         input.Email,
-		Username:      input.Username,
-		Notes:         input.Notes,
-		Role:          RoleUser, // Always create as regular user, never admin
-		Balance:       balance,
-		Concurrency:   input.Concurrency,
-		RPMLimit:      input.RPMLimit,
-		Status:        StatusActive,
-		AllowedGroups: input.AllowedGroups,
+		Email:                     input.Email,
+		Username:                  input.Username,
+		Notes:                     input.Notes,
+		Role:                      RoleUser, // Always create as regular user, never admin
+		Balance:                   balance,
+		Concurrency:               input.Concurrency,
+		RPMLimit:                  input.RPMLimit,
+		APIKeyMaxActiveIPs:        input.APIKeyMaxActiveIPs,
+		APIKeyMaxActiveIPsVisible: input.APIKeyMaxActiveIPsVisible,
+		Status:                    StatusActive,
+		AllowedGroups:             input.AllowedGroups,
 	}
 	if err := user.SetPassword(input.Password); err != nil {
 		return nil, err
@@ -756,6 +765,8 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	oldStatus := user.Status
 	oldRole := user.Role
 	oldRPMLimit := user.RPMLimit
+	oldAPIKeyMaxActiveIPs := user.APIKeyMaxActiveIPs
+	oldAPIKeyMaxActiveIPsVisible := user.APIKeyMaxActiveIPsVisible
 
 	if input.Email != "" {
 		user.Email = input.Email
@@ -785,6 +796,17 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		user.RPMLimit = *input.RPMLimit
 	}
 
+	if input.APIKeyMaxActiveIPs != nil {
+		if *input.APIKeyMaxActiveIPs < 0 {
+			return nil, ErrInvalidRuntimeLimit
+		}
+		user.APIKeyMaxActiveIPs = *input.APIKeyMaxActiveIPs
+	}
+
+	if input.APIKeyMaxActiveIPsVisible != nil {
+		user.APIKeyMaxActiveIPsVisible = *input.APIKeyMaxActiveIPsVisible
+	}
+
 	if input.AllowedGroups != nil {
 		user.AllowedGroups = *input.AllowedGroups
 	}
@@ -803,7 +825,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if s.authCacheInvalidator != nil {
 		// RPMLimit 直接参与 billing_cache_service.checkRPM 的三级级联，
 		// 不失效缓存会让修改在一个 L2 TTL 内失去效果。
-		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || user.RPMLimit != oldRPMLimit {
+		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || user.RPMLimit != oldRPMLimit || user.APIKeyMaxActiveIPs != oldAPIKeyMaxActiveIPs || user.APIKeyMaxActiveIPsVisible != oldAPIKeyMaxActiveIPsVisible {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
 		}
 	}

@@ -47,6 +47,22 @@
         />
         <p class="input-hint">{{ t('admin.users.form.rpmLimitHint') }}</p>
       </div>
+      <div>
+        <label class="input-label">{{ t('admin.users.form.apiKeyMaxActiveIPs') }}</label>
+        <input
+          v-model.number="form.api_key_max_active_ips"
+          type="number"
+          min="0"
+          step="1"
+          class="input"
+          :placeholder="t('admin.users.form.apiKeyMaxActiveIPsPlaceholder')"
+        />
+        <p class="input-hint">{{ t('admin.users.form.apiKeyMaxActiveIPsHint') }}</p>
+        <label class="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input v-model="form.api_key_max_active_ips_visible" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <span>{{ t('admin.users.form.apiKeyMaxActiveIPsVisible') }}</span>
+        </label>
+      </div>
     </form>
     <template #footer>
       <div class="flex justify-end gap-3">
@@ -69,7 +85,7 @@ import Icon from '@/components/icons/Icon.vue'
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits(['close', 'success']); const { t } = useI18n()
 
-const form = reactive({ email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0 })
+const form = reactive({ email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false })
 
 const { loading, submit } = useForm({
   form,
@@ -80,13 +96,14 @@ const { loading, submit } = useForm({
     if (balance !== '') {
       payload.balance = Number(balance)
     }
+    payload.api_key_max_active_ips = Math.max(0, Math.floor(Number(payload.api_key_max_active_ips) || 0))
     await adminAPI.users.create(payload)
     emit('success'); emit('close')
   },
   successMsg: t('admin.users.userCreated')
 })
 
-watch(() => props.show, (v) => { if(v) Object.assign(form, { email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0 }) })
+watch(() => props.show, (v) => { if(v) Object.assign(form, { email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false }) })
 
 const generateRandomPassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*'

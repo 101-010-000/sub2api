@@ -100,6 +100,9 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 		return translatePersistenceError(err, nil, service.ErrEmailExists)
 	}
 
+	if err := r.updateUserAPIKeyIPPolicyWithExecutor(txCtx, txAwareSQLExecutor(txCtx, r.sql, r.client), created.ID, userIn.APIKeyMaxActiveIPs, userIn.APIKeyMaxActiveIPsVisible); err != nil {
+		return err
+	}
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, created.ID, userIn.AllowedGroups); err != nil {
 		return err
 	}
@@ -131,6 +134,9 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, 
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
 	}
+	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -147,6 +153,9 @@ func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*
 	}
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
+	}
+	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -174,6 +183,9 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 	}
 	if v, ok := groups[m.ID]; ok {
 		out.AllowedGroups = v
+	}
+	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -257,6 +269,9 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 		return translatePersistenceError(err, service.ErrUserNotFound, service.ErrEmailExists)
 	}
 
+	if err := r.updateUserAPIKeyIPPolicyWithExecutor(txCtx, txAwareSQLExecutor(txCtx, r.sql, r.client), updated.ID, userIn.APIKeyMaxActiveIPs, userIn.APIKeyMaxActiveIPsVisible); err != nil {
+		return err
+	}
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, updated.ID, userIn.AllowedGroups); err != nil {
 		return err
 	}
@@ -530,6 +545,9 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		if groups, ok := allowedGroupsByUser[id]; ok {
 			u.AllowedGroups = groups
 		}
+	}
+	if err := r.hydrateUsersAPIKeyIPPolicy(ctx, outUsers); err != nil {
+		return nil, nil, err
 	}
 
 	return outUsers, paginationResultFromTotal(int64(total), params), nil
@@ -899,6 +917,9 @@ func (r *userRepository) GetFirstAdmin(ctx context.Context) (*service.User, erro
 	if v, ok := groups[m.ID]; ok {
 		out.AllowedGroups = v
 	}
+	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -976,6 +997,116 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 	dst.LastActiveAt = src.LastActiveAt
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
+}
+
+type userAPIKeyIPPolicy struct {
+	MaxActiveIPs int
+	Visible      bool
+}
+
+func (r *userRepository) hydrateUserAPIKeyIPPolicy(ctx context.Context, user *service.User) error {
+	if user == nil {
+		return nil
+	}
+	policies, err := r.loadUserAPIKeyIPPolicies(ctx, []int64{user.ID})
+	if err != nil {
+		return err
+	}
+	if policy, ok := policies[user.ID]; ok {
+		user.APIKeyMaxActiveIPs = policy.MaxActiveIPs
+		user.APIKeyMaxActiveIPsVisible = policy.Visible
+	}
+	return nil
+}
+
+func (r *userRepository) hydrateUsersAPIKeyIPPolicy(ctx context.Context, users []service.User) error {
+	if len(users) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(users))
+	for i := range users {
+		ids = append(ids, users[i].ID)
+	}
+	policies, err := r.loadUserAPIKeyIPPolicies(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for i := range users {
+		if policy, ok := policies[users[i].ID]; ok {
+			users[i].APIKeyMaxActiveIPs = policy.MaxActiveIPs
+			users[i].APIKeyMaxActiveIPsVisible = policy.Visible
+		}
+	}
+	return nil
+}
+
+func (r *userRepository) loadUserAPIKeyIPPolicies(ctx context.Context, userIDs []int64) (map[int64]userAPIKeyIPPolicy, error) {
+	result := make(map[int64]userAPIKeyIPPolicy, len(userIDs))
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	exec := txAwareSQLExecutor(ctx, r.sql, r.client)
+	if exec == nil {
+		return result, nil
+	}
+
+	var rows *sql.Rows
+	var err error
+	if len(userIDs) == 1 {
+		rows, err = exec.QueryContext(ctx, "SELECT id, api_key_max_active_ips, api_key_max_active_ips_visible FROM users WHERE id = $1", userIDs[0])
+	} else {
+		placeholders := make([]string, 0, len(userIDs))
+		args := make([]any, 0, len(userIDs))
+		for i, id := range userIDs {
+			placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+			args = append(args, id)
+		}
+		rows, err = exec.QueryContext(ctx, "SELECT id, api_key_max_active_ips, api_key_max_active_ips_visible FROM users WHERE id IN ("+strings.Join(placeholders, ",")+")", args...)
+	}
+	if err != nil {
+		if isMissingUserAPIKeyIPPolicyColumn(err) {
+			return result, nil
+		}
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var id int64
+		var policy userAPIKeyIPPolicy
+		if err := rows.Scan(&id, &policy.MaxActiveIPs, &policy.Visible); err != nil {
+			return nil, err
+		}
+		result[id] = policy
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (r *userRepository) updateUserAPIKeyIPPolicyWithExecutor(ctx context.Context, exec sqlQueryExecutor, userID int64, maxActiveIPs int, visible bool) error {
+	if exec == nil || userID <= 0 {
+		return nil
+	}
+	_, err := exec.ExecContext(ctx,
+		"UPDATE users SET api_key_max_active_ips = $1, api_key_max_active_ips_visible = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
+		maxActiveIPs,
+		visible,
+		userID,
+	)
+	if err != nil && isMissingUserAPIKeyIPPolicyColumn(err) {
+		return nil
+	}
+	return err
+}
+
+func isMissingUserAPIKeyIPPolicyColumn(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "api_key_max_active_ips") || strings.Contains(msg, "api_key_max_active_ips_visible")
 }
 
 func userSignupSourceOrDefault(signupSource string) string {

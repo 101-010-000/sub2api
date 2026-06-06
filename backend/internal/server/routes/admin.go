@@ -108,6 +108,10 @@ func registerContentModerationRoutes(admin *gin.RouterGroup, h *handler.Handlers
 		risk.POST("/api-keys/test", h.Admin.ContentModeration.TestAPIKeys)
 		risk.GET("/status", h.Admin.ContentModeration.GetStatus)
 		risk.GET("/logs", h.Admin.ContentModeration.ListLogs)
+		risk.GET("/users/:user_id/profile", h.Admin.ContentModeration.GetUserRiskProfile)
+		risk.POST("/users/:user_id/suspicion", h.Admin.ContentModeration.SetUserSuspicion)
+		risk.GET("/users/:user_id/contexts", h.Admin.ContentModeration.ListUserContexts)
+		risk.GET("/contexts/:context_id", h.Admin.ContentModeration.GetContextDetail)
 		risk.GET("/users/:user_id/ban-status", h.Admin.ContentModeration.GetUserBanStatus)
 		risk.POST("/users/:user_id/self-unban", h.Admin.ContentModeration.SelfUnban)
 		risk.POST("/users/:user_id/unban", h.Admin.ContentModeration.UnbanUser)
@@ -426,6 +430,7 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		adminSettings.GET("", h.Admin.Setting.GetSettings)
 		adminSettings.PUT("", h.Admin.Setting.UpdateSettings)
+		adminSettings.POST("/site-logo/download", h.Admin.Setting.DownloadSiteLogo)
 		adminSettings.POST("/test-smtp", h.Admin.Setting.TestSMTPConnection)
 		adminSettings.POST("/send-test-email", h.Admin.Setting.SendTestEmail)
 		adminSettings.GET("/email-templates", h.Admin.Setting.ListEmailTemplates)

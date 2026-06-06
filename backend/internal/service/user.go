@@ -54,6 +54,12 @@ type User struct {
 	// 且该 (用户, 分组) 无 rpm_override 时作为全局兜底生效，计数键 rpm:u:{userID}:{min}。
 	RPMLimit int
 
+	// APIKeyMaxActiveIPs 用户级 API Key 动态活跃 IP 上限（0 = 不限制）。
+	// 普通用户创建或更新 API Key 时不能超过该值，未配置 Key 级上限时会自动套用。
+	APIKeyMaxActiveIPs int
+	// APIKeyMaxActiveIPsVisible 控制普通用户接口是否展示该用户级上限。
+	APIKeyMaxActiveIPsVisible bool
+
 	// UserGroupRPMOverride 来自 auth cache snapshot 的 (user, group) RPM 覆盖值。
 	// nil = 该 API Key 对应的 (user, group) 无 override；非 nil 时 checkRPM 直接使用，
 	// 避免每请求查 DB。字段不持久化到数据库。

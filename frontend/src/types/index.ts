@@ -111,6 +111,8 @@ export interface User {
   balance: number // User balance for API usage
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
+  api_key_max_active_ips?: number // User-level API key active IP cap; only present when visible to the user
+  api_key_max_active_ips_visible?: boolean
   status: 'active' | 'disabled' // Account status
   allowed_groups: number[] | null // Allowed group IDs (null = all non-exclusive groups)
   balance_notify_enabled: boolean
@@ -127,6 +129,8 @@ export interface AdminUser extends User {
   // 管理员备注（普通用户接口不返回）
   notes: string
   last_used_at?: string | null
+  api_key_max_active_ips: number
+  api_key_max_active_ips_visible: boolean
   // 用户专属分组倍率配置 (group_id -> rate_multiplier)
   group_rates?: Record<number, number>
   // 当前并发数（仅管理员列表接口返回）
@@ -1566,6 +1570,9 @@ export interface UpdateUserRequest {
   role?: 'admin' | 'user'
   balance?: number
   concurrency?: number
+  rpm_limit?: number
+  api_key_max_active_ips?: number
+  api_key_max_active_ips_visible?: boolean
   status?: 'active' | 'disabled'
   allowed_groups?: number[] | null
   // 用户专属分组倍率配置 (group_id -> rate_multiplier | null)

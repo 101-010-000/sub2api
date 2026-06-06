@@ -7,6 +7,7 @@ import SettingsView from "../SettingsView.vue";
 const {
   getSettings,
   updateSettings,
+  downloadSiteLogo,
   getWebSearchEmulationConfig,
   updateWebSearchEmulationConfig,
   getAdminApiKey,
@@ -29,6 +30,7 @@ const {
 } = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  downloadSiteLogo: vi.fn(),
   getWebSearchEmulationConfig: vi.fn(),
   updateWebSearchEmulationConfig: vi.fn(),
   getAdminApiKey: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock("@/api", () => ({
     settings: {
       getSettings,
       updateSettings,
+      downloadSiteLogo,
       getWebSearchEmulationConfig,
       updateWebSearchEmulationConfig,
       getAdminApiKey,
@@ -163,6 +166,12 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.openaiExperimentalScheduler.description": "默认关闭。开启后仅影响本网关在 OpenAI 账号间的实验性调度选择逻辑，不代表上游 OpenAI 官方能力。",
     "admin.settings.site.uploadImage": "上传图片",
     "admin.settings.site.remove": "移除",
+    "admin.settings.site.logoUrlPlaceholder": "https://example.com/logo.png",
+    "admin.settings.site.logoUrlHint": "填写图片 URL 后由服务端下载并写入站点 Logo 配置。",
+    "admin.settings.site.downloadLogo": "下载 Logo",
+    "admin.settings.site.logoDownloading": "下载中",
+    "admin.settings.site.logoDownloadSuccess": "Logo 已下载，请保存设置后生效。",
+    "admin.settings.site.logoDownloadError": "下载 Logo 失败",
     "admin.settings.platformQuota.platform": "平台",
     "admin.settings.platformQuota.daily": "日限额 (USD)",
     "admin.settings.platformQuota.weekly": "周限额 (USD)",
@@ -477,6 +486,7 @@ describe("admin SettingsView payment visible method controls", () => {
   beforeEach(() => {
     getSettings.mockReset();
     updateSettings.mockReset();
+    downloadSiteLogo.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
     getAdminApiKey.mockReset();
@@ -503,6 +513,9 @@ describe("admin SettingsView payment visible method controls", () => {
       ...baseSettingsResponse,
       ...payload,
     }));
+    downloadSiteLogo.mockResolvedValue({
+      site_logo: "data:image/png;base64,downloaded",
+    });
     getWebSearchEmulationConfig.mockResolvedValue({
       enabled: false,
       providers: [],
@@ -562,6 +575,27 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(wrapper.text()).not.toContain("支付来源");
   });
 
+  it("downloads the site logo from URL into the existing logo field", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    await wrapper
+      .get('input[placeholder="https://example.com/logo.png"]')
+      .setValue("https://cdn.example.com/logo.png");
+    await wrapper
+      .findAll("button")
+      .find((node) => node.text().includes("下载 Logo"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(downloadSiteLogo).toHaveBeenCalledWith("https://cdn.example.com/logo.png");
+    const siteLogoUpload = wrapper.find(".image-upload-stub");
+    expect(siteLogoUpload.attributes("data-model-value")).toBe(
+      "data:image/png;base64,downloaded",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Logo 已下载，请保存设置后生效。");
+  });
+
   it("links payment guidance to README sections instead of removed payment docs", async () => {
     const wrapper = mountView();
 
@@ -576,10 +610,10 @@ describe("admin SettingsView payment visible method controls", () => {
 
     expect(paymentLinks).toHaveLength(2);
     expect(paymentLinks[0]?.attributes("href")).toBe(
-      "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md",
+      "https://github.com/TalexDreamSoul/sub2api/blob/main/docs/PAYMENT_CN.md",
     );
     expect(paymentLinks[1]?.attributes("href")).toBe(
-      "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md#支持的支付方式",
+      "https://github.com/TalexDreamSoul/sub2api/blob/main/docs/PAYMENT_CN.md#支持的支付方式",
     );
     for (const link of paymentLinks) {
       expect(link.attributes("href")).toContain("docs/PAYMENT");
@@ -760,6 +794,7 @@ describe("admin SettingsView wechat connect controls", () => {
   beforeEach(() => {
     getSettings.mockReset();
     updateSettings.mockReset();
+    downloadSiteLogo.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
     getAdminApiKey.mockReset();
@@ -789,6 +824,9 @@ describe("admin SettingsView wechat connect controls", () => {
       payment_visible_method_wxpay_source: "official_wxpay",
       ...payload,
     }));
+    downloadSiteLogo.mockResolvedValue({
+      site_logo: "data:image/png;base64,downloaded",
+    });
     getWebSearchEmulationConfig.mockResolvedValue({
       enabled: false,
       providers: [],
@@ -1006,6 +1044,7 @@ describe("admin SettingsView platform quota matrix", () => {
   beforeEach(() => {
     getSettings.mockReset();
     updateSettings.mockReset();
+    downloadSiteLogo.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
     getAdminApiKey.mockReset();
@@ -1032,6 +1071,9 @@ describe("admin SettingsView platform quota matrix", () => {
       ...baseSettingsResponse,
       ...payload,
     }));
+    downloadSiteLogo.mockResolvedValue({
+      site_logo: "data:image/png;base64,downloaded",
+    });
     getWebSearchEmulationConfig.mockResolvedValue({ enabled: false, providers: [] });
     updateWebSearchEmulationConfig.mockResolvedValue({ enabled: false, providers: [] });
     getAdminApiKey.mockResolvedValue({ exists: false, masked_key: "" });

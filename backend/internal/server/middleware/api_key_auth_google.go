@@ -77,7 +77,7 @@ func APIKeyAuthWithSubscriptionGoogleWithRuntime(apiKeyService *service.APIKeySe
 			}
 		}
 		if apiKeyRuntimeService == nil {
-			if apiKey.MaxActiveIPs > 0 || apiKey.MaxConcurrency > 0 {
+			if service.EffectiveAPIKeyMaxActiveIPs(apiKey) > 0 || apiKey.MaxConcurrency > 0 {
 				abortWithGoogleError(c, 503, "API key runtime limit service unavailable")
 				return
 			}

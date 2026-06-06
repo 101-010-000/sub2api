@@ -5001,6 +5001,41 @@
                   :hint="t('admin.settings.site.logoHint')"
                   :max-size="300 * 1024"
                 />
+                <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    v-model="siteLogoUrlInput"
+                    type="url"
+                    class="input font-mono text-sm"
+                    :placeholder="t('admin.settings.site.logoUrlPlaceholder')"
+                    @keydown.enter.prevent="downloadSiteLogoFromUrl"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm shrink-0"
+                    :disabled="siteLogoDownloading || !siteLogoUrlInput.trim()"
+                    @click="downloadSiteLogoFromUrl"
+                  >
+                    <span
+                      v-if="siteLogoDownloading"
+                      class="mr-1.5 h-4 w-4 animate-spin rounded-full border-b-2 border-current"
+                    ></span>
+                    <Icon
+                      v-else
+                      name="download"
+                      size="sm"
+                      class="mr-1.5"
+                      :stroke-width="2"
+                    />
+                    {{
+                      siteLogoDownloading
+                        ? t("admin.settings.site.logoDownloading")
+                        : t("admin.settings.site.downloadLogo")
+                    }}
+                  </button>
+                </div>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.site.logoUrlHint") }}
+                </p>
               </div>
 
               <!-- Home Content -->
@@ -7019,14 +7054,14 @@ function localText(zh: string, en: string): string {
 
 const paymentGuideHref = computed(() =>
   locale.value.startsWith("zh")
-    ? "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md"
-    : "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT.md",
+    ? "https://github.com/TalexDreamSoul/sub2api/blob/main/docs/PAYMENT_CN.md"
+    : "https://github.com/TalexDreamSoul/sub2api/blob/main/docs/PAYMENT.md",
 );
 
 const paymentMethodsHref = computed(() =>
   locale.value.startsWith("zh")
-    ? "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md#支持的支付方式"
-    : "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT.md#supported-payment-methods",
+    ? "https://github.com/TalexDreamSoul/sub2api/blob/main/docs/PAYMENT_CN.md#支持的支付方式"
+    : "https://github.com/TalexDreamSoul/sub2api/blob/main/docs/PAYMENT.md#supported-payment-methods",
 );
 
 type SettingsTab =
@@ -7107,6 +7142,8 @@ const { copyToClipboard } = useClipboard();
 const loading = ref(true);
 const loadFailed = ref(false);
 const saving = ref(false);
+const siteLogoUrlInput = ref("");
+const siteLogoDownloading = ref(false);
 const testingSmtp = ref(false);
 const sendingTestEmail = ref(false);
 const smtpPasswordManuallyEdited = ref(false);
@@ -8246,6 +8283,27 @@ async function loadSettings() {
     );
   } finally {
     loading.value = false;
+  }
+}
+
+async function downloadSiteLogoFromUrl() {
+  const url = siteLogoUrlInput.value.trim();
+  if (!url || siteLogoDownloading.value) {
+    return;
+  }
+
+  siteLogoDownloading.value = true;
+  try {
+    const result = await adminAPI.settings.downloadSiteLogo(url);
+    form.site_logo = result.site_logo;
+    siteLogoUrlInput.value = "";
+    appStore.showSuccess(t("admin.settings.site.logoDownloadSuccess"));
+  } catch (error: unknown) {
+    appStore.showError(
+      extractApiErrorMessage(error, t("admin.settings.site.logoDownloadError")),
+    );
+  } finally {
+    siteLogoDownloading.value = false;
   }
 }
 

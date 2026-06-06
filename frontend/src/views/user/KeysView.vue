@@ -577,6 +577,9 @@
 
           <div v-if="formData.enable_runtime_limits" class="space-y-4 pt-2">
             <p class="input-hint -mt-2">{{ t('keys.runtimeLimitsHint') }}</p>
+            <p v-if="showUserAPIKeyMaxActiveIPs" class="input-hint -mt-1">
+              {{ t('keys.accountMaxActiveIPsLimit', { limit: userAPIKeyMaxActiveIPs > 0 ? userAPIKeyMaxActiveIPs : t('keys.runtimeUnlimited') }) }}
+            </p>
             <div class="grid gap-4 sm:grid-cols-3">
               <div>
                 <label class="input-label">{{ t('keys.maxActiveIPs') }}</label>
@@ -584,11 +587,17 @@
                   v-model.number="formData.max_active_ips"
                   type="number"
                   min="0"
+                  :max="userAPIKeyMaxActiveIPs > 0 ? userAPIKeyMaxActiveIPs : undefined"
                   step="1"
                   class="input"
-                  placeholder="0"
+                  :placeholder="userAPIKeyMaxActiveIPs > 0 ? String(userAPIKeyMaxActiveIPs) : '0'"
                 />
-                <p class="input-hint">{{ t('keys.maxActiveIPsHint') }}</p>
+                <p class="input-hint">
+                  {{ t('keys.maxActiveIPsHint') }}
+                  <span v-if="!showEditModal && showUserAPIKeyMaxActiveIPs && userAPIKeyMaxActiveIPs > 0">
+                    {{ t('keys.effectiveMaxActiveIPs', { limit: effectiveCreateMaxActiveIPs }) }}
+                  </span>
+                </p>
               </div>
               <div>
                 <label class="input-label">{{ t('keys.ipIdleTimeout') }}</label>
@@ -1253,6 +1262,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
 import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import DataTable from '@/components/common/DataTable.vue'
@@ -1296,6 +1306,7 @@ interface GroupOption {
 
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
+const authStore = useAuthStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
 
 const columns = computed<Column[]>(() => [
@@ -1419,6 +1430,22 @@ const statusOptions = computed(() => [
   { value: 'inactive', label: t('common.inactive') }
 ])
 
+const userAPIKeyMaxActiveIPs = computed(() => authStore.user?.api_key_max_active_ips ?? 0)
+const showUserAPIKeyMaxActiveIPs = computed(() =>
+  authStore.user?.api_key_max_active_ips_visible === true &&
+  authStore.user?.api_key_max_active_ips !== undefined
+)
+const effectiveCreateMaxActiveIPs = computed(() => {
+  const configured = formData.value.max_active_ips && formData.value.max_active_ips > 0
+    ? Math.floor(formData.value.max_active_ips)
+    : 0
+  const userLimit = userAPIKeyMaxActiveIPs.value
+  if (userLimit > 0 && (configured <= 0 || userLimit < configured)) {
+    return userLimit
+  }
+  return configured
+})
+
 // Filter dropdown options
 const groupFilterOptions = computed(() => [
   { value: '', label: t('keys.allGroups') },
@@ -1485,15 +1512,24 @@ const copyToClipboard = async (text: string, keyId: number) => {
 
 const hasRuntimeLimits = (key: ApiKey): boolean =>
   (key.max_active_ips || 0) > 0 ||
+  (showUserAPIKeyMaxActiveIPs.value && userAPIKeyMaxActiveIPs.value > 0) ||
   (key.ip_idle_timeout_seconds || 0) > 0 ||
   (key.max_concurrency || 0) > 0
 
 const effectiveIdleTimeout = (seconds: number | null | undefined): number =>
   seconds && seconds > 0 ? seconds : 600
 
+const effectiveRuntimeMaxActiveIPs = (key: ApiKey): number => {
+  const keyLimit = key.max_active_ips || 0
+  const userLimit = showUserAPIKeyMaxActiveIPs.value ? userAPIKeyMaxActiveIPs.value : 0
+  if (userLimit > 0 && (keyLimit <= 0 || userLimit < keyLimit)) return userLimit
+  return keyLimit
+}
+
 const runtimeActiveIPSummary = (key: ApiKey): string => {
-  if ((key.max_active_ips || 0) <= 0) return t('keys.runtimeUnlimited')
-  return `${key.max_active_ips}/${formatRuntimeSeconds(effectiveIdleTimeout(key.ip_idle_timeout_seconds))}`
+  const maxActiveIPs = effectiveRuntimeMaxActiveIPs(key)
+  if (maxActiveIPs <= 0) return t('keys.runtimeUnlimited')
+  return `${maxActiveIPs}/${formatRuntimeSeconds(effectiveIdleTimeout(key.ip_idle_timeout_seconds))}`
 }
 
 const runtimeConcurrencySummary = (key: ApiKey): string => {
@@ -1792,6 +1828,10 @@ const handleSubmit = async () => {
     (runtimeLimitData.ip_idle_timeout_seconds < 60 || runtimeLimitData.ip_idle_timeout_seconds > 86400)
   ) {
     appStore.showError(t('keys.invalidIPIdleTimeout'))
+    return
+  }
+  if (userAPIKeyMaxActiveIPs.value > 0 && runtimeLimitData.max_active_ips > userAPIKeyMaxActiveIPs.value) {
+    appStore.showError(t('keys.maxActiveIPsUserLimitExceeded', { limit: userAPIKeyMaxActiveIPs.value }))
     return
   }
 

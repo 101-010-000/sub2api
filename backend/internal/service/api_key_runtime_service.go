@@ -60,7 +60,8 @@ func NewAPIKeyRuntimeService(cache APIKeyRuntimeCache) *APIKeyRuntimeService {
 }
 
 func (s *APIKeyRuntimeService) EnforceActiveIP(ctx context.Context, apiKey *APIKey, clientIP string) error {
-	if apiKey == nil || apiKey.MaxActiveIPs <= 0 {
+	maxActiveIPs := EffectiveAPIKeyMaxActiveIPs(apiKey)
+	if apiKey == nil || maxActiveIPs <= 0 {
 		return nil
 	}
 	if s == nil || s.cache == nil {
@@ -70,7 +71,7 @@ func (s *APIKeyRuntimeService) EnforceActiveIP(ctx context.Context, apiKey *APIK
 		ctx,
 		apiKey.ID,
 		clientIP,
-		apiKey.MaxActiveIPs,
+		maxActiveIPs,
 		time.Duration(EffectiveAPIKeyIPIdleTimeoutSeconds(apiKey.IPIdleTimeoutSeconds))*time.Second,
 	)
 	if err != nil {
@@ -110,13 +111,13 @@ func (s *APIKeyRuntimeService) GetStatus(ctx context.Context, apiKey *APIKey) (*
 		return nil, ErrAPIKeyNotFound
 	}
 	status := &APIKeyRuntimeStatus{
-		MaxActiveIPs:         apiKey.MaxActiveIPs,
+		MaxActiveIPs:         EffectiveAPIKeyMaxActiveIPs(apiKey),
 		IPIdleTimeoutSeconds: apiKey.IPIdleTimeoutSeconds,
 		MaxConcurrency:       apiKey.MaxConcurrency,
 		ActiveIPs:            []APIKeyActiveIP{},
 	}
 	if s == nil || s.cache == nil {
-		if apiKey.MaxActiveIPs > 0 || apiKey.MaxConcurrency > 0 {
+		if status.MaxActiveIPs > 0 || apiKey.MaxConcurrency > 0 {
 			return nil, ErrAPIKeyRuntimeUnavailable
 		}
 		return status, nil
@@ -128,7 +129,7 @@ func (s *APIKeyRuntimeService) GetStatus(ctx context.Context, apiKey *APIKey) (*
 		}
 		status.CurrentConcurrency = count
 	}
-	if apiKey.MaxActiveIPs > 0 {
+	if status.MaxActiveIPs > 0 {
 		idleTimeout := time.Duration(EffectiveAPIKeyIPIdleTimeoutSeconds(apiKey.IPIdleTimeoutSeconds)) * time.Second
 		ips, err := s.cache.GetActiveIPs(ctx, apiKey.ID, idleTimeout)
 		if err != nil {

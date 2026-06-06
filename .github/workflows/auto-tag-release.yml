@@ -1,0 +1,123 @@
+name: Auto Tag Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without or with v prefix. Leave empty to bump patch from backend/cmd/server/VERSION.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto-tag-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  create-tag:
+    name: Bump VERSION and create release tag
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (!contains(github.event.head_commit.message, '[skip release]') &&
+           !contains(github.event.head_commit.message, '[skip ci]')) }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_VERSION="${{ github.event.inputs.version || '' }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="${INPUT_VERSION#v}"
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "version must be numeric semver: X.Y.Z" >&2
+              exit 1
+            fi
+            TAG="v${VERSION}"
+            if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null || \
+               git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+              echo "tag ${TAG} already exists" >&2
+              exit 1
+            fi
+          else
+            CURRENT_VERSION="$(tr -d '\r\n' < backend/cmd/server/VERSION)"
+            if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "backend/cmd/server/VERSION must be numeric semver: X.Y.Z" >&2
+              exit 1
+            fi
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+            while true; do
+              PATCH=$((PATCH + 1))
+              VERSION="${MAJOR}.${MINOR}.${PATCH}"
+              TAG="v${VERSION}"
+              if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null && \
+                 ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+                break
+              fi
+            done
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Releasing v${VERSION}"
+
+      - name: Commit VERSION bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "$VERSION" > backend/cmd/server/VERSION
+
+          if git diff --quiet -- backend/cmd/server/VERSION; then
+            echo "VERSION already set to ${VERSION}"
+          else
+            git add backend/cmd/server/VERSION
+            git commit -m "chore: bump VERSION to ${VERSION} [skip ci]"
+            git push origin HEAD:${{ github.event.repository.default_branch }}
+          fi
+
+      - name: Create and push tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          git tag -a "$TAG" \
+            -m "Sub2API ${TAG}" \
+            -m "Automated release from ${GITHUB_SHA}."
+          git push origin "$TAG"
+
+      - name: Dispatch packaging workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          gh workflow run release.yml \
+            --ref "${{ github.event.repository.default_branch }}" \
+            -f tag="$TAG" \
+            -f simple_release=false
+
+      - name: Summary
+        run: |
+          echo "Created ${{ steps.version.outputs.tag }} and dispatched release.yml to package binaries, checksums, and Docker images from this tag."

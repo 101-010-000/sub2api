@@ -51,6 +51,10 @@ type APIKeyAuthUserSnapshot struct {
 	// RPMLimit 用户级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 兜底判断。
 	RPMLimit int `json:"rpm_limit"`
 
+	// APIKeyMaxActiveIPs 用户级 API Key 活跃 IP 上限；热路径用于计算有效动态 IP 上限。
+	APIKeyMaxActiveIPs        int  `json:"api_key_max_active_ips"`
+	APIKeyMaxActiveIPsVisible bool `json:"api_key_max_active_ips_visible"`
+
 	// UserGroupRPMOverride 该 API Key 对应的 (user, group) 专属 RPM 覆盖值。
 	// nil = 无 override（回退到 group/user 级）；0 = 不限流；>0 = 专属上限。
 	UserGroupRPMOverride *int `json:"user_group_rpm_override,omitempty"`

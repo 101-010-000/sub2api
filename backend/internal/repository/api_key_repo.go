@@ -84,7 +84,11 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	out := apiKeyEntityToService(m)
+	if err := r.hydrateAPIKeyUserIPPolicy(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // GetKeyAndOwnerID 根据 API Key ID 获取其 key 与所有者（用户）ID。
@@ -118,7 +122,11 @@ func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.A
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	out := apiKeyEntityToService(m)
+	if err := r.hydrateAPIKeyUserIPPolicy(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*service.APIKey, error) {
@@ -200,7 +208,11 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 		}
 		return nil, err
 	}
-	return apiKeyEntityToService(m), nil
+	out := apiKeyEntityToService(m)
+	if err := r.hydrateAPIKeyUserIPPolicy(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) error {
@@ -662,6 +674,37 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		out.Group = groupEntityToService(m.Edges.Group)
 	}
 	return out
+}
+
+func (r *apiKeyRepository) hydrateAPIKeyUserIPPolicy(ctx context.Context, apiKey *service.APIKey) error {
+	if apiKey == nil || apiKey.User == nil || apiKey.User.ID <= 0 {
+		return nil
+	}
+	if r.sql == nil {
+		return nil
+	}
+	rows, err := r.sql.QueryContext(ctx,
+		"SELECT api_key_max_active_ips, api_key_max_active_ips_visible FROM users WHERE id = $1",
+		apiKey.User.ID,
+	)
+	if err != nil {
+		if isMissingUserAPIKeyIPPolicyColumn(err) {
+			return nil
+		}
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return rows.Err()
+	}
+	var maxActiveIPs int
+	var visible bool
+	if err := rows.Scan(&maxActiveIPs, &visible); err != nil {
+		return err
+	}
+	apiKey.User.APIKeyMaxActiveIPs = maxActiveIPs
+	apiKey.User.APIKeyMaxActiveIPsVisible = visible
+	return nil
 }
 
 func userEntityToService(u *dbent.User) *service.User {

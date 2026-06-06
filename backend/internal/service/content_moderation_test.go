@@ -75,14 +75,27 @@ func (r *contentModerationTestSettingRepo) Delete(ctx context.Context, key strin
 }
 
 type contentModerationTestRepo struct {
-	mu   sync.Mutex
-	logs []ContentModerationLog
+	mu            sync.Mutex
+	logs          []ContentModerationLog
+	nextLogID     int64
+	profiles      map[int64]ContentModerationUserRiskProfile
+	events        []ContentModerationUserRiskEvent
+	contexts      []ContentModerationContext
+	nextContextID int64
+	accessLogs    []int64
 }
 
 func (r *contentModerationTestRepo) CreateLog(ctx context.Context, log *ContentModerationLog) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if log != nil {
+		if log.ID <= 0 {
+			r.nextLogID++
+			log.ID = r.nextLogID
+		}
+		if log.CreatedAt.IsZero() {
+			log.CreatedAt = time.Now()
+		}
 		r.logs = append(r.logs, *log)
 	}
 	return nil
@@ -108,7 +121,7 @@ func (r *contentModerationTestRepo) CountFlaggedByUserSince(ctx context.Context,
 	return count, nil
 }
 
-func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error) {
+func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time, contextBefore time.Time) (*ContentModerationCleanupResult, error) {
 	return &ContentModerationCleanupResult{}, nil
 }
 
@@ -129,6 +142,188 @@ func (r *contentModerationTestRepo) CountSelfUnbanAttempts(ctx context.Context, 
 }
 
 func (r *contentModerationTestRepo) CreateSelfUnbanRecord(ctx context.Context, record *ContentModerationSelfUnbanRecord) error {
+	return nil
+}
+
+func (r *contentModerationTestRepo) GetUserRiskProfile(ctx context.Context, userID int64) (*ContentModerationUserRiskProfile, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.profiles == nil {
+		return nil, nil
+	}
+	profile, ok := r.profiles[userID]
+	if !ok {
+		return nil, nil
+	}
+	return &profile, nil
+}
+
+func (r *contentModerationTestRepo) UpsertUserRiskProfile(ctx context.Context, profile *ContentModerationUserRiskProfile) error {
+	if profile == nil || profile.UserID <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.profiles == nil {
+		r.profiles = map[int64]ContentModerationUserRiskProfile{}
+	}
+	clone := *profile
+	if clone.CreatedAt.IsZero() {
+		clone.CreatedAt = time.Now()
+	}
+	clone.UpdatedAt = time.Now()
+	r.profiles[clone.UserID] = clone
+	return nil
+}
+
+func (r *contentModerationTestRepo) CreateUserRiskEvent(ctx context.Context, event *ContentModerationUserRiskEvent) error {
+	if event == nil || event.UserID <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	clone := *event
+	if clone.ID <= 0 {
+		clone.ID = int64(len(r.events) + 1)
+	}
+	if clone.CreatedAt.IsZero() {
+		clone.CreatedAt = time.Now()
+	}
+	r.events = append(r.events, clone)
+	return nil
+}
+
+func (r *contentModerationTestRepo) ListUserRiskEvents(ctx context.Context, userID int64, limit int) ([]ContentModerationUserRiskEvent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]ContentModerationUserRiskEvent, 0)
+	for i := len(r.events) - 1; i >= 0; i-- {
+		if r.events[i].UserID != userID {
+			continue
+		}
+		out = append(out, r.events[i])
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *contentModerationTestRepo) CreateContext(ctx context.Context, item *ContentModerationContext) error {
+	if item == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if item.ID <= 0 {
+		r.nextContextID++
+		item.ID = r.nextContextID
+	}
+	if item.CreatedAt.IsZero() {
+		item.CreatedAt = time.Now()
+	}
+	item.UpdatedAt = time.Now()
+	r.contexts = append(r.contexts, *item)
+	return nil
+}
+
+func (r *contentModerationTestRepo) ClaimPendingContexts(ctx context.Context, batchSize int) ([]ContentModerationContext, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	out := make([]ContentModerationContext, 0)
+	for i := range r.contexts {
+		if len(out) >= batchSize {
+			break
+		}
+		if r.contexts[i].Status != ContentModerationContextStatusPending || r.contexts[i].NextReviewAt.After(now) {
+			continue
+		}
+		r.contexts[i].Status = ContentModerationContextStatusProcessing
+		r.contexts[i].ReviewAttempts++
+		started := now
+		r.contexts[i].ProcessingStartedAt = &started
+		out = append(out, r.contexts[i])
+	}
+	return out, nil
+}
+
+func (r *contentModerationTestRepo) UpdateContextReview(ctx context.Context, update ContentModerationContextReviewUpdate) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.contexts {
+		if r.contexts[i].ID != update.ID {
+			continue
+		}
+		if update.Status != "" {
+			r.contexts[i].Status = update.Status
+		}
+		if update.NextReviewAt != nil {
+			r.contexts[i].NextReviewAt = *update.NextReviewAt
+		}
+		r.contexts[i].ReviewedAt = update.ReviewedAt
+		r.contexts[i].LastReviewLogID = update.LastReviewLogID
+		r.contexts[i].LastReviewFlagged = update.LastReviewFlagged
+		r.contexts[i].LastReviewError = update.LastReviewError
+		r.contexts[i].UpdatedAt = time.Now()
+		return nil
+	}
+	return nil
+}
+
+func (r *contentModerationTestRepo) CountContextsByStatus(ctx context.Context) (*ContentModerationContextStatusCounts, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	counts := &ContentModerationContextStatusCounts{}
+	for _, item := range r.contexts {
+		switch item.Status {
+		case ContentModerationContextStatusPending:
+			counts.Pending++
+		case ContentModerationContextStatusProcessing:
+			counts.Processing++
+		case ContentModerationContextStatusFailed:
+			counts.Failed++
+		}
+		if item.ReviewedAt != nil && (counts.LastReviewedAt == nil || item.ReviewedAt.After(*counts.LastReviewedAt)) {
+			t := *item.ReviewedAt
+			counts.LastReviewedAt = &t
+		}
+	}
+	return counts, nil
+}
+
+func (r *contentModerationTestRepo) ListUserContexts(ctx context.Context, userID int64, limit int) ([]ContentModerationContext, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]ContentModerationContext, 0)
+	for i := len(r.contexts) - 1; i >= 0; i-- {
+		if r.contexts[i].UserID == nil || *r.contexts[i].UserID != userID {
+			continue
+		}
+		out = append(out, r.contexts[i])
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *contentModerationTestRepo) GetContextByID(ctx context.Context, contextID int64) (*ContentModerationContext, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, item := range r.contexts {
+		if item.ID == contextID {
+			clone := item
+			return &clone, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *contentModerationTestRepo) CreateContextAccessLog(ctx context.Context, contextID int64, adminUserID int64, action string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.accessLogs = append(r.accessLogs, contextID)
 	return nil
 }
 
@@ -379,6 +574,16 @@ func (c *contentModerationTestHashCache) snapshotChecked() []string {
 	out := make([]string, len(c.checked))
 	copy(out, c.checked)
 	return out
+}
+
+type contentModerationTestEncryptor struct{}
+
+func (contentModerationTestEncryptor) Encrypt(plaintext string) (string, error) {
+	return plaintext, nil
+}
+
+func (contentModerationTestEncryptor) Decrypt(ciphertext string) (string, error) {
+	return ciphertext, nil
 }
 
 func (c *contentModerationTestHashCache) hasHash(inputHash string) bool {
@@ -1148,6 +1353,150 @@ func TestContentModerationCheck_OpenAIResponsesRecordsNonHitForCodexPayload(t *t
 	require.Equal(t, "last user prompt", moderationRequest.Input)
 }
 
+func TestContentModerationBackgroundReview_AuditModelReceivesUserMessagesOnly(t *testing.T) {
+	var auditPrompt string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/chat/completions", r.URL.Path)
+		var req openAIChatCompletionRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		require.Len(t, req.Messages, 1)
+		auditPrompt = req.Messages[0].Content
+		_ = json.NewEncoder(w).Encode(openAIChatCompletionResponse{
+			Choices: []struct {
+				Message openAIChatMessage `json:"message"`
+			}{{
+				Message: openAIChatMessage{
+					Role:    "assistant",
+					Content: `{"violation":false,"risk_score":0,"reason":"ok","categories":[]}`,
+				},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModeObserve
+	cfg.APIKeys = []string{}
+	cfg.RecordNonHits = true
+	cfg.ContextCaptureEnabled = true
+	cfg.BackgroundReviewEnabled = true
+	cfg.BackgroundReviewBatchSize = 1
+	cfg.AuditModels = []ContentModerationAuditModelConfig{{
+		ID:             "third_party",
+		Name:           "Third Party",
+		Enabled:        true,
+		Protocol:       ContentModerationAuditProtocolOpenAICompatible,
+		BaseURL:        server.URL,
+		APIKey:         "sk-audit",
+		Model:          "audit-model",
+		PromptTemplate: "audit input={{input}}",
+		Weight:         1,
+		TimeoutMS:      3000,
+	}}
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	repo := &contentModerationTestRepo{}
+	svc := &ContentModerationService{
+		settingRepo: &contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		repo:             repo,
+		hashCache:        &contentModerationTestHashCache{},
+		encryptor:        contentModerationTestEncryptor{},
+		httpClient:       &http.Client{},
+		keyHealth:        map[string]*contentModerationKeyHealth{},
+		auditModelHealth: map[string]*contentModerationAuditModelHealth{},
+	}
+	body := []byte(`{
+		"model":"gpt-5.5",
+		"system":"system prompt should only be retained for detail view",
+		"input":[
+			{"type":"message","role":"developer","content":[{"type":"input_text","text":"developer instruction should not be audited"}]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"first user prompt"}]},
+			{"type":"message","role":"assistant","content":[{"type":"output_text","text":"assistant answer should not be audited"}]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"latest user prompt"}]}
+		]
+	}`)
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		RequestID: "req-bg-user-only",
+		UserID:    1001,
+		Endpoint:  "/responses",
+		Provider:  "openai",
+		Model:     "gpt-5.5",
+		Protocol:  ContentModerationProtocolOpenAIResponses,
+		Body:      body,
+	})
+
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.NotNil(t, decision.ContextID)
+	require.Len(t, repo.contexts, 1)
+	require.Contains(t, repo.contexts[0].EncryptedContext, "developer instruction should not be audited")
+
+	svc.processBackgroundReviews(context.Background(), cfg)
+
+	require.Equal(t, "audit input=first user prompt\nlatest user prompt", auditPrompt)
+	require.NotContains(t, auditPrompt, "system prompt")
+	require.NotContains(t, auditPrompt, "developer instruction")
+	require.NotContains(t, auditPrompt, "assistant answer")
+	logs := requireContentModerationLogCount(t, repo, 1)
+	require.Equal(t, ContentModerationReviewStageBackground, logs[0].ReviewStage)
+	require.Equal(t, ContentModerationRiskEventSourceBackgroundReview, logs[0].RiskEventSource)
+	require.False(t, logs[0].Flagged)
+	require.Equal(t, ContentModerationContextStatusReviewed, repo.contexts[0].Status)
+}
+
+func TestParseContentModerationModelTextResult_JSONFalseViolationStaysFalse(t *testing.T) {
+	result := parseContentModerationModelTextResult(`{"violation":false,"risk_score":0,"reason":"ok","categories":[]}`)
+
+	require.False(t, result.Violation)
+	require.Equal(t, 0.0, result.RiskScore)
+	require.Equal(t, "ok", result.Reason)
+}
+
+func TestContentModerationSetUserManualSuspicious_IsIdempotent(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.RiskWeightEnabled = true
+	cfg.ManualSuspiciousWeight = 60
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		repo,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	detail, err := svc.SetUserManualSuspicious(context.Background(), 1001, true, "manual review")
+	require.NoError(t, err)
+	require.True(t, detail.Profile.ManualSuspicious)
+	require.Equal(t, 60.0, detail.Profile.CurrentWeight)
+	require.Len(t, repo.events, 1)
+
+	detail, err = svc.SetUserManualSuspicious(context.Background(), 1001, true, "manual review again")
+	require.NoError(t, err)
+	require.True(t, detail.Profile.ManualSuspicious)
+	require.Equal(t, 60.0, detail.Profile.CurrentWeight)
+	require.Len(t, repo.events, 1)
+
+	detail, err = svc.SetUserManualSuspicious(context.Background(), 1001, false, "cleared")
+	require.NoError(t, err)
+	require.False(t, detail.Profile.ManualSuspicious)
+	require.Equal(t, 0.0, detail.Profile.CurrentWeight)
+	require.Len(t, repo.events, 2)
+}
+
 func TestContentModerationCheck_PreBlockBlocksCodexResponsesLatestUserInput(t *testing.T) {
 	var moderationRequest moderationAPIRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1748,7 +2097,7 @@ func TestContentModerationCheck_AsyncFlaggedWritesRedisHashCache(t *testing.T) {
 	decision := svc.checkSync(context.Background(), ContentModerationCheckInput{
 		Protocol: ContentModerationProtocolOpenAIChat,
 		Body:     []byte(`{"messages":[{"role":"user","content":"bad prompt"}]}`),
-	}, cfg, ContentModerationInput{Text: "bad prompt"}, strings.Repeat("b", 64), contentModerationIntPtr(25), false)
+	}, cfg, ContentModerationInput{Text: "bad prompt"}, strings.Repeat("b", 64), contentModerationIntPtr(25), false, nil, svc.riskSnapshotForUser(context.Background(), cfg, 0), ContentModerationRiskEventSourceAsync, ContentModerationReviewStageAsync)
 
 	require.False(t, decision.Blocked)
 	requireRecordedHashCount(t, hashCache, 1)

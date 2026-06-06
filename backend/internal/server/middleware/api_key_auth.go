@@ -111,7 +111,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			clientIP = ip.GetClientIP(c)
 		}
 		if apiKeyRuntimeService == nil {
-			if apiKey.MaxActiveIPs > 0 || apiKey.MaxConcurrency > 0 {
+			if service.EffectiveAPIKeyMaxActiveIPs(apiKey) > 0 || apiKey.MaxConcurrency > 0 {
 				AbortWithError(c, 503, "API_KEY_RUNTIME_UNAVAILABLE", "API key runtime limit service unavailable")
 				return
 			}

@@ -20,17 +20,18 @@ import (
 )
 
 var (
-	ErrAPIKeyNotFound              = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
-	ErrGroupNotAllowed             = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
-	ErrAPIKeyExists                = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
-	ErrAPIKeyTooShort              = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
-	ErrAPIKeyInvalidChars          = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
-	ErrAPIKeyRateLimited           = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
-	ErrInvalidIPPattern            = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
-	ErrInvalidRuntimeLimit         = infraerrors.BadRequest("INVALID_API_KEY_RUNTIME_LIMIT", "invalid api key runtime limit")
-	ErrAPIKeyRuntimeUnavailable    = infraerrors.ServiceUnavailable("API_KEY_RUNTIME_UNAVAILABLE", "api key runtime limit service unavailable")
-	ErrAPIKeyActiveIPLimitExceeded = infraerrors.Forbidden("API_KEY_ACTIVE_IP_LIMIT_EXCEEDED", "api key active IP limit exceeded")
-	ErrAPIKeyConcurrencyExceeded   = infraerrors.TooManyRequests("API_KEY_CONCURRENCY_EXCEEDED", "api key concurrency limit exceeded")
+	ErrAPIKeyNotFound                     = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
+	ErrGroupNotAllowed                    = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
+	ErrAPIKeyExists                       = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
+	ErrAPIKeyTooShort                     = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
+	ErrAPIKeyInvalidChars                 = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
+	ErrAPIKeyRateLimited                  = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
+	ErrInvalidIPPattern                   = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrInvalidRuntimeLimit                = infraerrors.BadRequest("INVALID_API_KEY_RUNTIME_LIMIT", "invalid api key runtime limit")
+	ErrAPIKeyMaxActiveIPUserLimitExceeded = infraerrors.BadRequest("API_KEY_MAX_ACTIVE_IP_USER_LIMIT_EXCEEDED", "api key active IP limit exceeds user limit")
+	ErrAPIKeyRuntimeUnavailable           = infraerrors.ServiceUnavailable("API_KEY_RUNTIME_UNAVAILABLE", "api key runtime limit service unavailable")
+	ErrAPIKeyActiveIPLimitExceeded        = infraerrors.Forbidden("API_KEY_ACTIVE_IP_LIMIT_EXCEEDED", "api key active IP limit exceeded")
+	ErrAPIKeyConcurrencyExceeded          = infraerrors.TooManyRequests("API_KEY_CONCURRENCY_EXCEEDED", "api key concurrency limit exceeded")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
@@ -268,6 +269,31 @@ func validateAPIKeyRuntimeLimits(maxActiveIPs, ipIdleTimeoutSeconds, maxConcurre
 	return nil
 }
 
+func validateUserAPIKeyMaxActiveIPs(user *User, maxActiveIPs int) error {
+	if user == nil || !user.APIKeyMaxActiveIPsVisible || user.APIKeyMaxActiveIPs <= 0 || maxActiveIPs <= 0 {
+		return nil
+	}
+	if maxActiveIPs > user.APIKeyMaxActiveIPs {
+		return ErrAPIKeyMaxActiveIPUserLimitExceeded
+	}
+	return nil
+}
+
+func EffectiveAPIKeyMaxActiveIPs(apiKey *APIKey) int {
+	if apiKey == nil {
+		return 0
+	}
+	keyLimit := apiKey.MaxActiveIPs
+	userLimit := 0
+	if apiKey.User != nil {
+		userLimit = apiKey.User.APIKeyMaxActiveIPs
+	}
+	if userLimit > 0 && (keyLimit <= 0 || userLimit < keyLimit) {
+		return userLimit
+	}
+	return keyLimit
+}
+
 func EffectiveAPIKeyIPIdleTimeoutSeconds(configured int) int {
 	if configured <= 0 {
 		return defaultAPIKeyIPIdleTimeoutSeconds
@@ -364,6 +390,9 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	}
 
 	if err := validateAPIKeyRuntimeLimits(req.MaxActiveIPs, req.IPIdleTimeoutSeconds, req.MaxConcurrency); err != nil {
+		return nil, err
+	}
+	if err := validateUserAPIKeyMaxActiveIPs(user, req.MaxActiveIPs); err != nil {
 		return nil, err
 	}
 
@@ -639,7 +668,14 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	apiKey.IPBlacklist = req.IPBlacklist
 
 	if req.MaxActiveIPs != nil {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("get user: %w", err)
+		}
 		if err := validateAPIKeyRuntimeLimits(*req.MaxActiveIPs, apiKey.IPIdleTimeoutSeconds, apiKey.MaxConcurrency); err != nil {
+			return nil, err
+		}
+		if err := validateUserAPIKeyMaxActiveIPs(user, *req.MaxActiveIPs); err != nil {
 			return nil, err
 		}
 		apiKey.MaxActiveIPs = *req.MaxActiveIPs

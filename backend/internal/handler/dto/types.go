@@ -32,6 +32,10 @@ type User struct {
 	// RPMLimit 用户级每分钟请求数上限（0 = 不限制），仅在所用分组未设置 rpm_limit 时作为兜底生效。
 	RPMLimit int `json:"rpm_limit"`
 
+	// APIKeyMaxActiveIPs 仅当管理员允许展示时返回给普通用户。
+	APIKeyMaxActiveIPs        *int `json:"api_key_max_active_ips,omitempty"`
+	APIKeyMaxActiveIPsVisible bool `json:"api_key_max_active_ips_visible,omitempty"`
+
 	APIKeys       []APIKey           `json:"api_keys,omitempty"`
 	Subscriptions []UserSubscription `json:"subscriptions,omitempty"`
 }
@@ -43,6 +47,9 @@ type AdminUser struct {
 
 	Notes      string     `json:"notes"`
 	LastUsedAt *time.Time `json:"last_used_at"`
+	// APIKeyMaxActiveIPs 是管理员配置的用户级 API Key 活跃 IP 上限（0 = 不限制）。
+	APIKeyMaxActiveIPs        int  `json:"api_key_max_active_ips"`
+	APIKeyMaxActiveIPsVisible bool `json:"api_key_max_active_ips_visible"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier
 	GroupRates map[int64]float64 `json:"group_rates,omitempty"`

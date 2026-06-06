@@ -49,6 +49,22 @@
         />
         <p class="input-hint">{{ t('admin.users.form.rpmLimitHint') }}</p>
       </div>
+      <div>
+        <label class="input-label">{{ t('admin.users.form.apiKeyMaxActiveIPs') }}</label>
+        <input
+          v-model.number="form.api_key_max_active_ips"
+          type="number"
+          min="0"
+          step="1"
+          class="input"
+          :placeholder="t('admin.users.form.apiKeyMaxActiveIPsPlaceholder')"
+        />
+        <p class="input-hint">{{ t('admin.users.form.apiKeyMaxActiveIPsHint') }}</p>
+        <label class="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input v-model="form.api_key_max_active_ips_visible" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <span>{{ t('admin.users.form.apiKeyMaxActiveIPsVisible') }}</span>
+        </label>
+      </div>
       <UserAttributeForm v-model="form.customAttributes" :user-id="user?.id" />
     </form>
     <template #footer>
@@ -78,11 +94,11 @@ const emit = defineEmits(['close', 'success'])
 const { t } = useI18n(); const appStore = useAppStore(); const { copyToClipboard } = useClipboard()
 
 const submitting = ref(false); const passwordCopied = ref(false)
-const form = reactive({ email: '', password: '', username: '', notes: '', concurrency: 1, rpm_limit: 0, customAttributes: {} as UserAttributeValuesMap })
+const form = reactive({ email: '', password: '', username: '', notes: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, customAttributes: {} as UserAttributeValuesMap })
 
 watch(() => props.user, (u) => {
   if (u) {
-    Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, customAttributes: {} })
+    Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, api_key_max_active_ips: u.api_key_max_active_ips ?? 0, api_key_max_active_ips_visible: u.api_key_max_active_ips_visible ?? false, customAttributes: {} })
     passwordCopied.value = false
   }
 }, { immediate: true })
@@ -107,9 +123,13 @@ const handleUpdateUser = async () => {
     appStore.showError(t('admin.users.concurrencyMin'))
     return
   }
+  if (form.api_key_max_active_ips < 0) {
+    appStore.showError(t('admin.users.form.apiKeyMaxActiveIPsInvalid'))
+    return
+  }
   submitting.value = true
   try {
-    const data: any = { email: form.email, username: form.username, notes: form.notes, concurrency: form.concurrency, rpm_limit: form.rpm_limit }
+    const data: any = { email: form.email, username: form.username, notes: form.notes, concurrency: form.concurrency, rpm_limit: form.rpm_limit, api_key_max_active_ips: Math.floor(form.api_key_max_active_ips || 0), api_key_max_active_ips_visible: form.api_key_max_active_ips_visible }
     if (form.password.trim()) data.password = form.password.trim()
     await adminAPI.users.update(props.user.id, data)
     if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(props.user.id, form.customAttributes)
