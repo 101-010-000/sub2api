@@ -2802,6 +2802,17 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 	if !cfg.AutoBanEnabled || banThreshold <= 0 || count < banThreshold {
 		return false
 	}
+	if s.userRepo != nil {
+		user, err := s.userRepo.GetByID(ctx, *log.UserID)
+		if err != nil {
+			slog.Warn("content_moderation.ban_get_user_failed", "user_id", *log.UserID, "error", err)
+			return false
+		}
+		if user.IsAdmin() {
+			slog.Warn("content_moderation.autoban_skipped_admin", "user_id", *log.UserID, "role", user.Role, "count", count, "threshold", banThreshold)
+			return false
+		}
+	}
 	now := time.Now()
 	banUntil := now.Add(time.Duration(cfg.BanDurationMinutes) * time.Minute)
 	if s.repo != nil {
