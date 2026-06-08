@@ -14,11 +14,6 @@ import (
 
 type contentModerationNormalizedContext struct {
 	Protocol string         `json:"protocol"`
-	System   any            `json:"system,omitempty"`
-	Messages any            `json:"messages,omitempty"`
-	Input    any            `json:"input,omitempty"`
-	Contents any            `json:"contents,omitempty"`
-	Prompt   any            `json:"prompt,omitempty"`
 	UserText string         `json:"user_text"`
 	Images   []string       `json:"images,omitempty"`
 	Meta     map[string]any `json:"meta,omitempty"`
@@ -49,21 +44,6 @@ func buildContentModerationNormalizedContext(protocol string, body []byte, input
 			"model":      input.Model,
 		},
 	}
-	if v, ok := clean["system"]; ok {
-		ctx.System = v
-	}
-	if v, ok := clean["messages"]; ok {
-		ctx.Messages = v
-	}
-	if v, ok := clean["input"]; ok {
-		ctx.Input = v
-	}
-	if v, ok := clean["contents"]; ok {
-		ctx.Contents = v
-	}
-	if v, ok := clean["prompt"]; ok {
-		ctx.Prompt = v
-	}
 	userInput := extractUserFocusedModerationInputFromSanitizedContext(protocol, clean)
 	ctx.UserText = userInput.Text
 	ctx.Images = userInput.Images
@@ -82,12 +62,6 @@ func contentModerationContextSummary(ctx *contentModerationNormalizedContext) st
 	if strings.TrimSpace(ctx.UserText) != "" {
 		return trimRunes(redactContentModerationSecrets(ctx.UserText), maxModerationExcerptRunes)
 	}
-	for _, value := range []any{ctx.Prompt, ctx.Input, ctx.Messages, ctx.Contents} {
-		text := strings.TrimSpace(contextValueText(value))
-		if text != "" {
-			return trimRunes(redactContentModerationSecrets(text), maxModerationExcerptRunes)
-		}
-	}
 	return ""
 }
 
@@ -101,7 +75,7 @@ func parseContentModerationNormalizedContext(raw string) (*contentModerationNorm
 		return nil, ContentModerationInput{}, err
 	}
 	input := ContentModerationInput{
-		Text:   trimRunes(normalizeContentModerationTextPreserveLines(ctx.UserText), maxModerationInputRunes),
+		Text:   trimRunesFromEnd(normalizeContentModerationTextPreserveLines(ctx.UserText), maxModerationInputRunes),
 		Images: normalizeModerationImages(ctx.Images),
 	}
 	return &ctx, input, nil
@@ -279,7 +253,7 @@ func extractUserFocusedModerationInputFromSanitizedContext(protocol string, root
 		collectContextValue(root["prompt"], &parts, &images)
 	}
 	out := ContentModerationInput{
-		Text:   trimRunes(normalizeContentModerationTextPreserveLines(strings.Join(parts, "\n")), maxModerationInputRunes),
+		Text:   trimRunesFromEnd(normalizeContentModerationTextPreserveLines(strings.Join(parts, "\n")), maxModerationInputRunes),
 		Images: normalizeModerationImages(images),
 	}
 	return out
@@ -290,7 +264,14 @@ func collectUserMessagesFromAny(value any, parts *[]string, images *[]string) {
 	if !ok {
 		return
 	}
-	for _, item := range items {
+	if !lastAnyRoleIs(items, "user") {
+		return
+	}
+	if !anyUserMessageHasModerationInput(items[len(items)-1]) {
+		return
+	}
+	start := recentAnyRoleMessageStart(items, "user")
+	for _, item := range items[start:] {
 		obj, ok := item.(map[string]any)
 		if !ok {
 			continue
@@ -308,7 +289,11 @@ func collectResponsesUserInputsFromAny(value any, parts *[]string, images *[]str
 	case string:
 		addModerationText(parts, v)
 	case []any:
-		for _, item := range v {
+		if len(v) > 0 && !isResponsesUserContextItem(v[len(v)-1]) {
+			return
+		}
+		start := recentResponsesContextInputStart(v)
+		for _, item := range v[start:] {
 			if isResponsesUserContextItem(item) {
 				collectResponsesItemValue(item, parts, images)
 			}
@@ -348,7 +333,14 @@ func collectGeminiUserContentsFromAny(value any, parts *[]string, images *[]stri
 	if !ok {
 		return
 	}
-	for _, item := range items {
+	if !lastAnyGeminiRoleIsUser(items) {
+		return
+	}
+	if !anyGeminiContentHasModerationInput(items[len(items)-1]) {
+		return
+	}
+	start := recentAnyGeminiUserContentStart(items)
+	for _, item := range items[start:] {
 		obj, ok := item.(map[string]any)
 		if !ok {
 			continue
@@ -359,6 +351,102 @@ func collectGeminiUserContentsFromAny(value any, parts *[]string, images *[]stri
 		}
 		collectContextValue(obj["parts"], parts, images)
 	}
+}
+
+func lastAnyRoleIs(items []any, role string) bool {
+	if len(items) == 0 {
+		return false
+	}
+	obj, ok := items[len(items)-1].(map[string]any)
+	if !ok {
+		return false
+	}
+	return strings.ToLower(strings.TrimSpace(fmt.Sprint(obj["role"]))) == role
+}
+
+func anyUserMessageHasModerationInput(item any) bool {
+	obj, ok := item.(map[string]any)
+	if !ok {
+		return false
+	}
+	var parts []string
+	var images []string
+	collectContextValue(obj["content"], &parts, &images)
+	return normalizeContentModerationText(strings.Join(parts, "\n")) != "" || len(images) > 0
+}
+
+func recentAnyRoleMessageStart(items []any, role string) int {
+	seen := 0
+	for i := len(items) - 1; i >= 0; i-- {
+		obj, ok := items[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(obj["role"]))) != role {
+			continue
+		}
+		seen++
+		if seen >= maxModerationUserMessageWindow {
+			return i
+		}
+	}
+	return 0
+}
+
+func recentResponsesContextInputStart(items []any) int {
+	seen := 0
+	for i := len(items) - 1; i >= 0; i-- {
+		if !isResponsesUserContextItem(items[i]) {
+			continue
+		}
+		seen++
+		if seen >= maxModerationUserMessageWindow {
+			return i
+		}
+	}
+	return 0
+}
+
+func lastAnyGeminiRoleIsUser(items []any) bool {
+	if len(items) == 0 {
+		return false
+	}
+	obj, ok := items[len(items)-1].(map[string]any)
+	if !ok {
+		return false
+	}
+	role := strings.ToLower(strings.TrimSpace(fmt.Sprint(obj["role"])))
+	return role == "" || role == "user"
+}
+
+func anyGeminiContentHasModerationInput(item any) bool {
+	obj, ok := item.(map[string]any)
+	if !ok {
+		return false
+	}
+	var parts []string
+	var images []string
+	collectContextValue(obj["parts"], &parts, &images)
+	return normalizeContentModerationText(strings.Join(parts, "\n")) != "" || len(images) > 0
+}
+
+func recentAnyGeminiUserContentStart(items []any) int {
+	seen := 0
+	for i := len(items) - 1; i >= 0; i-- {
+		obj, ok := items[i].(map[string]any)
+		if !ok {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(fmt.Sprint(obj["role"])))
+		if role != "" && role != "user" {
+			continue
+		}
+		seen++
+		if seen >= maxModerationUserMessageWindow {
+			return i
+		}
+	}
+	return 0
 }
 
 func collectContextValue(value any, parts *[]string, images *[]string) {

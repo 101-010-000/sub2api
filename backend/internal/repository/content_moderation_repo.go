@@ -258,12 +258,14 @@ WHERE flagged = FALSE AND created_at < $1
 	result.DeletedNonHit, _ = nonHitExec.RowsAffected()
 
 	if !contextBefore.IsZero() {
-		if _, err := r.db.ExecContext(ctx, `
+		contextExec, err := r.db.ExecContext(ctx, `
 DELETE FROM content_moderation_contexts
 WHERE created_at < $1
-`, contextBefore); err != nil {
+`, contextBefore)
+		if err != nil {
 			return nil, fmt.Errorf("delete expired content moderation contexts: %w", err)
 		}
+		result.DeletedContext, _ = contextExec.RowsAffected()
 	}
 
 	result.FinishedAt = time.Now()
@@ -627,6 +629,12 @@ WHERE id = $1
 
 func (r *contentModerationRepository) CountContextsByStatus(ctx context.Context) (*service.ContentModerationContextStatusCounts, error) {
 	counts := &service.ContentModerationContextStatusCounts{}
+	if err := r.db.QueryRowContext(ctx, `
+SELECT COUNT(*)::BIGINT, COALESCE(SUM(context_bytes), 0)::BIGINT, COALESCE(AVG(context_bytes), 0)::BIGINT
+FROM content_moderation_contexts
+`).Scan(&counts.Total, &counts.TotalBytes, &counts.AvgBytes); err != nil {
+		return nil, fmt.Errorf("summarize content moderation contexts: %w", err)
+	}
 	rows, err := r.db.QueryContext(ctx, `
 SELECT status, COUNT(*), MAX(reviewed_at)
 FROM content_moderation_contexts

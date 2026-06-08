@@ -94,7 +94,7 @@ const (
 	ContentModerationProtocolOpenAIImages      = "openai_images"
 
 	ContentModerationAuditProtocolOpenAICompatible = "openai_compatible"
-	ContentModerationAuditProtocolInternalGroup     = "internal_group"
+	ContentModerationAuditProtocolInternalGroup    = "internal_group"
 
 	contentModerationInternalAuditUserEmail = "content-moderation-audit@internal.local"
 	contentModerationInternalAuditUserName  = "Content Moderation Audit"
@@ -107,6 +107,7 @@ const (
 	defaultContentModerationTimeoutMS = 3000
 	maxContentModerationTimeoutMS     = 30000
 	maxModerationInputRunes           = 12000
+	maxModerationUserMessageWindow    = 3
 	maxModerationExcerptRunes         = 240
 
 	defaultContentModerationWorkerCount          = 4
@@ -123,11 +124,13 @@ const (
 	maxContentModerationRetryCount               = 5
 	defaultContentModerationHitRetentionDays     = 180
 	defaultContentModerationNonHitRetentionDays  = 3
+	defaultContentModerationContextRetentionDays = 3
 	defaultContentModerationBanDurationMinutes   = 60
 	defaultContentModerationUnbanWindowMinutes   = 5 * 60
 	defaultContentModerationSecondUnbanWaitMins  = 15
 	maxContentModerationRetentionDays            = 3650
 	maxContentModerationNonHitRetentionDays      = 3
+	maxContentModerationContextRetentionDays     = 3
 	contentModerationKeyRateLimitFreezeDuration  = time.Minute
 	contentModerationKeyAuthFreezeDuration       = 10 * time.Minute
 	contentModerationKeyHTTPErrorFreezeDuration  = 10 * time.Second
@@ -340,16 +343,16 @@ const (
 )
 
 type ContentModerationCyberuseConfig struct {
-	Enabled              bool                                `json:"enabled"`
-	EmitToClient         bool                                `json:"emit_to_client"`
-	ErrorCode            string                              `json:"error_code"`
-	Message              string                              `json:"message"`
-	IncludeRequestID     bool                                `json:"include_request_id"`
-	AuditMetadataEnabled bool                                `json:"audit_metadata_enabled"`
-	AnnouncementEnabled  bool                                `json:"announcement_enabled"`
-	AnnouncementTitle    string                              `json:"announcement_title"`
-	AnnouncementContent  string                              `json:"announcement_content"`
-	UserScope            ContentModerationCyberuseUserScope  `json:"user_scope"`
+	Enabled              bool                               `json:"enabled"`
+	EmitToClient         bool                               `json:"emit_to_client"`
+	ErrorCode            string                             `json:"error_code"`
+	Message              string                             `json:"message"`
+	IncludeRequestID     bool                               `json:"include_request_id"`
+	AuditMetadataEnabled bool                               `json:"audit_metadata_enabled"`
+	AnnouncementEnabled  bool                               `json:"announcement_enabled"`
+	AnnouncementTitle    string                             `json:"announcement_title"`
+	AnnouncementContent  string                             `json:"announcement_content"`
+	UserScope            ContentModerationCyberuseUserScope `json:"user_scope"`
 }
 
 type ContentModerationCyberuseUserScope struct {
@@ -393,30 +396,30 @@ type ContentModerationAuditContext struct {
 }
 
 type ContentModerationPolicyMetadata struct {
-	Source                string `json:"source"`
-	Origin                string `json:"origin"`
-	PolicySignal          string `json:"policy_signal"`
-	UpstreamPolicy        bool   `json:"upstream_policy"`
-	RequestID             string `json:"request_id"`
-	UserID                int64  `json:"user_id"`
-	UserEmail             string `json:"user_email"`
-	APIKeyID              int64  `json:"api_key_id"`
-	APIKeyName            string `json:"api_key_name"`
-	GroupID               *int64 `json:"group_id,omitempty"`
-	GroupName             string `json:"group_name"`
-	Endpoint              string `json:"endpoint"`
-	Provider              string `json:"provider"`
-	Model                 string `json:"model"`
-	Protocol              string `json:"protocol"`
-	InputHash             string `json:"input_hash,omitempty"`
-	ContextID             *int64 `json:"context_id,omitempty"`
-	Action                string `json:"action"`
-	HighestCategory       string `json:"highest_category"`
-	ClientErrorCode       string `json:"client_error_code,omitempty"`
-	ClientMessage         string `json:"client_message,omitempty"`
-	AnnouncementEnabled   bool   `json:"announcement_enabled"`
-	AnnouncementTitle     string `json:"announcement_title,omitempty"`
-	AnnouncementContent   string `json:"announcement_content,omitempty"`
+	Source              string `json:"source"`
+	Origin              string `json:"origin"`
+	PolicySignal        string `json:"policy_signal"`
+	UpstreamPolicy      bool   `json:"upstream_policy"`
+	RequestID           string `json:"request_id"`
+	UserID              int64  `json:"user_id"`
+	UserEmail           string `json:"user_email"`
+	APIKeyID            int64  `json:"api_key_id"`
+	APIKeyName          string `json:"api_key_name"`
+	GroupID             *int64 `json:"group_id,omitempty"`
+	GroupName           string `json:"group_name"`
+	Endpoint            string `json:"endpoint"`
+	Provider            string `json:"provider"`
+	Model               string `json:"model"`
+	Protocol            string `json:"protocol"`
+	InputHash           string `json:"input_hash,omitempty"`
+	ContextID           *int64 `json:"context_id,omitempty"`
+	Action              string `json:"action"`
+	HighestCategory     string `json:"highest_category"`
+	ClientErrorCode     string `json:"client_error_code,omitempty"`
+	ClientMessage       string `json:"client_message,omitempty"`
+	AnnouncementEnabled bool   `json:"announcement_enabled"`
+	AnnouncementTitle   string `json:"announcement_title,omitempty"`
+	AnnouncementContent string `json:"announcement_content,omitempty"`
 }
 
 type ContentModerationRequestContext struct {
@@ -630,7 +633,7 @@ func (in *ContentModerationInput) Normalize() {
 	if in == nil {
 		return
 	}
-	in.Text = trimRunes(normalizeContentModerationText(in.Text), maxModerationInputRunes)
+	in.Text = trimRunesFromEnd(normalizeContentModerationText(in.Text), maxModerationInputRunes)
 	in.Images = normalizeModerationImages(in.Images)
 }
 
@@ -741,9 +744,10 @@ type ContentModerationLogFilter struct {
 }
 
 type ContentModerationCleanupResult struct {
-	DeletedHit    int64     `json:"deleted_hit"`
-	DeletedNonHit int64     `json:"deleted_non_hit"`
-	FinishedAt    time.Time `json:"finished_at"`
+	DeletedHit     int64     `json:"deleted_hit"`
+	DeletedNonHit  int64     `json:"deleted_non_hit"`
+	DeletedContext int64     `json:"deleted_context"`
+	FinishedAt     time.Time `json:"finished_at"`
 }
 
 type ContentModerationRuntimeStatus struct {
@@ -778,12 +782,16 @@ type ContentModerationRuntimeStatus struct {
 	ProcessingContextCount       int64                                      `json:"processing_context_count"`
 	FailedContextCount           int64                                      `json:"failed_context_count"`
 	LastBackgroundReviewAt       *time.Time                                 `json:"last_background_review_at,omitempty"`
+	ContextTotalCount            int64                                      `json:"context_total_count"`
+	ContextTotalBytes            int64                                      `json:"context_total_bytes"`
+	ContextAvgBytes              int64                                      `json:"context_avg_bytes"`
 	ContextDropCount             int64                                      `json:"context_drop_count"`
 	ContextCaptureError          string                                     `json:"context_capture_error"`
 	LastContextCaptureErrorAt    *time.Time                                 `json:"last_context_capture_error_at,omitempty"`
 	LastCleanupAt                *time.Time                                 `json:"last_cleanup_at,omitempty"`
 	LastCleanupDeletedHit        int64                                      `json:"last_cleanup_deleted_hit"`
 	LastCleanupDeletedNonHit     int64                                      `json:"last_cleanup_deleted_non_hit"`
+	LastCleanupDeletedContext    int64                                      `json:"last_cleanup_deleted_context"`
 }
 
 type ContentModerationAuditModelRuntimeStatus struct {
@@ -894,6 +902,9 @@ type ContentModerationContextStatusCounts struct {
 	Pending        int64
 	Processing     int64
 	Failed         int64
+	Total          int64
+	TotalBytes     int64
+	AvgBytes       int64
 	LastReviewedAt *time.Time
 }
 
@@ -985,6 +996,7 @@ type ContentModerationService struct {
 	lastCleanupUnix           atomic.Int64
 	lastCleanupDeletedHit     atomic.Int64
 	lastCleanupDeletedNonHit  atomic.Int64
+	lastCleanupDeletedContext atomic.Int64
 	contextDrops              atomic.Int64
 	lastBackgroundReviewUnix  atomic.Int64
 	contextErrorMu            sync.Mutex
@@ -1492,37 +1504,37 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	contextID := s.captureModerationContext(ctx, cfg, input, hashText)
 	keywordHits := matchContentModerationKeywordRules(content.Text, cfg.keywordRules())
 	keywordForceAudit := keywordHitsRequireAction(keywordHits, ContentModerationActionRecordAudit)
+	auditModels := cfg.enabledAuditModels()
+	keywordBlockingHit := cfg.KeywordBlockingMode != ContentModerationKeywordModeAPIOnly && keywordHitRequiresBlocking(keywordHits)
 	if cfg.Mode == ContentModerationModePreBlock {
-		if cfg.KeywordBlockingMode != ContentModerationKeywordModeAPIOnly && len(keywordHits) > 0 {
-			if keywordHitRequiresBlocking(keywordHits) {
-				s.recordPreBlockSyncMetric(0, ContentModerationActionKeywordBlock)
-				slog.Info("content_moderation.keyword_block",
-					"user_id", input.UserID,
-					"api_key_id", input.APIKeyID,
-					"group_id", contentModerationLogGroupID(input.GroupID),
-					"endpoint", input.Endpoint,
-					"protocol", input.Protocol,
-					"keyword_blocking_mode", cfg.KeywordBlockingMode,
-					"keyword_hits", len(keywordHits))
-				scores := map[string]float64{contentModerationKeywordCategory: 1.0}
-				log := s.buildLog(input, cfg, ContentModerationActionKeywordBlock, true, contentModerationKeywordCategory, 1.0, scores, content.ExcerptText(), nil, nil, "", keywordHits, nil)
-				s.decorateModerationLog(log, riskSnapshot, contextID, ContentModerationRiskEventSourceSync, ContentModerationReviewStageRealtime)
-				s.enqueueRecord(input, cfg, log, hashText, false, true)
-				return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
-					Allowed:         false,
-					Blocked:         true,
-					Flagged:         true,
-					Message:         cfg.BlockMessage,
-					StatusCode:      cfg.BlockStatus,
-					HighestCategory: contentModerationKeywordCategory,
-					HighestScore:    1.0,
-					CategoryScores:  scores,
-					Action:          ContentModerationActionKeywordBlock,
-					KeywordHits:     keywordHits,
-					ContextID:       contextID,
-					RiskSnapshot:    riskSnapshot,
-				}), nil
-			}
+		if keywordBlockingHit && len(auditModels) == 0 {
+			s.recordPreBlockSyncMetric(0, ContentModerationActionKeywordBlock)
+			slog.Info("content_moderation.keyword_block",
+				"user_id", input.UserID,
+				"api_key_id", input.APIKeyID,
+				"group_id", contentModerationLogGroupID(input.GroupID),
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"keyword_blocking_mode", cfg.KeywordBlockingMode,
+				"keyword_hits", len(keywordHits))
+			scores := map[string]float64{contentModerationKeywordCategory: 1.0}
+			log := s.buildLog(input, cfg, ContentModerationActionKeywordBlock, true, contentModerationKeywordCategory, 1.0, scores, content.ExcerptText(), nil, nil, "", keywordHits, nil)
+			s.decorateModerationLog(log, riskSnapshot, contextID, ContentModerationRiskEventSourceSync, ContentModerationReviewStageRealtime)
+			s.enqueueRecord(input, cfg, log, hashText, false, true)
+			return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
+				Allowed:         false,
+				Blocked:         true,
+				Flagged:         true,
+				Message:         cfg.BlockMessage,
+				StatusCode:      cfg.BlockStatus,
+				HighestCategory: contentModerationKeywordCategory,
+				HighestScore:    1.0,
+				CategoryScores:  scores,
+				Action:          ContentModerationActionKeywordBlock,
+				KeywordHits:     keywordHits,
+				ContextID:       contextID,
+				RiskSnapshot:    riskSnapshot,
+			}), nil
 		}
 		if cfg.KeywordBlockingMode == ContentModerationKeywordModeKeywordOnly {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
@@ -1572,8 +1584,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			}), nil
 		}
 	}
-	auditModels := cfg.enabledAuditModels()
-	if !keywordForceAudit && !contentModerationShouldSample(hashText, riskSnapshot.EffectiveSampleRate) {
+	if !keywordForceAudit && !keywordBlockingHit && !contentModerationShouldSample(hashText, riskSnapshot.EffectiveSampleRate) {
 		if cfg.Mode == ContentModerationModePreBlock {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
 		}
@@ -1767,6 +1778,23 @@ func (s *ContentModerationService) checkModelAuditSync(ctx context.Context, inpu
 	if agg.Flagged {
 		action = ContentModerationActionBlock
 	}
+	if !agg.Flagged && keywordHitRequiresBlocking(keywordHits) && agg.TotalCount == 0 {
+		agg.Flagged = true
+		agg.Reason = "keyword fallback: all audit models failed"
+		action = ContentModerationActionKeywordBlock
+		scores[contentModerationKeywordCategory] = 1
+		if scores[contentModerationModelAuditCategory] < 1 {
+			scores[contentModerationModelAuditCategory] = 1
+		}
+	}
+	highestCategory := contentModerationModelAuditCategory
+	if action == ContentModerationActionKeywordBlock {
+		highestCategory = contentModerationKeywordCategory
+	}
+	highestScore := scores[contentModerationModelAuditCategory]
+	if highestCategory == contentModerationKeywordCategory {
+		highestScore = scores[contentModerationKeywordCategory]
+	}
 	latency := int(time.Since(startAll).Milliseconds())
 	auditCtx := &ContentModerationAuditContext{
 		Request:     buildContentModerationRequestContext(input, content.ExcerptText()),
@@ -1776,7 +1804,7 @@ func (s *ContentModerationService) checkModelAuditSync(ctx context.Context, inpu
 		FinalAction: action,
 	}
 	if agg.Flagged || cfg.RecordNonHits || len(keywordHits) > 0 {
-		log := s.buildLog(input, cfg, action, agg.Flagged, contentModerationModelAuditCategory, scores[contentModerationModelAuditCategory], scores, content.ExcerptText(), &latency, queueDelay, "", keywordHits, auditCtx)
+		log := s.buildLog(input, cfg, action, agg.Flagged, highestCategory, highestScore, scores, content.ExcerptText(), &latency, queueDelay, "", keywordHits, auditCtx)
 		s.decorateModerationLog(log, riskSnapshot, contextID, source, stage)
 		if queueDelay == nil && cfg.Mode == ContentModerationModePreBlock {
 			s.enqueueRecord(input, cfg, log, hashText, agg.Flagged, agg.Flagged)
@@ -1792,8 +1820,8 @@ func (s *ContentModerationService) checkModelAuditSync(ctx context.Context, inpu
 			Flagged:         true,
 			Message:         cfg.BlockMessage,
 			StatusCode:      cfg.BlockStatus,
-			HighestCategory: contentModerationModelAuditCategory,
-			HighestScore:    scores[contentModerationModelAuditCategory],
+			HighestCategory: highestCategory,
+			HighestScore:    highestScore,
 			CategoryScores:  scores,
 			Action:          action,
 			KeywordHits:     keywordHits,
@@ -2372,12 +2400,16 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		ProcessingContextCount:       contextCounts.Processing,
 		FailedContextCount:           contextCounts.Failed,
 		LastBackgroundReviewAt:       lastBackgroundReviewAt,
+		ContextTotalCount:            contextCounts.Total,
+		ContextTotalBytes:            contextCounts.TotalBytes,
+		ContextAvgBytes:              contextCounts.AvgBytes,
 		ContextDropCount:             s.contextDrops.Load(),
 		ContextCaptureError:          contextError,
 		LastContextCaptureErrorAt:    contextErrorAt,
 		LastCleanupAt:                lastCleanupAt,
 		LastCleanupDeletedHit:        s.lastCleanupDeletedHit.Load(),
 		LastCleanupDeletedNonHit:     s.lastCleanupDeletedNonHit.Load(),
+		LastCleanupDeletedContext:    s.lastCleanupDeletedContext.Load(),
 	}, nil
 }
 
@@ -2417,6 +2449,7 @@ func (s *ContentModerationService) runCleanupOnce() {
 	s.lastCleanupUnix.Store(result.FinishedAt.Unix())
 	s.lastCleanupDeletedHit.Store(result.DeletedHit)
 	s.lastCleanupDeletedNonHit.Store(result.DeletedNonHit)
+	s.lastCleanupDeletedContext.Store(result.DeletedContext)
 }
 
 func (s *ContentModerationService) loadConfig(ctx context.Context) (*ContentModerationConfig, error) {
@@ -3188,13 +3221,6 @@ func (s *ContentModerationService) sendFlaggedNotificationSideEffects(ctx contex
 	userID := contentModerationEmailUserID(log)
 	emailSent := false
 	if s.emailService != nil && strings.TrimSpace(log.UserEmail) != "" {
-		if cfg.EmailOnHit {
-			if err := s.sendViolationEmail(ctx, cfg, log); err != nil {
-				slog.Warn("content_moderation.email_failed", "user_id", userID, "email", log.UserEmail, "error", err)
-			} else {
-				emailSent = true
-			}
-		}
 		if autoBanJustApplied {
 			if err := s.sendAccountDisabledEmail(ctx, cfg, log); err != nil {
 				slog.Warn("content_moderation.ban_email_failed", "user_id", userID, "email", log.UserEmail, "error", err)
@@ -3393,7 +3419,7 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 		RetryCount:                          defaultContentModerationRetryCount,
 		HitRetentionDays:                    defaultContentModerationHitRetentionDays,
 		NonHitRetentionDays:                 defaultContentModerationNonHitRetentionDays,
-		ContextRetentionDays:                defaultContentModerationHitRetentionDays,
+		ContextRetentionDays:                defaultContentModerationContextRetentionDays,
 		PreHashCheckEnabled:                 false,
 		BlockedKeywords:                     []string{},
 		KeywordBlockingMode:                 ContentModerationKeywordModeKeywordAndAPI,
@@ -3537,10 +3563,10 @@ func (cfg *ContentModerationConfig) normalize() {
 		cfg.NonHitRetentionDays = maxContentModerationNonHitRetentionDays
 	}
 	if cfg.ContextRetentionDays <= 0 {
-		cfg.ContextRetentionDays = cfg.HitRetentionDays
+		cfg.ContextRetentionDays = defaultContentModerationContextRetentionDays
 	}
-	if cfg.ContextRetentionDays > maxContentModerationRetentionDays {
-		cfg.ContextRetentionDays = maxContentModerationRetentionDays
+	if cfg.ContextRetentionDays > maxContentModerationContextRetentionDays {
+		cfg.ContextRetentionDays = maxContentModerationContextRetentionDays
 	}
 	cfg.GroupIDs = normalizeInt64IDs(cfg.GroupIDs)
 	cfg.Thresholds = mergeContentModerationThresholds(ContentModerationDefaultThresholds(), cfg.Thresholds)
@@ -4009,6 +4035,10 @@ func aggregateContentModerationModelResults(details []ContentModerationModelAudi
 	}
 	decision := ContentModerationAggregateDecision{RuleType: rule.Type, TotalCount: len(details)}
 	for _, detail := range details {
+		if strings.TrimSpace(detail.Error) != "" {
+			decision.TotalCount--
+			continue
+		}
 		weight := weights[detail.ModelID]
 		if weight <= 0 {
 			weight = 1
@@ -4932,6 +4962,17 @@ func trimRunes(text string, max int) string {
 		return text
 	}
 	return string(runes[:max])
+}
+
+func trimRunesFromEnd(text string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	return string(runes[len(runes)-max:])
 }
 
 func maskSecretTail(secret string) string {

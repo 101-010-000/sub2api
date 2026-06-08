@@ -35,6 +35,17 @@ func contentModerationErrorCode(decision *service.ContentModerationDecision) str
 	return "content_policy_violation"
 }
 
+func writeContentModerationResponsesStreamError(c *gin.Context, decision *service.ContentModerationDecision, stream bool) bool {
+	if !stream || decision == nil || !decision.Blocked || !inboundIsResponses(c) {
+		return false
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+	return writeResponsesFailedSSE(c, contentModerationErrorCode(decision), decision.Message)
+}
+
 func (h *OpenAIGatewayHandler) checkContentModeration(c *gin.Context, reqLog *zap.Logger, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol string, model string, body []byte) *service.ContentModerationDecision {
 	if h == nil || h.contentModerationService == nil {
 		return nil

@@ -954,6 +954,7 @@
               <div>
                 <label class="input-label">{{ t('admin.riskControl.contextMaxBytes') }}</label>
                 <input v-model.number="configForm.context_max_bytes" type="number" min="1024" max="2097152" step="1024" class="input" />
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.contextStorageStats', { count: formatNumber(status?.context_total_count ?? 0), total: formatBytes(status?.context_total_bytes ?? 0), avg: formatBytes(status?.context_avg_bytes ?? 0) }) }}</p>
               </div>
             </div>
 
@@ -1473,12 +1474,13 @@
             </div>
             <div>
               <label class="input-label">{{ t('admin.riskControl.contextRetentionDays') }}</label>
-              <input v-model.number="configForm.context_retention_days" type="number" min="1" max="3650" class="input" />
+              <input v-model.number="configForm.context_retention_days" type="number" min="1" max="3" class="input" />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.contextRetentionHint') }}</p>
             </div>
             <div class="rounded-lg border border-gray-100 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400 lg:col-span-2">
               <div class="flex flex-wrap items-center gap-3">
                 <Icon name="database" size="md" class="text-gray-400" />
-                <span>{{ t('admin.riskControl.cleanupStats', { hit: status?.last_cleanup_deleted_hit ?? 0, nonHit: status?.last_cleanup_deleted_non_hit ?? 0 }) }}</span>
+                <span>{{ t('admin.riskControl.cleanupStats', { hit: status?.last_cleanup_deleted_hit ?? 0, nonHit: status?.last_cleanup_deleted_non_hit ?? 0, context: status?.last_cleanup_deleted_context ?? 0 }) }}</span>
               </div>
             </div>
           </div>
@@ -1627,7 +1629,7 @@ import type {
 import type { AdminGroup, SelectOption } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { formatDateTime as formatDateTimeValue } from '@/utils/format'
+import { formatBytes as formatBytesValue, formatDateTime as formatDateTimeValue } from '@/utils/format'
 
 type SettingsTab = 'basic' | 'scope' | 'runtime' | 'riskProfile' | 'response' | 'auditModels' | 'riskThresholds' | 'retention' | 'keywords'
 type WorkerSlotState = 'active' | 'idle' | 'disabled'
@@ -1765,7 +1767,7 @@ const configForm = reactive({
   cyberuse_user_ids_text: '',
   hit_retention_days: 180,
   non_hit_retention_days: 3,
-  context_retention_days: 180,
+  context_retention_days: 3,
   pre_hash_check_enabled: false,
   risk_weight_enabled: true,
   flagged_weight: 10,
@@ -2259,6 +2261,16 @@ const backgroundReviewMetricItems = computed(() => [
     value: formatNumber(status.value?.failed_context_count ?? 0),
   },
   {
+    key: 'stored',
+    label: t('admin.riskControl.storedContexts'),
+    value: formatNumber(status.value?.context_total_count ?? 0),
+  },
+  {
+    key: 'stored_bytes',
+    label: t('admin.riskControl.storedContextBytes'),
+    value: formatBytes(status.value?.context_total_bytes ?? 0),
+  },
+  {
     key: 'dropped',
     label: t('admin.riskControl.contextDropCount'),
     value: formatNumber(status.value?.context_drop_count ?? 0),
@@ -2347,7 +2359,7 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.cyberuse_user_ids_text = configForm.cyberuse_response.user_scope.user_ids.join('\n')
   configForm.hit_retention_days = config.hit_retention_days || 180
   configForm.non_hit_retention_days = Math.min(Math.max(config.non_hit_retention_days || 3, 1), 3)
-  configForm.context_retention_days = config.context_retention_days || 180
+  configForm.context_retention_days = Math.min(3, Math.max(1, config.context_retention_days || 3))
   configForm.pre_hash_check_enabled = config.pre_hash_check_enabled ?? false
   configForm.risk_weight_enabled = config.risk_weight_enabled ?? true
   configForm.flagged_weight = config.flagged_weight ?? 10
@@ -2453,7 +2465,7 @@ async function saveConfig() {
       cyberuse_response: cyberusePayload,
       hit_retention_days: Number(configForm.hit_retention_days) || 180,
       non_hit_retention_days: Math.min(Math.max(Number(configForm.non_hit_retention_days) || 3, 1), 3),
-      context_retention_days: Number(configForm.context_retention_days) || 180,
+      context_retention_days: Math.min(3, Math.max(1, Number(configForm.context_retention_days) || 3)),
       pre_hash_check_enabled: configForm.pre_hash_check_enabled,
       risk_weight_enabled: configForm.risk_weight_enabled,
       flagged_weight: Math.max(0.01, Number(configForm.flagged_weight) || 10),
@@ -2488,6 +2500,10 @@ async function saveConfig() {
     }
     if (!payload.clear_api_key && configForm.api_keys_mode !== 'replace' && pendingDeleteApiKeyHashes.value.length > 0) {
       payload.delete_api_key_hashes = [...pendingDeleteApiKeyHashes.value]
+    }
+    if (payload.context_retention_days === 3) {
+      const confirmed = window.confirm(t('admin.riskControl.contextRetentionConfirm', { days: payload.context_retention_days }))
+      if (!confirmed) return
     }
 
     const updated = await adminAPI.riskControl.updateConfig(payload)
@@ -3361,6 +3377,10 @@ function formatDateTime(value: string): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
+}
+
+function formatBytes(value: number): string {
+  return formatBytesValue(Math.max(0, value || 0), 1)
 }
 
 function formatWeight(value: number): string {

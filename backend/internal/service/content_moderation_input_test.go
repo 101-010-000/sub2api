@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,7 +37,7 @@ func TestExtractContentModerationInput_AnthropicFirstTurnExtractsUser(t *testing
 	require.Equal(t, "Q1", input.Text)
 }
 
-func TestExtractContentModerationInput_AnthropicMultiTurnExtractsLatestUser(t *testing.T) {
+func TestExtractContentModerationInput_AnthropicMultiTurnExtractsRecentUsers(t *testing.T) {
 	body := []byte(`{
 		"messages": [
 			{"role":"user","content":"Q1"},
@@ -47,7 +48,7 @@ func TestExtractContentModerationInput_AnthropicMultiTurnExtractsLatestUser(t *t
 
 	input := ExtractContentModerationInput(ContentModerationProtocolAnthropicMessages, body)
 
-	require.Equal(t, "Q2", input.Text)
+	require.Equal(t, "Q1 Q2", input.Text)
 }
 
 func TestExtractContentModerationInput_AnthropicStreamResendExtractsResend(t *testing.T) {
@@ -80,7 +81,7 @@ func TestExtractContentModerationInput_OpenAIChatAgentToolLoopSkipsAudit(t *test
 	require.Empty(t, input.Images)
 }
 
-func TestExtractContentModerationInput_OpenAIChatMultiTurnExtractsLatestUser(t *testing.T) {
+func TestExtractContentModerationInput_OpenAIChatMultiTurnExtractsRecentUsers(t *testing.T) {
 	body := []byte(`{
 		"messages": [
 			{"role":"user","content":"Q1"},
@@ -91,7 +92,37 @@ func TestExtractContentModerationInput_OpenAIChatMultiTurnExtractsLatestUser(t *
 
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
 
-	require.Equal(t, "Q2", input.Text)
+	require.Equal(t, "Q1 Q2", input.Text)
+}
+
+func TestExtractContentModerationInput_OpenAIChatKeepsLatestThreeUserMessages(t *testing.T) {
+	body := []byte(`{
+		"messages": [
+			{"role":"user","content":"Q1"},
+			{"role":"assistant","content":"A1"},
+			{"role":"user","content":"Q2"},
+			{"role":"assistant","content":"A2"},
+			{"role":"user","content":"Q3"},
+			{"role":"assistant","content":"A3"},
+			{"role":"user","content":"Q4"}
+		]
+	}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
+
+	require.Equal(t, "Q2 Q3 Q4", input.Text)
+	require.NotContains(t, input.Text, "Q1")
+	require.NotContains(t, input.Text, "A3")
+}
+
+func TestExtractContentModerationInput_OpenAIChatLongTextKeepsTail(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"DROP` + strings.Repeat("前", maxModerationInputRunes+16) + `TAIL"}]}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
+
+	require.Len(t, []rune(input.Text), maxModerationInputRunes)
+	require.True(t, strings.HasSuffix(input.Text, "TAIL"))
+	require.NotContains(t, input.Text, "DROP")
 }
 
 func TestExtractContentModerationInput_GeminiAgentToolLoopSkipsAudit(t *testing.T) {
@@ -121,7 +152,7 @@ func TestExtractContentModerationInput_GeminiFirstTurnExtractsUser(t *testing.T)
 	require.Equal(t, "你好", input.Text)
 }
 
-func TestExtractContentModerationInput_GeminiMultiTurnExtractsLatestUser(t *testing.T) {
+func TestExtractContentModerationInput_GeminiMultiTurnExtractsRecentUsers(t *testing.T) {
 	body := []byte(`{
 		"contents": [
 			{"role":"user","parts":[{"text":"Q1"}]},
@@ -132,7 +163,7 @@ func TestExtractContentModerationInput_GeminiMultiTurnExtractsLatestUser(t *test
 
 	input := ExtractContentModerationInput(ContentModerationProtocolGemini, body)
 
-	require.Equal(t, "Q2", input.Text)
+	require.Equal(t, "Q1 Q2", input.Text)
 }
 
 func TestExtractContentModerationInput_ResponsesAgentToolLoopSkipsAudit(t *testing.T) {
@@ -150,7 +181,7 @@ func TestExtractContentModerationInput_ResponsesAgentToolLoopSkipsAudit(t *testi
 	require.Empty(t, input.Images)
 }
 
-func TestExtractContentModerationInput_ResponsesLastUserMessageExtracted(t *testing.T) {
+func TestExtractContentModerationInput_ResponsesRecentUserMessagesExtracted(t *testing.T) {
 	body := []byte(`{
 		"input":[
 			{"type":"message","role":"user","content":[{"type":"input_text","text":"first"}]},
@@ -161,7 +192,7 @@ func TestExtractContentModerationInput_ResponsesLastUserMessageExtracted(t *test
 
 	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
 
-	require.Equal(t, "latest", input.Text)
+	require.Equal(t, "first latest", input.Text)
 }
 
 func TestExtractContentModerationInput_ResponsesLastIsAssistantSkipped(t *testing.T) {

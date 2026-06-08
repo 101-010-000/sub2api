@@ -1068,12 +1068,12 @@ func TestOpenAIGatewayServiceRecordUsage_ScheduledGroupOnlyAffectsAccountStatsCo
 		AccountStatsPricingRules: []AccountStatsPricingRule{{
 			GroupIDs: []int64{scheduledGroupID},
 			Pricing: []ChannelModelPricing{{
-				Model:      "gpt-5.1",
+				Models:     []string{"gpt-5.1"},
 				InputPrice: &inputPrice,
 			}},
 		}},
 	}
-	svc.channelService = newTestChannelServiceForStats(t, channel, scheduledGroupID, PlatformOpenAI)
+	svc.channelService = newTestOpenAIChannelServiceForStats(t, channel, scheduledGroupID, PlatformOpenAI)
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
@@ -1132,6 +1132,17 @@ func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingRequestedModel(
 	require.Equal(t, expectedCost.ActualCost, usageRepo.lastLog.ActualCost)
 	require.Equal(t, expectedCost.TotalCost, usageRepo.lastLog.TotalCost)
 	require.Equal(t, expectedCost.ActualCost, userRepo.lastAmount)
+}
+
+func newTestOpenAIChannelServiceForStats(t *testing.T, channel *Channel, groupID int64, platform string) *ChannelService {
+	t.Helper()
+	cache := newEmptyChannelCache()
+	cache.channelByGroupID[groupID] = channel
+	cache.groupPlatform[groupID] = platform
+	cache.loadedAt = time.Now()
+	cs := &ChannelService{}
+	cs.cache.Store(cache)
+	return cs
 }
 
 func TestOpenAIGatewayServiceRecordUsage_ChannelMappedDoesNotOverrideBillingModelWhenUnmapped(t *testing.T) {

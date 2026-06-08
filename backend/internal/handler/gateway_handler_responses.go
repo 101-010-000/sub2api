@@ -105,6 +105,9 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	}
 
 	if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, body); decision != nil && decision.Blocked {
+		if writeContentModerationResponsesStreamError(c, decision, reqStream) {
+			return
+		}
 		h.responsesErrorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
 		return
 	}

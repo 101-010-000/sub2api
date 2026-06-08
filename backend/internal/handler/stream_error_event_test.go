@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,6 +141,33 @@ func TestOpenAIHandleStreamingAwareError_ResponsesStreamingJSONEscaping(t *testi
 			assert.Equal(t, tc.message, errObj["message"], "message 必须被原样还原")
 		})
 	}
+}
+
+func TestWriteContentModerationResponsesStreamError_EmitsResponseFailed(t *testing.T) {
+	c, w := newGinContextForEndpoint(t, EndpointResponses)
+	setOpsRequestContext(c, "gpt-5.5", true)
+	decision := &service.ContentModerationDecision{
+		Blocked:   true,
+		ErrorCode: "cyber_policy",
+		Message:   "Your account is in a high-risk state due to suspected CyberUse activity.",
+	}
+
+	require.True(t, writeContentModerationResponsesStreamError(c, decision, true))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
+	resp, errObj := parseResponsesFailedSSE(t, w.Body.String())
+	assert.Equal(t, "gpt-5.5", resp["model"])
+	assert.Equal(t, "cyber_policy", errObj["code"])
+	assert.Equal(t, decision.Message, errObj["message"])
+}
+
+func TestWriteContentModerationResponsesStreamError_SkipsNonStream(t *testing.T) {
+	c, w := newGinContextForEndpoint(t, EndpointResponses)
+	decision := &service.ContentModerationDecision{Blocked: true, ErrorCode: "cyber_policy", Message: "blocked"}
+
+	require.False(t, writeContentModerationResponsesStreamError(c, decision, false))
+	require.Empty(t, w.Body.String())
 }
 
 // OpenAI handler: /v1/chat/completions streaming keeps the legacy event: error format

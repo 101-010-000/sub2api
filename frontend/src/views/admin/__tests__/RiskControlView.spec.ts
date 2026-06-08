@@ -135,8 +135,17 @@ const runtimeStatus = () => ({
   pre_block_api_key_loads: [],
   api_key_statuses: [],
   flagged_hash_count: 0,
+  pending_context_count: 0,
+  processing_context_count: 0,
+  failed_context_count: 0,
+  context_total_count: 0,
+  context_total_bytes: 0,
+  context_avg_bytes: 0,
+  context_drop_count: 0,
+  context_capture_error: '',
   last_cleanup_deleted_hit: 0,
   last_cleanup_deleted_non_hit: 0,
+  last_cleanup_deleted_context: 0,
 })
 
 const AppLayoutStub = { template: '<div><slot /></div>' }

@@ -311,12 +311,16 @@ export interface ContentModerationRuntimeStatus {
   processing_context_count: number
   failed_context_count: number
   last_background_review_at?: string
+  context_total_count: number
+  context_total_bytes: number
+  context_avg_bytes: number
   context_drop_count: number
   context_capture_error: string
   last_context_capture_error_at?: string
   last_cleanup_at?: string
   last_cleanup_deleted_hit: number
   last_cleanup_deleted_non_hit: number
+  last_cleanup_deleted_context: number
 }
 
 export interface ContentModerationAPIKeyLoad {
