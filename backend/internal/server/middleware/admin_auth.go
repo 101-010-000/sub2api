@@ -146,6 +146,8 @@ func validateAdminAPIKey(
 		Concurrency: admin.Concurrency,
 	})
 	c.Set(string(ContextKeyUserRole), admin.Role)
+	c.Set(string(ContextKeyAdminPermissions), []string{})
+	c.Set(string(ContextKeyAdminSuper), true)
 	c.Set("auth_method", "admin_api_key")
 	return true
 }
@@ -187,9 +189,8 @@ func validateJWTForAdmin(
 		return false
 	}
 
-	// 检查管理员权限
-	if !user.IsAdmin() {
-		AbortWithError(c, 403, "FORBIDDEN", "Admin access required")
+	if !user.CanAccessAdmin() {
+		AbortWithError(c, 403, "FORBIDDEN", "Admin permission required")
 		return false
 	}
 
@@ -198,6 +199,8 @@ func validateJWTForAdmin(
 		Concurrency: user.Concurrency,
 	})
 	c.Set(string(ContextKeyUserRole), user.Role)
+	c.Set(string(ContextKeyAdminPermissions), append([]string(nil), user.AdminPermissions...))
+	c.Set(string(ContextKeyAdminSuper), user.IsAdmin())
 	c.Set("auth_method", "jwt")
 
 	return true

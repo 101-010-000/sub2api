@@ -3,7 +3,9 @@ package routes
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,7 +18,12 @@ func RegisterAdminRoutes(
 ) {
 	admin := v1.Group("/admin")
 	admin.Use(gin.HandlerFunc(adminAuth))
+	admin.Use(middleware.AdminPermissionGuard(resolveAdminAccessRule))
 	{
+		admin.GET("/permissions", func(c *gin.Context) {
+			response.Success(c, service.AdminPermissionDefinitions())
+		})
+
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
 

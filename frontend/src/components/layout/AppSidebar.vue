@@ -24,7 +24,7 @@
     <!-- Navigation -->
     <nav class="sidebar-nav scrollbar-hide">
       <!-- Admin View: Admin menu first, then personal menu -->
-      <template v-if="isAdmin">
+      <template v-if="canAccessAdmin">
         <!-- Admin Section -->
         <div class="sidebar-section">
           <template v-for="item in adminNavItems" :key="item.path">
@@ -187,6 +187,7 @@ import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } 
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
+import { resolveAdminRoutePermissions } from '@/utils/adminPermissions'
 
 interface NavItem {
   path: string
@@ -207,6 +208,8 @@ interface NavItem {
    * 开关切换时菜单自动更新。
    */
   featureFlag?: () => boolean | undefined
+  adminPermission?: string
+  requiresSuperAdmin?: boolean
 }
 
 // applyFeatureFlags 递归过滤掉 featureFlag() === false 的节点（含子节点）。
@@ -235,7 +238,7 @@ const adminSettingsStore = useAdminSettingsStore()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
-const isAdmin = computed(() => authStore.isAdmin)
+const canAccessAdmin = computed(() => authStore.canAccessAdmin)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 // Track which parent nav groups are expanded
@@ -691,6 +694,30 @@ function finalizeNav(items: NavItem[]): NavItem[] {
   return authStore.isSimpleMode ? visible.filter(item => !item.hideInSimpleMode) : visible
 }
 
+function canShowAdminNavItem(item: NavItem): boolean {
+  if (authStore.isSuperAdmin) return true
+  if (item.requiresSuperAdmin) return false
+  const permissions = item.adminPermission ? [item.adminPermission] : resolveAdminRoutePermissions(item.path)
+  return permissions.length > 0 && permissions.some((permission) => authStore.hasAdminPermission(permission))
+}
+
+function filterAdminNavItems(items: NavItem[]): NavItem[] {
+  const out: NavItem[] = []
+  for (const item of items) {
+    if (item.children?.length) {
+      const children = filterAdminNavItems(item.children)
+      if (children.length > 0) {
+        out.push({ ...item, children })
+      }
+      continue
+    }
+    if (canShowAdminNavItem(item)) {
+      out.push(item)
+    }
+  }
+  return out
+}
+
 // User navigation items (for regular users)
 const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(true)))
 
@@ -767,22 +794,32 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
   ]
 
-  const visible = applyFeatureFlags(baseItems)
+  const visible = filterAdminNavItems(applyFeatureFlags(baseItems))
 
   // 简单模式下，在系统设置前插入 API密钥
   if (authStore.isSimpleMode) {
     const filtered = visible.filter(item => !item.hideInSimpleMode)
     filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })
-    filtered.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
-    for (const cm of customMenuItemsForAdmin.value) {
-      filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+    const settingsItem = { path: '/admin/settings', label: t('nav.settings'), icon: CogIcon }
+    if (canShowAdminNavItem(settingsItem)) {
+      filtered.push(settingsItem)
+    }
+    if (authStore.isSuperAdmin || authStore.hasAdminPermission('admin.settings.read')) {
+      for (const cm of customMenuItemsForAdmin.value) {
+        filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+      }
     }
     return filtered
   }
 
-  visible.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
-  for (const cm of customMenuItemsForAdmin.value) {
-    visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+  const settingsItem = { path: '/admin/settings', label: t('nav.settings'), icon: CogIcon }
+  if (canShowAdminNavItem(settingsItem)) {
+    visible.push(settingsItem)
+  }
+  if (authStore.isSuperAdmin || authStore.hasAdminPermission('admin.settings.read')) {
+    for (const cm of customMenuItemsForAdmin.value) {
+      visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+    }
   }
   return visible
 })
@@ -876,7 +913,7 @@ if (
 
 // Fetch admin settings (for feature-gated nav items like Ops).
 watch(
-  isAdmin,
+  canAccessAdmin,
   (v) => {
     if (v) {
       adminSettingsStore.fetch()
@@ -886,7 +923,7 @@ watch(
 )
 
 onMounted(() => {
-  if (isAdmin.value) {
+  if (canAccessAdmin.value) {
     adminSettingsStore.fetch()
   }
 })

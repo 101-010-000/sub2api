@@ -20,6 +20,17 @@ declare module 'vue-router' {
     requiresAdmin?: boolean
 
     /**
+     * Required delegated admin permission for this route
+     */
+    adminPermission?: string
+
+    /**
+     * Whether this route requires super admin role
+     * @default false
+     */
+    requiresSuperAdmin?: boolean
+
+    /**
      * Page title for this route
      */
     title?: string

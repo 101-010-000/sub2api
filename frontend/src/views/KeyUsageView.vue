@@ -969,7 +969,7 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 :global(.dark) .skeleton {
-  background: linear-gradient(90deg, #334155 25%, #1e293b 50%, #334155 75%);
+  background: linear-gradient(90deg, #3f3f3f 25%, #303030 50%, #3f3f3f 75%);
   background-size: 200% 100%;
 }
 

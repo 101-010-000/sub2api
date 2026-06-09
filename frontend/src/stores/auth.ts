@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { authAPI, isTotp2FARequired, type LoginResponse } from '@/api'
 import type { User, LoginRequest, RegisterRequest, AuthResponse } from '@/types'
+import { normalizeAdminPermissions } from '@/utils/adminPermissions'
 
 const AUTH_TOKEN_KEY = 'auth_token'
 const AUTH_USER_KEY = 'auth_user'
@@ -68,6 +69,13 @@ function clearPendingAuthSessionStorage(): void {
   localStorage.removeItem(PENDING_AUTH_SESSION_KEY)
 }
 
+function normalizeUser(value: User): User {
+  return {
+    ...value,
+    admin_permissions: normalizeAdminPermissions(value?.admin_permissions)
+  }
+}
+
 export const useAuthStore = defineStore('auth', () => {
   // ==================== State ====================
 
@@ -90,6 +98,17 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   })
 
+  const isSuperAdmin = computed(() => isAdmin.value)
+
+  const canAccessAdmin = computed(() => {
+    return isSuperAdmin.value || normalizeAdminPermissions(user.value?.admin_permissions).length > 0
+  })
+
+  function hasAdminPermission(permission: string): boolean {
+    if (isSuperAdmin.value) return true
+    return normalizeAdminPermissions(user.value?.admin_permissions).includes(permission)
+  }
+
   const isSimpleMode = computed(() => runMode.value === 'simple')
   const hasPendingAuthSession = computed(() => pendingAuthSession.value !== null)
 
@@ -110,7 +129,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (savedToken && savedUser) {
       try {
         token.value = savedToken
-        user.value = JSON.parse(savedUser)
+        user.value = normalizeUser(JSON.parse(savedUser))
         refreshTokenValue.value = savedRefreshToken
         tokenExpiresAt.value = savedExpiresAt ? parseInt(savedExpiresAt, 10) : null
 
@@ -293,7 +312,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (response.user.run_mode) {
       runMode.value = response.user.run_mode
     }
-    const { run_mode: _run_mode, ...userData } = response.user
+    const { run_mode: _run_mode, ...rawUserData } = response.user
+    const userData = normalizeUser(rawUserData)
     user.value = userData
 
     // Persist to localStorage
@@ -420,7 +440,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.data.run_mode) {
         runMode.value = response.data.run_mode
       }
-      const { run_mode: _run_mode, ...userData } = response.data
+      const { run_mode: _run_mode, ...rawUserData } = response.data
+      const userData = normalizeUser(rawUserData)
       user.value = userData
 
       // Update localStorage
@@ -476,6 +497,9 @@ export const useAuthStore = defineStore('auth', () => {
     // Computed
     isAuthenticated,
     isAdmin,
+    isSuperAdmin,
+    canAccessAdmin,
+    hasAdminPermission,
     isSimpleMode,
     hasPendingAuthSession,
 

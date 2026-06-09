@@ -18,6 +18,7 @@ type User struct {
 	AvatarSHA256   string
 	PasswordHash   string
 	Role           string
+	AdminPermissions []string
 	Balance        float64
 	Concurrency    int
 	Status         string
@@ -71,6 +72,13 @@ type User struct {
 
 func (u *User) IsAdmin() bool {
 	return u.Role == RoleAdmin
+}
+
+func (u *User) CanAccessAdmin() bool {
+	if u == nil {
+		return false
+	}
+	return u.IsAdmin() || len(u.AdminPermissions) > 0
 }
 
 func (u *User) IsActive() bool {

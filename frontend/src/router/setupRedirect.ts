@@ -1,7 +1,7 @@
-export function resolveCompletedSetupRedirectPath(isAuthenticated: boolean, isAdmin: boolean): string {
+export function resolveCompletedSetupRedirectPath(isAuthenticated: boolean, canAccessAdmin: boolean): string {
   if (!isAuthenticated) {
     return '/login'
   }
 
-  return isAdmin ? '/admin/dashboard' : '/dashboard'
+  return canAccessAdmin ? '/admin/dashboard' : '/dashboard'
 }

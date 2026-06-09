@@ -127,7 +127,7 @@
                 </router-link>
 
                 <a
-                  v-if="authStore.isAdmin"
+                  v-if="authStore.canAccessAdmin"
                   href="https://github.com/TalexDreamSoul/sub2api"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -240,7 +240,7 @@ const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
 
 // 只在标准模式的管理员下显示新手引导按钮
 const showOnboardingButton = computed(() => {
-  return !authStore.isSimpleMode && user.value?.role === 'admin'
+  return !authStore.isSimpleMode && authStore.canAccessAdmin
 })
 
 const userInitials = computed(() => {
@@ -268,7 +268,7 @@ const pageTitle = computed(() => {
     const id = route.params.id as string
     const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []
     const menuItem = publicItems.find((item) => item.id === id)
-      ?? (authStore.isAdmin ? adminSettingsStore.customMenuItems.find((item) => item.id === id) : undefined)
+      ?? (authStore.canAccessAdmin ? adminSettingsStore.customMenuItems.find((item) => item.id === id) : undefined)
     if (menuItem?.label) return menuItem.label
   }
   const titleKey = route.meta.titleKey as string

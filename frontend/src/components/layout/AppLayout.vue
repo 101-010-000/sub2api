@@ -40,10 +40,10 @@ import AppHeader from './AppHeader.vue'
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
-const isAdmin = computed(() => authStore.user?.role === 'admin')
+const canAccessAdmin = computed(() => authStore.canAccessAdmin)
 
 const { replayTour } = useOnboardingTour({
-  storageKey: isAdmin.value ? 'admin_guide' : 'user_guide',
+  storageKey: canAccessAdmin.value ? 'admin_guide' : 'user_guide',
   autoStart: true
 })
 

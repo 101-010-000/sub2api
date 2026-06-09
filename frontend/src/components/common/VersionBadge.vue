@@ -1,7 +1,7 @@
 <template>
   <div class="relative">
     <!-- Admin: Full version badge with dropdown -->
-    <template v-if="isAdmin">
+    <template v-if="isSuperAdmin">
       <button
         @click="toggleDropdown"
         class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors"
@@ -396,7 +396,7 @@ const props = defineProps<{
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
-const isAdmin = computed(() => authStore.isAdmin)
+const isSuperAdmin = computed(() => authStore.isSuperAdmin)
 
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -430,7 +430,7 @@ function closeDropdown() {
 }
 
 async function refreshVersion(force = true) {
-  if (!isAdmin.value) return
+  if (!isSuperAdmin.value) return
 
   // Reset update states when refreshing
   updateError.value = ''
@@ -523,7 +523,7 @@ function handleClickOutside(event: MouseEvent) {
 }
 
 onMounted(() => {
-  if (isAdmin.value) {
+  if (isSuperAdmin.value) {
     // Use cached version if available, otherwise fetch
     appStore.fetchVersion(false)
   }

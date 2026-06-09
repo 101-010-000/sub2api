@@ -146,6 +146,7 @@ type UpdateUserInput struct {
 	Password                  string
 	Username                  *string
 	Notes                     *string
+	AdminPermissions          *[]string
 	Balance                   *float64 // 使用指针区分"未提供"和"设置为0"
 	Concurrency               *int     // 使用指针区分"未提供"和"设置为0"
 	RPMLimit                  *int     // 使用指针区分"未提供"和"设置为0"
@@ -807,6 +808,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	oldConcurrency := user.Concurrency
 	oldStatus := user.Status
 	oldRole := user.Role
+	oldAdminPermissions := append([]string(nil), user.AdminPermissions...)
 	oldRPMLimit := user.RPMLimit
 	oldAPIKeyMaxActiveIPs := user.APIKeyMaxActiveIPs
 	oldAPIKeyMaxActiveIPsVisible := user.APIKeyMaxActiveIPsVisible
@@ -826,6 +828,14 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	}
 	if input.Notes != nil {
 		user.Notes = *input.Notes
+	}
+
+	if input.AdminPermissions != nil {
+		permissions, err := NormalizeAdminPermissions(*input.AdminPermissions)
+		if err != nil {
+			return nil, infraerrors.BadRequest("INVALID_ADMIN_PERMISSION", err.Error())
+		}
+		user.AdminPermissions = permissions
 	}
 
 	if input.Status != "" {
@@ -869,7 +879,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if s.authCacheInvalidator != nil {
 		// RPMLimit 直接参与 billing_cache_service.checkRPM 的三级级联，
 		// allowed_groups 和用户级 API Key 活跃 IP 策略也参与 API Key 授权热路径。
-		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || user.RPMLimit != oldRPMLimit || user.APIKeyMaxActiveIPs != oldAPIKeyMaxActiveIPs || user.APIKeyMaxActiveIPsVisible != oldAPIKeyMaxActiveIPsVisible || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) {
+		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || !sameStringSet(user.AdminPermissions, oldAdminPermissions) || user.RPMLimit != oldRPMLimit || user.APIKeyMaxActiveIPs != oldAPIKeyMaxActiveIPs || user.APIKeyMaxActiveIPsVisible != oldAPIKeyMaxActiveIPsVisible || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
 		}
 	}
@@ -896,6 +906,26 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	}
 
 	return user, nil
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if len(a) == 0 {
+		return true
+	}
+	counts := make(map[string]int, len(a))
+	for _, v := range a {
+		counts[v]++
+	}
+	for _, v := range b {
+		if counts[v] == 0 {
+			return false
+		}
+		counts[v]--
+	}
+	return true
 }
 
 func sameInt64Set(a, b []int64) bool {

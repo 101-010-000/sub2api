@@ -17,6 +17,7 @@ func UserFromServiceShallow(u *service.User) *User {
 		Email:                      u.Email,
 		Username:                   u.Username,
 		Role:                       u.Role,
+		AdminPermissions:           stringSliceOrEmpty(u.AdminPermissions),
 		Balance:                    u.Balance,
 		Concurrency:                u.Concurrency,
 		Status:                     u.Status,
@@ -38,6 +39,13 @@ func UserFromServiceShallow(u *service.User) *User {
 		out.APIKeyMaxActiveIPsVisible = true
 	}
 	return out
+}
+
+func stringSliceOrEmpty(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	return append([]string(nil), values...)
 }
 
 func UserFromService(u *service.User) *User {

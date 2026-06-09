@@ -12,6 +12,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/handler/quotaview"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -72,6 +73,7 @@ type UpdateUserRequest struct {
 	Password                  string   `json:"password" binding:"omitempty,min=6"`
 	Username                  *string  `json:"username"`
 	Notes                     *string  `json:"notes"`
+	AdminPermissions          *[]string `json:"admin_permissions"`
 	Balance                   *float64 `json:"balance"`
 	Concurrency               *int     `json:"concurrency"`
 	RPMLimit                  *int     `json:"rpm_limit"`
@@ -307,6 +309,10 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if req.AdminPermissions != nil && !middleware2.IsSuperAdminContext(c) {
+		response.Forbidden(c, "Only super admin can update admin permissions")
+		return
+	}
 
 	// 使用指针类型直接传递，nil 表示未提供该字段
 	user, err := h.adminService.UpdateUser(c.Request.Context(), userID, &service.UpdateUserInput{
@@ -314,6 +320,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		Password:                  req.Password,
 		Username:                  req.Username,
 		Notes:                     req.Notes,
+		AdminPermissions:          req.AdminPermissions,
 		Balance:                   req.Balance,
 		Concurrency:               req.Concurrency,
 		RPMLimit:                  req.RPMLimit,

@@ -18,6 +18,10 @@ const (
 	ContextKeyUser ContextKey = "user"
 	// ContextKeyUserRole 当前用户角色（string）
 	ContextKeyUserRole ContextKey = "user_role"
+	// ContextKeyAdminPermissions 当前用户可委派后台权限（[]string）
+	ContextKeyAdminPermissions ContextKey = "admin_permissions"
+	// ContextKeyAdminSuper 当前请求是否具备超级管理员能力（role=admin 或 Admin API Key）
+	ContextKeyAdminSuper ContextKey = "admin_super"
 	// ContextKeyAPIKey API密钥上下文键
 	ContextKeyAPIKey ContextKey = "api_key"
 	// ContextKeySubscription 订阅上下文键

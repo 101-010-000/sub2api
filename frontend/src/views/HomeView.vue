@@ -412,6 +412,7 @@ import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import PoweredByFooter from '@/components/common/PoweredByFooter.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { firstAccessibleAdminPath } from '@/utils/adminPermissions'
 
 const { t } = useI18n()
 
@@ -439,8 +440,10 @@ const githubUrl = 'https://github.com/TalexDreamSoul/sub2api'
 
 // Auth state
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const isAdmin = computed(() => authStore.isAdmin)
-const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')
+const dashboardPath = computed(() => {
+  if (!authStore.canAccessAdmin) return '/dashboard'
+  return firstAccessibleAdminPath((permission) => authStore.hasAdminPermission(permission))
+})
 const userInitial = computed(() => {
   const user = authStore.user
   if (!user || !user.email) return ''
@@ -492,7 +495,7 @@ onMounted(() => {
 /* Terminal Window */
 .terminal-window {
   width: 420px;
-  background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+  background: linear-gradient(145deg, #303030 0%, #212121 100%);
   border-radius: 14px;
   box-shadow:
     0 25px 50px -12px rgba(0, 0, 0, 0.4),
@@ -512,7 +515,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(38, 38, 38, 0.86);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 

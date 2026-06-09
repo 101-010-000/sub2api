@@ -27,6 +27,7 @@ const fakeUser = {
   username: 'testuser',
   email: 'test@example.com',
   role: 'user' as const,
+  admin_permissions: [] as string[],
   balance: 100,
   concurrency: 5,
   status: 'active' as const,
@@ -41,6 +42,14 @@ const fakeAdminUser = {
   username: 'admin',
   email: 'admin@example.com',
   role: 'admin' as const,
+}
+
+const fakeDelegatedAdminUser = {
+  ...fakeUser,
+  id: 3,
+  username: 'delegated',
+  email: 'delegated@example.com',
+  admin_permissions: ['admin.users.read', 'admin.users.write'],
 }
 
 const fakeAuthResponse = {
@@ -339,6 +348,49 @@ describe('useAuthStore', () => {
     it('未登录时返回 false', () => {
       const store = useAuthStore()
       expect(store.isAdmin).toBe(false)
+    })
+  })
+
+  describe('admin permissions', () => {
+    it('admin role can access admin and bypasses granular checks', async () => {
+      const adminResponse = { ...fakeAuthResponse, user: { ...fakeAdminUser } }
+      mockLogin.mockResolvedValue(adminResponse)
+      const store = useAuthStore()
+
+      await store.login({ email: 'admin@example.com', password: '123456' })
+
+      expect(store.isSuperAdmin).toBe(true)
+      expect(store.canAccessAdmin).toBe(true)
+      expect(store.hasAdminPermission('admin.accounts.read')).toBe(true)
+    })
+
+    it('delegated user can access admin only for granted permissions', async () => {
+      const delegatedResponse = { ...fakeAuthResponse, user: { ...fakeDelegatedAdminUser } }
+      mockLogin.mockResolvedValue(delegatedResponse)
+      const store = useAuthStore()
+
+      await store.login({ email: 'delegated@example.com', password: '123456' })
+
+      expect(store.isAdmin).toBe(false)
+      expect(store.isSuperAdmin).toBe(false)
+      expect(store.canAccessAdmin).toBe(true)
+      expect(store.hasAdminPermission('admin.users.read')).toBe(true)
+      expect(store.hasAdminPermission('admin.accounts.read')).toBe(false)
+    })
+
+    it('normalizes persisted delegated permissions', () => {
+      localStorage.setItem('auth_token', 'saved-token')
+      localStorage.setItem('auth_user', JSON.stringify({
+        ...fakeUser,
+        admin_permissions: [' admin.users.write ', 'unknown.permission', 'admin.users.read', 'admin.users.read'],
+      }))
+      mockGetCurrentUser.mockResolvedValue({ data: fakeUser })
+
+      const store = useAuthStore()
+      store.checkAuth()
+
+      expect(store.user?.admin_permissions).toEqual(['admin.users.read', 'admin.users.write'])
+      expect(store.canAccessAdmin).toBe(true)
     })
   })
 

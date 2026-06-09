@@ -108,6 +108,7 @@ export interface User {
   dingtalk_bound?: boolean
   feishu_bound?: boolean
   role: 'admin' | 'user' // User role for authorization
+  admin_permissions?: string[] // Delegated admin permissions for non-admin users
   balance: number // User balance for API usage
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
@@ -1632,6 +1633,7 @@ export interface UpdateUserRequest {
   username?: string
   notes?: string
   role?: 'admin' | 'user'
+  admin_permissions?: string[]
   balance?: number
   concurrency?: number
   rpm_limit?: number

@@ -156,7 +156,7 @@ const menuItem = computed(() => {
   const publicItems = appStore.cachedPublicSettings?.custom_menu_items ?? []
   const found = publicItems.find((item) => item.id === id) ?? null
   if (found) return found
-  if (authStore.isAdmin) {
+  if (authStore.canAccessAdmin) {
     return adminSettingsStore.customMenuItems.find((item) => item.id === id) ?? null
   }
   return null

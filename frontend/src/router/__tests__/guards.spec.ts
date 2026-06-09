@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { resolveCompletedSetupRedirectPath } from '@/router/setupRedirect'
+import { firstAccessibleAdminPath, resolveAdminRoutePermissions } from '@/utils/adminPermissions'
 
 // Mock 导航加载状态
 vi.mock('@/composables/useNavigationLoading', () => {
@@ -51,6 +52,7 @@ vi.mock('@/api/auth', () => ({
 interface MockAuthState {
   isAuthenticated: boolean
   isAdmin: boolean
+  adminPermissions?: string[]
   isSimpleMode: boolean
   backendModeEnabled: boolean
   hasPendingAuthSession: boolean
@@ -67,9 +69,15 @@ function simulateGuard(
 ): string | null {
   const requiresAuth = toMeta.requiresAuth !== false
   const requiresAdmin = toMeta.requiresAdmin === true
+  const isSuperAdmin = authState.isAdmin
+  const hasAdminPermission = (permission: string) => {
+    return isSuperAdmin || (authState.adminPermissions ?? []).includes(permission)
+  }
+  const canAccessAdmin = isSuperAdmin || (authState.adminPermissions ?? []).length > 0
+  const adminHomePath = () => firstAccessibleAdminPath(hasAdminPermission)
 
   if (toPath === '/setup' && authState.setupNeedsSetup === false) {
-    return resolveCompletedSetupRedirectPath(authState.isAuthenticated, authState.isAdmin)
+    return resolveCompletedSetupRedirectPath(authState.isAuthenticated, canAccessAdmin)
   }
 
   // 不需要认证的路由
@@ -78,10 +86,10 @@ function simulateGuard(
       authState.isAuthenticated &&
       (toPath === '/login' || toPath === '/register')
     ) {
-      if (authState.backendModeEnabled && !authState.isAdmin) {
+      if (authState.backendModeEnabled && !canAccessAdmin) {
         return null
       }
-      return authState.isAdmin ? '/admin/dashboard' : '/dashboard'
+      return canAccessAdmin ? adminHomePath() : '/dashboard'
     }
     if (authState.backendModeEnabled && !authState.isAuthenticated) {
       const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
@@ -110,8 +118,18 @@ function simulateGuard(
   }
 
   // 需要管理员但不是管理员
-  if (requiresAdmin && !authState.isAdmin) {
+  if (requiresAdmin && !canAccessAdmin) {
     return '/dashboard'
+  }
+
+  if (requiresAdmin) {
+    if (toMeta.requiresSuperAdmin && !isSuperAdmin) {
+      return adminHomePath()
+    }
+    const permissions = toMeta.adminPermission ? [toMeta.adminPermission] : resolveAdminRoutePermissions(toPath)
+    if (permissions.length > 0 && !permissions.some(hasAdminPermission)) {
+      return adminHomePath()
+    }
   }
 
   // 简易模式限制
@@ -124,13 +142,13 @@ function simulateGuard(
       '/redeem',
     ]
     if (restrictedPaths.some((path) => toPath.startsWith(path))) {
-      return authState.isAdmin ? '/admin/dashboard' : '/dashboard'
+      return canAccessAdmin ? adminHomePath() : '/dashboard'
     }
   }
 
   // Backend mode: admin gets full access, non-admin blocked
   if (authState.backendModeEnabled) {
-    if (authState.isAuthenticated && authState.isAdmin) {
+    if (authState.isAuthenticated && canAccessAdmin) {
       return null
     }
     const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
@@ -252,6 +270,39 @@ describe('路由守卫逻辑', () => {
     it('访问用户页面允许通过', () => {
       const redirect = simulateGuard('/dashboard', {}, authState)
       expect(redirect).toBeNull()
+    })
+  })
+
+  // --- 已认证委派后台用户 ---
+
+  describe('已认证委派后台用户', () => {
+    const authState: MockAuthState = {
+      isAuthenticated: true,
+      isAdmin: false,
+      adminPermissions: ['admin.users.read'],
+      isSimpleMode: false,
+      backendModeEnabled: false,
+      hasPendingAuthSession: false,
+    }
+
+    it('访问有 read 权限的后台页面允许通过', () => {
+      const redirect = simulateGuard('/admin/users', { requiresAdmin: true }, authState)
+      expect(redirect).toBeNull()
+    })
+
+    it('访问缺少权限的后台页面重定向到首个可访问后台页', () => {
+      const redirect = simulateGuard('/admin/accounts', { requiresAdmin: true }, authState)
+      expect(redirect).toBe('/admin/users')
+    })
+
+    it('访问超级管理员页面重定向到首个可访问后台页', () => {
+      const redirect = simulateGuard('/admin/settings', { requiresAdmin: true, requiresSuperAdmin: true }, authState)
+      expect(redirect).toBe('/admin/users')
+    })
+
+    it('访问 /login 重定向到首个可访问后台页', () => {
+      const redirect = simulateGuard('/login', { requiresAuth: false }, authState)
+      expect(redirect).toBe('/admin/users')
     })
   })
 
@@ -467,6 +518,19 @@ describe('路由守卫逻辑', () => {
         hasPendingAuthSession: false,
       }
       const redirect = simulateGuard('/key-usage', { requiresAuth: false }, authState)
+      expect(redirect).toBeNull()
+    })
+
+    it('delegated admin authenticated: /admin/users is allowed', () => {
+      const authState: MockAuthState = {
+        isAuthenticated: true,
+        isAdmin: false,
+        adminPermissions: ['admin.users.read'],
+        isSimpleMode: false,
+        backendModeEnabled: true,
+        hasPendingAuthSession: false,
+      }
+      const redirect = simulateGuard('/admin/users', { requiresAdmin: true }, authState)
       expect(redirect).toBeNull()
     })
 

@@ -65,6 +65,36 @@
           <span>{{ t('admin.users.form.apiKeyMaxActiveIPsVisible') }}</span>
         </label>
       </div>
+      <div v-if="isSuperAdmin">
+        <label class="input-label">后台权限</label>
+        <div class="grid gap-2 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div
+            v-for="module in adminPermissionModules"
+            :key="module.key"
+            class="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm"
+          >
+            <span class="min-w-0 truncate text-gray-700 dark:text-gray-300">{{ module.label }}</span>
+            <label class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                :checked="hasPermission(module.read)"
+                @change="togglePermission(module.read, eventChecked($event))"
+              />
+              <span>查看</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                :checked="hasPermission(module.write)"
+                @change="togglePermission(module.write, eventChecked($event))"
+              />
+              <span>编辑</span>
+            </label>
+          </div>
+        </div>
+      </div>
       <UserAttributeForm v-model="form.customAttributes" :user-id="user?.id" />
     </form>
     <template #footer>
@@ -79,29 +109,51 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { useClipboard } from '@/composables/useClipboard'
 import { adminAPI } from '@/api/admin'
 import type { AdminUser, UserAttributeValuesMap } from '@/types'
+import { adminPermissionModules, normalizeAdminPermissions } from '@/utils/adminPermissions'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import UserAttributeForm from '@/components/user/UserAttributeForm.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{ show: boolean, user: AdminUser | null }>()
 const emit = defineEmits(['close', 'success'])
-const { t } = useI18n(); const appStore = useAppStore(); const { copyToClipboard } = useClipboard()
+const { t } = useI18n(); const appStore = useAppStore(); const authStore = useAuthStore(); const { copyToClipboard } = useClipboard()
 
 const submitting = ref(false); const passwordCopied = ref(false)
-const form = reactive({ email: '', password: '', username: '', notes: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, customAttributes: {} as UserAttributeValuesMap })
+const form = reactive({ email: '', password: '', username: '', notes: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] as string[], customAttributes: {} as UserAttributeValuesMap })
+const isSuperAdmin = computed(() => authStore.isSuperAdmin)
 
 watch(() => props.user, (u) => {
   if (u) {
-    Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, api_key_max_active_ips: u.api_key_max_active_ips ?? 0, api_key_max_active_ips_visible: u.api_key_max_active_ips_visible ?? false, customAttributes: {} })
+    Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, api_key_max_active_ips: u.api_key_max_active_ips ?? 0, api_key_max_active_ips_visible: u.api_key_max_active_ips_visible ?? false, admin_permissions: normalizeAdminPermissions(u.admin_permissions), customAttributes: {} })
     passwordCopied.value = false
   }
 }, { immediate: true })
+
+const hasPermission = (permission: string) => form.admin_permissions.includes(permission)
+
+const eventChecked = (event: Event) => {
+  return (event.target as HTMLInputElement | null)?.checked === true
+}
+
+const togglePermission = (permission: string, enabled: boolean) => {
+  const next = new Set(form.admin_permissions)
+  const module = adminPermissionModules.find((item) => item.read === permission || item.write === permission)
+  if (enabled) {
+    next.add(permission)
+    if (module && permission === module.write) next.add(module.read)
+  } else {
+    next.delete(permission)
+    if (module && permission === module.read) next.delete(module.write)
+  }
+  form.admin_permissions = normalizeAdminPermissions([...next])
+}
 
 const generatePassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*'
@@ -130,6 +182,7 @@ const handleUpdateUser = async () => {
   submitting.value = true
   try {
     const data: any = { email: form.email, username: form.username, notes: form.notes, concurrency: form.concurrency, rpm_limit: form.rpm_limit, api_key_max_active_ips: Math.floor(form.api_key_max_active_ips || 0), api_key_max_active_ips_visible: form.api_key_max_active_ips_visible }
+    if (isSuperAdmin.value) data.admin_permissions = normalizeAdminPermissions(form.admin_permissions)
     if (form.password.trim()) data.password = form.password.trim()
     await adminAPI.users.update(props.user.id, data)
     if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(props.user.id, form.customAttributes)

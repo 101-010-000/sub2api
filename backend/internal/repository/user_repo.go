@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
@@ -44,6 +46,11 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 	if userIn == nil {
 		return nil
 	}
+	permissions, err := service.NormalizeAdminPermissions(userIn.AdminPermissions)
+	if err != nil {
+		return err
+	}
+	userIn.AdminPermissions = permissions
 
 	// 统一使用 ent 的事务：保证用户与允许分组的更新原子化，
 	// 并避免基于 *sql.Tx 手动构造 ent client 导致的 ExecQuerier 断言错误。
@@ -100,7 +107,11 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 		return translatePersistenceError(err, nil, service.ErrEmailExists)
 	}
 
-	if err := r.updateUserAPIKeyIPPolicyWithExecutor(txCtx, txAwareSQLExecutor(txCtx, r.sql, r.client), created.ID, userIn.APIKeyMaxActiveIPs, userIn.APIKeyMaxActiveIPsVisible); err != nil {
+	exec := txAwareSQLExecutor(txCtx, r.sql, r.client)
+	if err := r.updateUserAdminPermissionsWithExecutor(txCtx, exec, created.ID, userIn.AdminPermissions); err != nil {
+		return err
+	}
+	if err := r.updateUserAPIKeyIPPolicyWithExecutor(txCtx, exec, created.ID, userIn.APIKeyMaxActiveIPs, userIn.APIKeyMaxActiveIPsVisible); err != nil {
 		return err
 	}
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, created.ID, userIn.AllowedGroups); err != nil {
@@ -134,6 +145,9 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, 
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
 	}
+	if err := r.hydrateUserAdminPermissions(ctx, out); err != nil {
+		return nil, err
+	}
 	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
 		return nil, err
 	}
@@ -153,6 +167,9 @@ func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*
 	}
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
+	}
+	if err := r.hydrateUserAdminPermissions(ctx, out); err != nil {
+		return nil, err
 	}
 	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
 		return nil, err
@@ -184,6 +201,9 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 	if v, ok := groups[m.ID]; ok {
 		out.AllowedGroups = v
 	}
+	if err := r.hydrateUserAdminPermissions(ctx, out); err != nil {
+		return nil, err
+	}
 	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
 		return nil, err
 	}
@@ -194,6 +214,11 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 	if userIn == nil {
 		return nil
 	}
+	permissions, err := service.NormalizeAdminPermissions(userIn.AdminPermissions)
+	if err != nil {
+		return err
+	}
+	userIn.AdminPermissions = permissions
 
 	// 使用 ent 事务包裹用户更新与 allowed_groups 同步，避免跨层事务不一致。
 	tx, err := r.client.Tx(ctx)
@@ -269,7 +294,11 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 		return translatePersistenceError(err, service.ErrUserNotFound, service.ErrEmailExists)
 	}
 
-	if err := r.updateUserAPIKeyIPPolicyWithExecutor(txCtx, txAwareSQLExecutor(txCtx, r.sql, r.client), updated.ID, userIn.APIKeyMaxActiveIPs, userIn.APIKeyMaxActiveIPsVisible); err != nil {
+	exec := txAwareSQLExecutor(txCtx, r.sql, r.client)
+	if err := r.updateUserAdminPermissionsWithExecutor(txCtx, exec, updated.ID, userIn.AdminPermissions); err != nil {
+		return err
+	}
+	if err := r.updateUserAPIKeyIPPolicyWithExecutor(txCtx, exec, updated.ID, userIn.APIKeyMaxActiveIPs, userIn.APIKeyMaxActiveIPsVisible); err != nil {
 		return err
 	}
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, updated.ID, userIn.AllowedGroups); err != nil {
@@ -553,6 +582,9 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		if groups, ok := allowedGroupsByUser[id]; ok {
 			u.AllowedGroups = groups
 		}
+	}
+	if err := r.hydrateUsersAdminPermissions(ctx, outUsers); err != nil {
+		return nil, nil, err
 	}
 	if err := r.hydrateUsersAPIKeyIPPolicy(ctx, outUsers); err != nil {
 		return nil, nil, err
@@ -925,6 +957,9 @@ func (r *userRepository) GetFirstAdmin(ctx context.Context) (*service.User, erro
 	if v, ok := groups[m.ID]; ok {
 		out.AllowedGroups = v
 	}
+	if err := r.hydrateUserAdminPermissions(ctx, out); err != nil {
+		return nil, err
+	}
 	if err := r.hydrateUserAPIKeyIPPolicy(ctx, out); err != nil {
 		return nil, err
 	}
@@ -1005,6 +1040,151 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 	dst.LastActiveAt = src.LastActiveAt
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
+}
+
+func (r *userRepository) hydrateUserAdminPermissions(ctx context.Context, user *service.User) error {
+	if user == nil {
+		return nil
+	}
+	permissions, err := r.loadUserAdminPermissions(ctx, []int64{user.ID})
+	if err != nil {
+		return err
+	}
+	if value, ok := permissions[user.ID]; ok {
+		user.AdminPermissions = value
+	} else {
+		user.AdminPermissions = []string{}
+	}
+	return nil
+}
+
+func (r *userRepository) hydrateUsersAdminPermissions(ctx context.Context, users []service.User) error {
+	if len(users) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(users))
+	for i := range users {
+		ids = append(ids, users[i].ID)
+	}
+	permissions, err := r.loadUserAdminPermissions(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for i := range users {
+		if value, ok := permissions[users[i].ID]; ok {
+			users[i].AdminPermissions = value
+		} else {
+			users[i].AdminPermissions = []string{}
+		}
+	}
+	return nil
+}
+
+func (r *userRepository) loadUserAdminPermissions(ctx context.Context, userIDs []int64) (map[int64][]string, error) {
+	result := make(map[int64][]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	exec := txAwareSQLExecutor(ctx, r.sql, r.client)
+	if exec == nil {
+		return result, nil
+	}
+	query, args := userAdminPermissionsSelectQuery(r.client, userIDs)
+	rows, err := exec.QueryContext(ctx, query, args...)
+	if err != nil {
+		if isMissingAdminPermissionsColumn(err) {
+			return result, nil
+		}
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var userID int64
+		var raw string
+		if err := rows.Scan(&userID, &raw); err != nil {
+			return nil, err
+		}
+		var permissions []string
+		if strings.TrimSpace(raw) != "" {
+			if err := json.Unmarshal([]byte(raw), &permissions); err != nil {
+				return nil, err
+			}
+		}
+		normalized, err := service.NormalizeAdminPermissions(permissions)
+		if err != nil {
+			return nil, err
+		}
+		result[userID] = normalized
+	}
+	return result, rows.Err()
+}
+
+func (r *userRepository) updateUserAdminPermissionsWithExecutor(ctx context.Context, exec sqlExecutor, userID int64, permissions []string) error {
+	if exec == nil || userID <= 0 {
+		return nil
+	}
+	normalized, err := service.NormalizeAdminPermissions(permissions)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(normalized)
+	if err != nil {
+		return err
+	}
+	_, err = exec.ExecContext(ctx, `
+UPDATE users
+SET admin_permissions = `+userAdminPermissionsUpdateExpr(r.client)+`
+WHERE id = $2
+`, string(payload), userID)
+	if isMissingAdminPermissionsColumn(err) {
+		return nil
+	}
+	return err
+}
+
+func isMissingAdminPermissionsColumn(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "admin_permissions") &&
+		(strings.Contains(msg, "does not exist") || strings.Contains(msg, "no such column"))
+}
+
+func userAdminPermissionsSelectQuery(client *dbent.Client, userIDs []int64) (string, []any) {
+	if client == nil || client.Driver().Dialect() == dialect.Postgres {
+		return `
+SELECT id, ` + userAdminPermissionsTextExpr(client) + `
+FROM users
+WHERE id = ANY($1)
+`, []any{pq.Array(userIDs)}
+	}
+
+	placeholders := make([]string, 0, len(userIDs))
+	args := make([]any, 0, len(userIDs))
+	for i, id := range userIDs {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+		args = append(args, id)
+	}
+	return `
+SELECT id, ` + userAdminPermissionsTextExpr(client) + `
+FROM users
+WHERE id IN (` + strings.Join(placeholders, ",") + `)
+`, args
+}
+
+func userAdminPermissionsTextExpr(client *dbent.Client) string {
+	if client != nil && client.Driver().Dialect() != dialect.Postgres {
+		return "admin_permissions"
+	}
+	return "admin_permissions::text"
+}
+
+func userAdminPermissionsUpdateExpr(client *dbent.Client) string {
+	if client != nil && client.Driver().Dialect() != dialect.Postgres {
+		return "$1"
+	}
+	return "$1::jsonb"
 }
 
 type userAPIKeyIPPolicy struct {

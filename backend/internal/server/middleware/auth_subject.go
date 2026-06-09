@@ -26,3 +26,28 @@ func GetUserRoleFromContext(c *gin.Context) (string, bool) {
 	role, ok := value.(string)
 	return role, ok
 }
+
+func GetAdminPermissionsFromContext(c *gin.Context) []string {
+	value, exists := c.Get(string(ContextKeyAdminPermissions))
+	if !exists {
+		return nil
+	}
+	permissions, _ := value.([]string)
+	return permissions
+}
+
+func IsSuperAdminContext(c *gin.Context) bool {
+	value, exists := c.Get(string(ContextKeyAdminSuper))
+	if !exists {
+		return false
+	}
+	ok, _ := value.(bool)
+	return ok
+}
+
+func CanAccessAdminContext(c *gin.Context) bool {
+	if IsSuperAdminContext(c) {
+		return true
+	}
+	return len(GetAdminPermissionsFromContext(c)) > 0
+}
