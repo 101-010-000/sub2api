@@ -97,6 +97,18 @@ func TestResolveAdminAccessRule(t *testing.T) {
 			superOnly: true,
 		},
 		{
+			name:       "nested_scheduled_tests_route_requires_scheduled_tests_read",
+			method:     http.MethodGet,
+			path:       "/api/v1/admin/accounts/:id/scheduled-test-plans",
+			permission: service.AdminPermissionScheduledTestsRead,
+		},
+		{
+			name:       "nested_user_subscriptions_route_requires_subscriptions_read",
+			method:     http.MethodGet,
+			path:       "/api/v1/admin/users/:id/subscriptions",
+			permission: service.AdminPermissionSubscriptionsRead,
+		},
+		{
 			name:      "unknown_admin_route_is_super_only",
 			method:    http.MethodGet,
 			path:      "/api/v1/admin/unknown",

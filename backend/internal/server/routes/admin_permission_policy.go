@@ -29,6 +29,10 @@ func resolveAdminAccessRule(method, fullPath string) middleware.AdminAccessRule 
 		return moduleRule(service.AdminPermissionDashboardRead, service.AdminPermissionDashboardWrite, action)
 	case strings.HasPrefix(path, "/ops"):
 		return moduleRule(service.AdminPermissionOpsRead, service.AdminPermissionOpsWrite, action)
+	case strings.Contains(path, "/scheduled-test-plans"):
+		return moduleRule(service.AdminPermissionScheduledTestsRead, service.AdminPermissionScheduledTestsWrite, action)
+	case strings.Contains(path, "/subscriptions"):
+		return moduleRule(service.AdminPermissionSubscriptionsRead, service.AdminPermissionSubscriptionsWrite, action)
 	case strings.HasPrefix(path, "/users"):
 		return moduleRule(service.AdminPermissionUsersRead, service.AdminPermissionUsersWrite, action)
 	case strings.HasPrefix(path, "/api-keys"):
@@ -76,8 +80,6 @@ func resolveAdminAccessRule(method, fullPath string) middleware.AdminAccessRule 
 	case strings.HasPrefix(path, "/tls-fingerprint-profiles"):
 		return moduleRule(service.AdminPermissionTLSFingerprintProfilesRead, service.AdminPermissionTLSFingerprintProfilesWrite, action)
 	case strings.HasPrefix(path, "/scheduled-test-plans"):
-		return moduleRule(service.AdminPermissionScheduledTestsRead, service.AdminPermissionScheduledTestsWrite, action)
-	case strings.Contains(path, "/scheduled-test-plans"):
 		return moduleRule(service.AdminPermissionScheduledTestsRead, service.AdminPermissionScheduledTestsWrite, action)
 	case strings.HasPrefix(path, "/affiliates"):
 		return moduleRule(service.AdminPermissionAffiliatesRead, service.AdminPermissionAffiliatesWrite, action)
