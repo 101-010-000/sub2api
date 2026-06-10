@@ -37,10 +37,49 @@ func TestAdminService_CreateUser_Success(t *testing.T) {
 	require.Equal(t, input.Concurrency, user.Concurrency)
 	require.Equal(t, input.AllowedGroups, user.AllowedGroups)
 	require.Equal(t, RoleUser, user.Role)
+	require.Empty(t, user.AdminPermissions)
 	require.Equal(t, StatusActive, user.Status)
 	require.True(t, user.CheckPassword(input.Password))
 	require.Len(t, repo.created, 1)
 	require.Equal(t, user, repo.created[0])
+}
+
+func TestAdminService_CreateUser_WithAdminPermissions(t *testing.T) {
+	repo := &userRepoStub{nextID: 13}
+	svc := &adminServiceImpl{userRepo: repo}
+	permissions := []string{
+		AdminPermissionUsersWrite,
+		" " + AdminPermissionUsersRead + " ",
+		AdminPermissionUsersRead,
+	}
+
+	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
+		Email:            "delegated@test.com",
+		Password:         "strong-pass",
+		AdminPermissions: &permissions,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, RoleUser, user.Role)
+	require.Equal(t, []string{AdminPermissionUsersRead, AdminPermissionUsersWrite}, user.AdminPermissions)
+	require.Len(t, repo.created, 1)
+	require.Equal(t, user.AdminPermissions, repo.created[0].AdminPermissions)
+}
+
+func TestAdminService_CreateUser_RejectsInvalidAdminPermission(t *testing.T) {
+	repo := &userRepoStub{nextID: 14}
+	svc := &adminServiceImpl{userRepo: repo}
+	permissions := []string{"admin.unknown.read"}
+
+	_, err := svc.CreateUser(context.Background(), &CreateUserInput{
+		Email:            "bad-permission@test.com",
+		Password:         "strong-pass",
+		AdminPermissions: &permissions,
+	})
+
+	require.Error(t, err)
+	require.Empty(t, repo.created)
 }
 
 func TestAdminService_CreateUser_UsesDefaultBalanceWhenBalanceOmitted(t *testing.T) {

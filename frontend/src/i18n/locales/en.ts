@@ -1914,6 +1914,7 @@ export default {
         rpmLimit: 'Requests Per Minute (RPM)',
         rpmLimitPlaceholder: '0 = unlimited',
         rpmLimitHint: 'Max requests per minute for this user; 0 = unlimited. Acts as a fallback only when the group has no rpm_limit set.',
+        rpmLimitInvalid: 'RPM limit must be at least 0',
         apiKeyMaxActiveIPs: 'API Key Active IP Limit',
         apiKeyMaxActiveIPsPlaceholder: '0 = unlimited',
         apiKeyMaxActiveIPsHint: 'Users cannot create or edit API keys above this active IP count. 0 = unlimited.',

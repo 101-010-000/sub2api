@@ -133,6 +133,7 @@ type CreateUserInput struct {
 	Password                  string
 	Username                  string
 	Notes                     string
+	AdminPermissions          *[]string
 	Balance                   *float64
 	Concurrency               int
 	RPMLimit                  int
@@ -744,12 +745,21 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	if input.APIKeyMaxActiveIPs < 0 {
 		return nil, ErrInvalidRuntimeLimit
 	}
+	adminPermissions := []string{}
+	if input.AdminPermissions != nil {
+		permissions, err := NormalizeAdminPermissions(*input.AdminPermissions)
+		if err != nil {
+			return nil, infraerrors.BadRequest("INVALID_ADMIN_PERMISSION", err.Error())
+		}
+		adminPermissions = permissions
+	}
 
 	user := &User{
 		Email:                     input.Email,
 		Username:                  input.Username,
 		Notes:                     input.Notes,
 		Role:                      RoleUser, // Always create as regular user, never admin
+		AdminPermissions:          adminPermissions,
 		Balance:                   balance,
 		Concurrency:               input.Concurrency,
 		RPMLimit:                  input.RPMLimit,

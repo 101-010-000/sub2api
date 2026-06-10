@@ -32,7 +32,7 @@
         </div>
         <div>
           <label class="input-label">{{ t('admin.users.columns.concurrency') }}</label>
-          <input v-model.number="form.concurrency" type="number" class="input" />
+          <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input" />
         </div>
       </div>
       <div>
@@ -63,6 +63,7 @@
           <span>{{ t('admin.users.form.apiKeyMaxActiveIPsVisible') }}</span>
         </label>
       </div>
+      <AdminPermissionsField v-if="isSuperAdmin" v-model="form.admin_permissions" />
     </form>
     <template #footer>
       <div class="flex justify-end gap-3">
@@ -76,34 +77,80 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
-import { useI18n } from 'vue-i18n'; import { adminAPI } from '@/api/admin'
+import { computed, reactive, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { adminAPI } from '@/api/admin'
 import { useForm } from '@/composables/useForm'
+import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import { normalizeAdminPermissions } from '@/utils/adminPermissions'
+import AdminPermissionsField from '@/components/admin/user/AdminPermissionsField.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{ show: boolean }>()
-const emit = defineEmits(['close', 'success']); const { t } = useI18n()
+const emit = defineEmits(['close', 'success'])
+const { t } = useI18n()
+const appStore = useAppStore()
+const authStore = useAuthStore()
 
-const form = reactive({ email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false })
+const form = reactive({ email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] as string[] })
+const isSuperAdmin = computed(() => authStore.isSuperAdmin)
+
+const validationError = () => {
+  if (!form.email.trim()) {
+    return t('admin.users.emailRequired')
+  }
+  const password = form.password.trim()
+  if (!password) {
+    return t('auth.passwordRequired')
+  }
+  if (password.length < 6) {
+    return t('auth.passwordMinLength')
+  }
+  if (form.concurrency < 1) {
+    return t('admin.users.concurrencyMin')
+  }
+  if (form.rpm_limit < 0) {
+    return t('admin.users.form.rpmLimitInvalid')
+  }
+  if (form.api_key_max_active_ips < 0) {
+    return t('admin.users.form.apiKeyMaxActiveIPsInvalid')
+  }
+  return ''
+}
 
 const { loading, submit } = useForm({
   form,
   submitFn: async (data) => {
-    const { balance: rawBalance, ...rest } = data
+    const error = validationError()
+    if (error) {
+      appStore.showError(error)
+      return
+    }
+    const { balance: rawBalance, admin_permissions: rawPermissions, ...rest } = data
     const balance = String(rawBalance).trim()
-    const payload: typeof rest & { balance?: number } = { ...rest }
+    const payload: typeof rest & { balance?: number, admin_permissions?: string[] } = {
+      ...rest,
+      email: rest.email.trim(),
+      password: rest.password.trim(),
+    }
     if (balance !== '') {
       payload.balance = Number(balance)
     }
+    payload.concurrency = Math.max(1, Math.floor(Number(payload.concurrency) || 1))
+    payload.rpm_limit = Math.max(0, Math.floor(Number(payload.rpm_limit) || 0))
     payload.api_key_max_active_ips = Math.max(0, Math.floor(Number(payload.api_key_max_active_ips) || 0))
+    if (isSuperAdmin.value) {
+      payload.admin_permissions = normalizeAdminPermissions(rawPermissions)
+    }
     await adminAPI.users.create(payload)
+    appStore.showSuccess(t('admin.users.userCreated'))
     emit('success'); emit('close')
   },
-  successMsg: t('admin.users.userCreated')
 })
 
-watch(() => props.show, (v) => { if(v) Object.assign(form, { email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false }) })
+watch(() => props.show, (v) => { if(v) Object.assign(form, { email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] }) })
 
 const generateRandomPassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*'

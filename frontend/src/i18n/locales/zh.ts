@@ -2024,6 +2024,7 @@ export default {
         rpmLimit: '每分钟请求数 (RPM)',
         rpmLimitPlaceholder: '0 表示不限制',
         rpmLimitHint: '该用户每分钟最大请求数，0 = 不限制；仅在所用分组未设置 rpm_limit 时作为兜底生效',
+        rpmLimitInvalid: '每分钟请求数不能小于 0',
         apiKeyMaxActiveIPs: 'API Key 活跃 IP 上限',
         apiKeyMaxActiveIPsPlaceholder: '0 表示不限制',
         apiKeyMaxActiveIPsHint: '普通用户创建或编辑 API Key 时不能超过该 IP 数；0 = 不限制。',

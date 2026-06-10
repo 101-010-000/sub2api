@@ -12,7 +12,6 @@ func TestNormalizeAdminPermissions(t *testing.T) {
 	got, err := NormalizeAdminPermissions([]string{
 		" admin.users.write ",
 		AdminPermissionUsersRead,
-		AdminPermissionUsersRead,
 		"",
 	})
 	require.NoError(t, err)
@@ -20,6 +19,12 @@ func TestNormalizeAdminPermissions(t *testing.T) {
 		AdminPermissionUsersRead,
 		AdminPermissionUsersWrite,
 	}, got)
+}
+
+func TestNormalizeAdminPermissionsAddsReadDependencyForWrite(t *testing.T) {
+	got, err := NormalizeAdminPermissions([]string{AdminPermissionPaymentWrite})
+	require.NoError(t, err)
+	require.Equal(t, []string{AdminPermissionPaymentRead, AdminPermissionPaymentWrite}, got)
 }
 func TestNormalizeAdminPermissionsRejectsUnknownPermission(t *testing.T) {
 	got, err := NormalizeAdminPermissions([]string{"admin.users.read", "admin.unknown.read"})

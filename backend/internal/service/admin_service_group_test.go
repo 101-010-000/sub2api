@@ -279,7 +279,7 @@ func TestAdminService_NormalizeAndValidateSuisuGroup(t *testing.T) {
 				SuisuFallbackGroupID: &fallbackID,
 			},
 			groups: map[int64]*Group{
-				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusInactive},
+				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusDisabled},
 			},
 			wantMessage: "suisu fallback group must be active",
 		},

@@ -7,54 +7,54 @@ import (
 )
 
 const (
-	AdminPermissionDashboardRead = "admin.dashboard.read"
-	AdminPermissionDashboardWrite = "admin.dashboard.write"
-	AdminPermissionOpsRead = "admin.ops.read"
-	AdminPermissionOpsWrite = "admin.ops.write"
-	AdminPermissionUsersRead = "admin.users.read"
-	AdminPermissionUsersWrite = "admin.users.write"
-	AdminPermissionGroupsRead = "admin.groups.read"
-	AdminPermissionGroupsWrite = "admin.groups.write"
-	AdminPermissionAccountsRead = "admin.accounts.read"
-	AdminPermissionAccountsWrite = "admin.accounts.write"
-	AdminPermissionChannelsRead = "admin.channels.read"
-	AdminPermissionChannelsWrite = "admin.channels.write"
-	AdminPermissionChannelMonitorsRead = "admin.channel_monitors.read"
-	AdminPermissionChannelMonitorsWrite = "admin.channel_monitors.write"
-	AdminPermissionSubscriptionsRead = "admin.subscriptions.read"
-	AdminPermissionSubscriptionsWrite = "admin.subscriptions.write"
-	AdminPermissionAnnouncementsRead = "admin.announcements.read"
-	AdminPermissionAnnouncementsWrite = "admin.announcements.write"
-	AdminPermissionProxiesRead = "admin.proxies.read"
-	AdminPermissionProxiesWrite = "admin.proxies.write"
-	AdminPermissionRiskControlRead = "admin.risk_control.read"
-	AdminPermissionRiskControlWrite = "admin.risk_control.write"
-	AdminPermissionRedeemCodesRead = "admin.redeem_codes.read"
-	AdminPermissionRedeemCodesWrite = "admin.redeem_codes.write"
-	AdminPermissionPromoCodesRead = "admin.promo_codes.read"
-	AdminPermissionPromoCodesWrite = "admin.promo_codes.write"
-	AdminPermissionSettingsRead = "admin.settings.read"
-	AdminPermissionSettingsWrite = "admin.settings.write"
-	AdminPermissionDataManagementRead = "admin.data_management.read"
-	AdminPermissionDataManagementWrite = "admin.data_management.write"
-	AdminPermissionBackupRead = "admin.backup.read"
-	AdminPermissionBackupWrite = "admin.backup.write"
-	AdminPermissionSystemRead = "admin.system.read"
-	AdminPermissionSystemWrite = "admin.system.write"
-	AdminPermissionUsageRead = "admin.usage.read"
-	AdminPermissionUsageWrite = "admin.usage.write"
-	AdminPermissionUserAttributesRead = "admin.user_attributes.read"
-	AdminPermissionUserAttributesWrite = "admin.user_attributes.write"
-	AdminPermissionErrorPassthroughRead = "admin.error_passthrough.read"
-	AdminPermissionErrorPassthroughWrite = "admin.error_passthrough.write"
-	AdminPermissionTLSFingerprintProfilesRead = "admin.tls_fingerprint_profiles.read"
+	AdminPermissionDashboardRead               = "admin.dashboard.read"
+	AdminPermissionDashboardWrite              = "admin.dashboard.write"
+	AdminPermissionOpsRead                     = "admin.ops.read"
+	AdminPermissionOpsWrite                    = "admin.ops.write"
+	AdminPermissionUsersRead                   = "admin.users.read"
+	AdminPermissionUsersWrite                  = "admin.users.write"
+	AdminPermissionGroupsRead                  = "admin.groups.read"
+	AdminPermissionGroupsWrite                 = "admin.groups.write"
+	AdminPermissionAccountsRead                = "admin.accounts.read"
+	AdminPermissionAccountsWrite               = "admin.accounts.write"
+	AdminPermissionChannelsRead                = "admin.channels.read"
+	AdminPermissionChannelsWrite               = "admin.channels.write"
+	AdminPermissionChannelMonitorsRead         = "admin.channel_monitors.read"
+	AdminPermissionChannelMonitorsWrite        = "admin.channel_monitors.write"
+	AdminPermissionSubscriptionsRead           = "admin.subscriptions.read"
+	AdminPermissionSubscriptionsWrite          = "admin.subscriptions.write"
+	AdminPermissionAnnouncementsRead           = "admin.announcements.read"
+	AdminPermissionAnnouncementsWrite          = "admin.announcements.write"
+	AdminPermissionProxiesRead                 = "admin.proxies.read"
+	AdminPermissionProxiesWrite                = "admin.proxies.write"
+	AdminPermissionRiskControlRead             = "admin.risk_control.read"
+	AdminPermissionRiskControlWrite            = "admin.risk_control.write"
+	AdminPermissionRedeemCodesRead             = "admin.redeem_codes.read"
+	AdminPermissionRedeemCodesWrite            = "admin.redeem_codes.write"
+	AdminPermissionPromoCodesRead              = "admin.promo_codes.read"
+	AdminPermissionPromoCodesWrite             = "admin.promo_codes.write"
+	AdminPermissionSettingsRead                = "admin.settings.read"
+	AdminPermissionSettingsWrite               = "admin.settings.write"
+	AdminPermissionDataManagementRead          = "admin.data_management.read"
+	AdminPermissionDataManagementWrite         = "admin.data_management.write"
+	AdminPermissionBackupRead                  = "admin.backup.read"
+	AdminPermissionBackupWrite                 = "admin.backup.write"
+	AdminPermissionSystemRead                  = "admin.system.read"
+	AdminPermissionSystemWrite                 = "admin.system.write"
+	AdminPermissionUsageRead                   = "admin.usage.read"
+	AdminPermissionUsageWrite                  = "admin.usage.write"
+	AdminPermissionUserAttributesRead          = "admin.user_attributes.read"
+	AdminPermissionUserAttributesWrite         = "admin.user_attributes.write"
+	AdminPermissionErrorPassthroughRead        = "admin.error_passthrough.read"
+	AdminPermissionErrorPassthroughWrite       = "admin.error_passthrough.write"
+	AdminPermissionTLSFingerprintProfilesRead  = "admin.tls_fingerprint_profiles.read"
 	AdminPermissionTLSFingerprintProfilesWrite = "admin.tls_fingerprint_profiles.write"
-	AdminPermissionScheduledTestsRead = "admin.scheduled_tests.read"
-	AdminPermissionScheduledTestsWrite = "admin.scheduled_tests.write"
-	AdminPermissionAffiliatesRead = "admin.affiliates.read"
-	AdminPermissionAffiliatesWrite = "admin.affiliates.write"
-	AdminPermissionPaymentRead = "admin.payment.read"
-	AdminPermissionPaymentWrite = "admin.payment.write"
+	AdminPermissionScheduledTestsRead          = "admin.scheduled_tests.read"
+	AdminPermissionScheduledTestsWrite         = "admin.scheduled_tests.write"
+	AdminPermissionAffiliatesRead              = "admin.affiliates.read"
+	AdminPermissionAffiliatesWrite             = "admin.affiliates.write"
+	AdminPermissionPaymentRead                 = "admin.payment.read"
+	AdminPermissionPaymentWrite                = "admin.payment.write"
 )
 
 type AdminPermissionDefinition struct {
@@ -123,6 +123,24 @@ var adminPermissionSet = func() map[string]struct{} {
 	return out
 }()
 
+var adminPermissionWriteReadDependencies = func() map[string]string {
+	reads := make(map[string]string)
+	out := make(map[string]string)
+	for _, def := range adminPermissionDefinitions {
+		if def.Action == "read" {
+			reads[def.Module] = def.Key
+		}
+	}
+	for _, def := range adminPermissionDefinitions {
+		if def.Action == "write" {
+			if readKey := reads[def.Module]; readKey != "" {
+				out[def.Key] = readKey
+			}
+		}
+	}
+	return out
+}()
+
 func AdminPermissionDefinitions() []AdminPermissionDefinition {
 	out := make([]AdminPermissionDefinition, len(adminPermissionDefinitions))
 	copy(out, adminPermissionDefinitions)
@@ -153,6 +171,12 @@ func NormalizeAdminPermissions(permissions []string) ([]string, error) {
 		}
 		seen[permission] = struct{}{}
 		out = append(out, permission)
+		if readPermission := adminPermissionWriteReadDependencies[permission]; readPermission != "" {
+			if _, ok := seen[readPermission]; !ok {
+				seen[readPermission] = struct{}{}
+				out = append(out, readPermission)
+			}
+		}
 	}
 	sort.Strings(out)
 	return out, nil

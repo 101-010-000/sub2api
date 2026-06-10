@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -131,6 +133,62 @@ func TestUserHandlerEndpoints(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/1/usage?period=today", nil)
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestUserHandlerCreateAdminPermissionsRequiresSuperAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adminSvc := newStubAdminService()
+	handler := NewUserHandler(adminSvc, nil, nil, nil)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAdminPermissions), []string{service.AdminPermissionUsersWrite})
+		c.Next()
+	})
+	router.POST("/api/v1/admin/users", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"email":             "delegated@example.com",
+		"password":          "pass123",
+		"admin_permissions": []string{service.AdminPermissionUsersRead},
+	})
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Nil(t, adminSvc.createdUser)
+}
+
+func TestUserHandlerCreatePassesAdminPermissionsForSuperAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adminSvc := newStubAdminService()
+	handler := NewUserHandler(adminSvc, nil, nil, nil)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAdminSuper), true)
+		c.Next()
+	})
+	router.POST("/api/v1/admin/users", handler.Create)
+
+	body, err := json.Marshal(map[string]any{
+		"email":             "delegated@example.com",
+		"password":          "pass123",
+		"admin_permissions": []string{service.AdminPermissionUsersRead},
+	})
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, adminSvc.createdUser)
+	require.NotNil(t, adminSvc.createdUser.AdminPermissions)
+	require.Equal(t, []string{service.AdminPermissionUsersRead}, *adminSvc.createdUser.AdminPermissions)
 }
 
 func TestUserHandlerBindAuthIdentityMapsRequest(t *testing.T) {

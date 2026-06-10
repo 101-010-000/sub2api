@@ -54,33 +54,34 @@ func (h *UserHandler) SetSpeedService(speedService *service.SpeedService) {
 
 // CreateUserRequest represents admin create user request
 type CreateUserRequest struct {
-	Email                     string   `json:"email" binding:"required,email"`
-	Password                  string   `json:"password" binding:"required,min=6"`
-	Username                  string   `json:"username"`
-	Notes                     string   `json:"notes"`
-	Balance                   *float64 `json:"balance"`
-	Concurrency               int      `json:"concurrency"`
-	RPMLimit                  int      `json:"rpm_limit"`
-	APIKeyMaxActiveIPs        int      `json:"api_key_max_active_ips"`
-	APIKeyMaxActiveIPsVisible bool     `json:"api_key_max_active_ips_visible"`
-	AllowedGroups             []int64  `json:"allowed_groups"`
+	Email                     string    `json:"email" binding:"required,email"`
+	Password                  string    `json:"password" binding:"required,min=6"`
+	Username                  string    `json:"username"`
+	Notes                     string    `json:"notes"`
+	AdminPermissions          *[]string `json:"admin_permissions"`
+	Balance                   *float64  `json:"balance"`
+	Concurrency               int       `json:"concurrency"`
+	RPMLimit                  int       `json:"rpm_limit"`
+	APIKeyMaxActiveIPs        int       `json:"api_key_max_active_ips"`
+	APIKeyMaxActiveIPsVisible bool      `json:"api_key_max_active_ips_visible"`
+	AllowedGroups             []int64   `json:"allowed_groups"`
 }
 
 // UpdateUserRequest represents admin update user request
 // 使用指针类型来区分"未提供"和"设置为0"
 type UpdateUserRequest struct {
-	Email                     string   `json:"email" binding:"omitempty,email"`
-	Password                  string   `json:"password" binding:"omitempty,min=6"`
-	Username                  *string  `json:"username"`
-	Notes                     *string  `json:"notes"`
+	Email                     string    `json:"email" binding:"omitempty,email"`
+	Password                  string    `json:"password" binding:"omitempty,min=6"`
+	Username                  *string   `json:"username"`
+	Notes                     *string   `json:"notes"`
 	AdminPermissions          *[]string `json:"admin_permissions"`
-	Balance                   *float64 `json:"balance"`
-	Concurrency               *int     `json:"concurrency"`
-	RPMLimit                  *int     `json:"rpm_limit"`
-	APIKeyMaxActiveIPs        *int     `json:"api_key_max_active_ips"`
-	APIKeyMaxActiveIPsVisible *bool    `json:"api_key_max_active_ips_visible"`
-	Status                    string   `json:"status" binding:"omitempty,oneof=active disabled"`
-	AllowedGroups             *[]int64 `json:"allowed_groups"`
+	Balance                   *float64  `json:"balance"`
+	Concurrency               *int      `json:"concurrency"`
+	RPMLimit                  *int      `json:"rpm_limit"`
+	APIKeyMaxActiveIPs        *int      `json:"api_key_max_active_ips"`
+	APIKeyMaxActiveIPsVisible *bool     `json:"api_key_max_active_ips_visible"`
+	Status                    string    `json:"status" binding:"omitempty,oneof=active disabled"`
+	AllowedGroups             *[]int64  `json:"allowed_groups"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64 `json:"group_rates"`
@@ -274,12 +275,17 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if req.AdminPermissions != nil && !middleware2.IsSuperAdminContext(c) {
+		response.Forbidden(c, "Only super admin can grant admin permissions")
+		return
+	}
 
 	user, err := h.adminService.CreateUser(c.Request.Context(), &service.CreateUserInput{
 		Email:                     req.Email,
 		Password:                  req.Password,
 		Username:                  req.Username,
 		Notes:                     req.Notes,
+		AdminPermissions:          req.AdminPermissions,
 		Balance:                   req.Balance,
 		Concurrency:               req.Concurrency,
 		RPMLimit:                  req.RPMLimit,

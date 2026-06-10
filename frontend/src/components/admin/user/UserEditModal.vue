@@ -65,36 +65,7 @@
           <span>{{ t('admin.users.form.apiKeyMaxActiveIPsVisible') }}</span>
         </label>
       </div>
-      <div v-if="isSuperAdmin">
-        <label class="input-label">后台权限</label>
-        <div class="grid gap-2 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
-          <div
-            v-for="module in adminPermissionModules"
-            :key="module.key"
-            class="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm"
-          >
-            <span class="min-w-0 truncate text-gray-700 dark:text-gray-300">{{ module.label }}</span>
-            <label class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-              <input
-                type="checkbox"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                :checked="hasPermission(module.read)"
-                @change="togglePermission(module.read, eventChecked($event))"
-              />
-              <span>查看</span>
-            </label>
-            <label class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-              <input
-                type="checkbox"
-                class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                :checked="hasPermission(module.write)"
-                @change="togglePermission(module.write, eventChecked($event))"
-              />
-              <span>编辑</span>
-            </label>
-          </div>
-        </div>
-      </div>
+      <AdminPermissionsField v-if="isSuperAdmin" v-model="form.admin_permissions" />
       <UserAttributeForm v-model="form.customAttributes" :user-id="user?.id" />
     </form>
     <template #footer>
@@ -116,7 +87,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useClipboard } from '@/composables/useClipboard'
 import { adminAPI } from '@/api/admin'
 import type { AdminUser, UserAttributeValuesMap } from '@/types'
-import { adminPermissionModules, normalizeAdminPermissions } from '@/utils/adminPermissions'
+import { normalizeAdminPermissions } from '@/utils/adminPermissions'
+import AdminPermissionsField from '@/components/admin/user/AdminPermissionsField.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import UserAttributeForm from '@/components/user/UserAttributeForm.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -135,25 +107,6 @@ watch(() => props.user, (u) => {
     passwordCopied.value = false
   }
 }, { immediate: true })
-
-const hasPermission = (permission: string) => form.admin_permissions.includes(permission)
-
-const eventChecked = (event: Event) => {
-  return (event.target as HTMLInputElement | null)?.checked === true
-}
-
-const togglePermission = (permission: string, enabled: boolean) => {
-  const next = new Set(form.admin_permissions)
-  const module = adminPermissionModules.find((item) => item.read === permission || item.write === permission)
-  if (enabled) {
-    next.add(permission)
-    if (module && permission === module.write) next.add(module.read)
-  } else {
-    next.delete(permission)
-    if (module && permission === module.read) next.delete(module.write)
-  }
-  form.admin_permissions = normalizeAdminPermissions([...next])
-}
 
 const generatePassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*'
