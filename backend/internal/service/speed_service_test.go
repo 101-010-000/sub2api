@@ -65,12 +65,14 @@ func TestSpeedServiceDefaultFastRatioAndSlowState(t *testing.T) {
 				ID:                    7,
 				Name:                  "pro",
 				SpeedConfigEnabled:    true,
+				SubscriptionType:      SubscriptionTypeSubscription,
 				DefaultFastQuotaRatio: 0.3,
 				DailyLimitUSD:         &limit,
 			},
-			Config: &UserGroupSpeedConfig{
+			Subscription: &UserSubscription{
 				UserID:           3,
 				GroupID:          7,
+				Status:           SubscriptionStatusActive,
 				DailyWindowStart: &now,
 				DailyUsageUSD:    4,
 			},
@@ -94,12 +96,18 @@ func TestSpeedServiceRejectsOutOfRangeUserConfig(t *testing.T) {
 			Group: &Group{
 				ID:                         7,
 				SpeedConfigEnabled:         true,
+				SubscriptionType:           SubscriptionTypeSubscription,
 				UserSpeedConfigAllowed:     true,
 				MinFastQuotaRatio:          minRatio,
 				MaxFastQuotaRatio:          0.8,
 				MaxSlowDelaySeconds:        10,
 				DefaultSlowDelayMaxSeconds: 5,
 				MaxSlowRejectRate:          0.2,
+			},
+			Subscription: &UserSubscription{
+				UserID:  3,
+				GroupID: 7,
+				Status:  SubscriptionStatusActive,
 			},
 		},
 	}

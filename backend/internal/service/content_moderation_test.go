@@ -85,6 +85,7 @@ type contentModerationTestRepo struct {
 	contexts      []ContentModerationContext
 	nextContextID int64
 	accessLogs    []int64
+	bans          []ContentModerationUserBan
 }
 
 func (r *contentModerationTestRepo) CreateLog(ctx context.Context, log *ContentModerationLog) error {
@@ -128,6 +129,12 @@ func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitB
 }
 
 func (r *contentModerationTestRepo) UpsertUserBan(ctx context.Context, ban *ContentModerationUserBan) error {
+	if ban != nil {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		clone := *ban
+		r.bans = append(r.bans, clone)
+	}
 	return nil
 }
 
@@ -339,6 +346,14 @@ func (r *contentModerationTestRepo) snapshotLogs() []ContentModerationLog {
 	defer r.mu.Unlock()
 	out := make([]ContentModerationLog, len(r.logs))
 	copy(out, r.logs)
+	return out
+}
+
+func (r *contentModerationTestRepo) snapshotBans() []ContentModerationUserBan {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]ContentModerationUserBan, len(r.bans))
+	copy(out, r.bans)
 	return out
 }
 
@@ -1502,11 +1517,11 @@ func TestExtractContentModerationInput_AnthropicImageSourceOnlyParticipatesInMem
 	}`)
 
 	input := ExtractContentModerationInput(ContentModerationProtocolAnthropicMessages, body)
-	require.Equal(t, "检查这张图", input.Text)
+	require.Equal(t, "old 检查这张图", input.Text)
 	require.Equal(t, []string{"data:image/png;base64,aGVsbG8="}, input.Images)
 
 	log := (&ContentModerationService{}).buildLog(ContentModerationCheckInput{}, defaultContentModerationConfig(), ContentModerationActionAllow, false, "", 0, nil, input.ExcerptText(), nil, nil, "")
-	require.Equal(t, "检查这张图", log.InputExcerpt)
+	require.Equal(t, "old 检查这张图", log.InputExcerpt)
 	require.NotContains(t, log.InputExcerpt, "aGVsbG8=")
 }
 
@@ -1887,8 +1902,8 @@ func TestContentModerationCheck_PreBlockBlocksCodexResponsesLatestUserInput(t *t
 	require.True(t, logs[0].Flagged)
 	require.Equal(t, ContentModerationActionBlock, logs[0].Action)
 	require.Equal(t, ContentModerationModePreBlock, logs[0].Mode)
-	require.Equal(t, "latest blocked prompt", logs[0].InputExcerpt)
-	require.Equal(t, "latest blocked prompt", moderationRequest.Input)
+	require.Equal(t, "environment context latest blocked prompt", logs[0].InputExcerpt)
+	require.Equal(t, "environment context latest blocked prompt", moderationRequest.Input)
 }
 
 func TestContentModerationStatusTracksPreBlockSyncMetrics(t *testing.T) {
@@ -2392,8 +2407,11 @@ func TestContentModerationAutoBanDisablesRegularUserAtThreshold(t *testing.T) {
 	logs := requireContentModerationLogCount(t, repo, 2)
 	require.Equal(t, 2, logs[1].ViolationCount)
 	require.True(t, logs[1].AutoBanned)
-	require.Len(t, userRepo.updated, 1)
-	require.Equal(t, StatusDisabled, userRepo.user.Status)
+	require.Empty(t, userRepo.updated)
+	require.Equal(t, StatusActive, userRepo.user.Status)
+	bans := repo.snapshotBans()
+	require.Len(t, bans, 1)
+	require.Equal(t, userID, bans[0].UserID)
 	require.Equal(t, []int64{userID}, invalidator.userIDs)
 }
 

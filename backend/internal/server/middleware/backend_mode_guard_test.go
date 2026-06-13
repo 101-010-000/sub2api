@@ -131,6 +131,7 @@ func TestBackendModeUserGuard(t *testing.T) {
 				role := *tc.role
 				r.Use(func(c *gin.Context) {
 					c.Set(string(ContextKeyUserRole), role)
+					c.Set(string(ContextKeyAdminSuper), role == service.RoleAdmin)
 					c.Next()
 				})
 			}

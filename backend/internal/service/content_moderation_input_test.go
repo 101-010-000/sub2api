@@ -62,7 +62,7 @@ func TestExtractContentModerationInput_AnthropicStreamResendExtractsResend(t *te
 
 	input := ExtractContentModerationInput(ContentModerationProtocolAnthropicMessages, body)
 
-	require.Equal(t, "重发", input.Text)
+	require.Equal(t, "原问题 重发", input.Text)
 }
 
 func TestExtractContentModerationInput_OpenAIChatAgentToolLoopSkipsAudit(t *testing.T) {
