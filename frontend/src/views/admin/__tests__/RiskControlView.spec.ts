@@ -203,6 +203,7 @@ describe('admin RiskControlView', () => {
     getGroups.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     getConfig.mockResolvedValue(baseConfig())
     getStatus.mockResolvedValue(runtimeStatus())

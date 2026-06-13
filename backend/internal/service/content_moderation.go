@@ -1195,7 +1195,7 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 		cfg.KeywordBlockingMode = strings.TrimSpace(*input.KeywordBlockingMode)
 	}
 	if input.KeywordRules != nil {
-		cfg.KeywordRules = append([]ContentModerationKeywordRule(nil), (*input.KeywordRules)...)
+		cfg.KeywordRules = filterGeneratedContentModerationKeywordRules(*input.KeywordRules)
 	}
 	if input.ModelFilter != nil {
 		cfg.ModelFilter = *input.ModelFilter
@@ -1295,6 +1295,7 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	if err := s.prepareInternalAuditModels(ctx, cfg); err != nil {
 		return nil, err
 	}
+	cfg.prepareForSave()
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("marshal content moderation config: %w", err)
@@ -1982,10 +1983,18 @@ func (s *ContentModerationService) worker(id int) {
 			s.asyncActive.Add(1)
 			defer s.asyncActive.Add(-1)
 			queueDelay := int(time.Since(task.enqueuedAt).Milliseconds())
-			if task.forceAudit && len(cfg.enabledAuditModels()) > 0 {
-				_ = s.checkModelAuditSync(ctx, task.input, cfg, task.content, task.inputHash, task.keywordHits, &queueDelay, false, task.contextID, task.riskSnapshot, ContentModerationRiskEventSourceAsync, ContentModerationReviewStageAsync)
+			riskSnapshot := s.riskSnapshotForUser(ctx, cfg, task.input.UserID)
+			keywordHits := matchContentModerationKeywordRules(task.content.Text, cfg.keywordRules())
+			keywordForceAudit := keywordHitsRequireAction(keywordHits, ContentModerationActionRecordAudit)
+			keywordBlockingHit := cfg.KeywordBlockingMode != ContentModerationKeywordModeAPIOnly && keywordHitRequiresBlocking(keywordHits)
+			if !keywordForceAudit && !keywordBlockingHit && !contentModerationShouldSample(task.inputHash, riskSnapshot.EffectiveSampleRate) {
+				s.asyncProcessed.Add(1)
+				return
+			}
+			if len(cfg.enabledAuditModels()) > 0 {
+				_ = s.checkModelAuditSync(ctx, task.input, cfg, task.content, task.inputHash, keywordHits, &queueDelay, false, task.contextID, riskSnapshot, ContentModerationRiskEventSourceAsync, ContentModerationReviewStageAsync)
 			} else {
-				_ = s.checkSync(ctx, task.input, cfg, task.content, task.inputHash, &queueDelay, false, task.contextID, task.riskSnapshot, ContentModerationRiskEventSourceAsync, ContentModerationReviewStageAsync)
+				_ = s.checkSync(ctx, task.input, cfg, task.content, task.inputHash, &queueDelay, false, task.contextID, riskSnapshot, ContentModerationRiskEventSourceAsync, ContentModerationReviewStageAsync)
 			}
 			s.asyncProcessed.Add(1)
 		}()
@@ -3625,6 +3634,13 @@ func (cfg *ContentModerationConfig) normalize() {
 	cfg.ModelFilter = normalizeContentModerationModelFilter(cfg.ModelFilter)
 }
 
+func (cfg *ContentModerationConfig) prepareForSave() {
+	if cfg == nil {
+		return
+	}
+	cfg.KeywordRules = filterGeneratedContentModerationKeywordRules(cfg.KeywordRules)
+}
+
 func (cfg *ContentModerationConfig) includesGroup(groupID *int64) bool {
 	if cfg.AllGroups {
 		return true
@@ -3823,7 +3839,7 @@ func mergeContentModerationAuditModelSecrets(existing []ContentModerationAuditMo
 
 func normalizeContentModerationKeywordRules(rules []ContentModerationKeywordRule, legacyKeywords []string) []ContentModerationKeywordRule {
 	out := make([]ContentModerationKeywordRule, 0, len(rules)+1)
-	for i, rule := range rules {
+	for i, rule := range filterGeneratedContentModerationKeywordRules(rules) {
 		rule.ID = strings.TrimSpace(rule.ID)
 		if rule.ID == "" {
 			rule.ID = fmt.Sprintf("rule_%d", i+1)
@@ -3865,6 +3881,17 @@ func normalizeContentModerationKeywordRules(rules []ContentModerationKeywordRule
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Priority > out[j].Priority })
+	return out
+}
+
+func filterGeneratedContentModerationKeywordRules(rules []ContentModerationKeywordRule) []ContentModerationKeywordRule {
+	out := make([]ContentModerationKeywordRule, 0, len(rules))
+	for _, rule := range rules {
+		if strings.TrimSpace(rule.ID) == "legacy_blocked_keywords" {
+			continue
+		}
+		out = append(out, rule)
+	}
 	return out
 }
 
@@ -4332,7 +4359,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		PreHashCheckEnabled:                 cfg.PreHashCheckEnabled,
 		BlockedKeywords:                     append([]string(nil), cfg.BlockedKeywords...),
 		KeywordBlockingMode:                 cfg.KeywordBlockingMode,
-		KeywordRules:                        append([]ContentModerationKeywordRule(nil), cfg.KeywordRules...),
+		KeywordRules:                        filterGeneratedContentModerationKeywordRules(cfg.KeywordRules),
 		ModelFilter:                         cloneContentModerationModelFilter(cfg.ModelFilter),
 		AuditModels:                         maskedContentModerationAuditModels(cfg.AuditModels),
 		DecisionRule:                        cfg.DecisionRule,

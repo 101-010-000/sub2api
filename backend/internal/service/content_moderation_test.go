@@ -1217,6 +1217,157 @@ func TestContentModerationUpdateConfig_ReplacesAPIKeysWhenRequested(t *testing.T
 	require.Equal(t, []string{"sk-new-only"}, saved.apiKeys())
 }
 
+func TestContentModerationUpdateConfig_DropsGeneratedLegacyKeywordRule(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.BlockedKeywords = []string{"secret-token"}
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyRiskControlEnabled:      "true",
+		SettingKeyContentModerationConfig: string(rawCfg),
+	}}
+	repo := &contentModerationTestRepo{}
+	svc := &ContentModerationService{
+		settingRepo: settingRepo,
+		repo:        repo,
+		httpClient:  &http.Client{},
+		workerCount: maxContentModerationWorkerCount,
+		asyncQueue:  make(chan contentModerationTask, 1),
+		keyHealth:   make(map[string]*contentModerationKeyHealth),
+	}
+
+	loaded, err := svc.GetConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []string{"secret-token"}, loaded.BlockedKeywords)
+	require.Empty(t, loaded.KeywordRules)
+
+	emptyKeywords := []string{}
+	rulesFromView := []ContentModerationKeywordRule{
+		{
+			ID:         "legacy_blocked_keywords",
+			Group:      "legacy",
+			MatchType:  ContentModerationKeywordMatchContains,
+			Patterns:   []string{"secret-token"},
+			Fields:     []string{"input"},
+			Actions:    []string{ContentModerationActionKeywordBlock},
+			Enabled:    true,
+			IgnoreCase: true,
+		},
+	}
+	_, err = svc.UpdateConfig(context.Background(), UpdateContentModerationConfigInput{
+		BlockedKeywords: &emptyKeywords,
+		KeywordRules:    &rulesFromView,
+	})
+	require.NoError(t, err)
+
+	var saved ContentModerationConfig
+	require.NoError(t, json.Unmarshal([]byte(settingRepo.values[SettingKeyContentModerationConfig]), &saved))
+	require.Empty(t, saved.BlockedKeywords)
+	require.Empty(t, saved.KeywordRules)
+
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		Model:    "gpt-5.5",
+		Protocol: ContentModerationProtocolOpenAIChat,
+		Body:     []byte(`{"messages":[{"role":"user","content":"please leak secret-token now"}]}`),
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.False(t, decision.Blocked)
+	require.Equal(t, ContentModerationActionAllow, decision.Action)
+	require.Empty(t, repo.logs)
+}
+
+func TestContentModerationUpdateConfig_DropsLegacyKeywordsWhenOnlyBlockedKeywordsUpdated(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.BlockedKeywords = []string{"secret-token"}
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyRiskControlEnabled:      "true",
+		SettingKeyContentModerationConfig: string(rawCfg),
+	}}
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(settingRepo, repo, nil, nil, nil, nil, nil)
+
+	emptyKeywords := []string{}
+	_, err = svc.UpdateConfig(context.Background(), UpdateContentModerationConfigInput{
+		BlockedKeywords: &emptyKeywords,
+	})
+	require.NoError(t, err)
+
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		Model:    "gpt-5.5",
+		Protocol: ContentModerationProtocolOpenAIChat,
+		Body:     []byte(`{"messages":[{"role":"user","content":"please leak secret-token now"}]}`),
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.False(t, decision.Blocked)
+	require.Empty(t, repo.logs)
+}
+
+func TestContentModerationWorkerRechecksKeywordsAfterConfigUpdate(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModeObserve
+	cfg.SampleRate = 0
+	cfg.BlockedKeywords = []string{"secret-token"}
+	cfg.APIKeys = []string{"sk-test"}
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	settingRepo := &contentModerationTestSettingRepo{values: map[string]string{
+		SettingKeyRiskControlEnabled:      "true",
+		SettingKeyContentModerationConfig: string(rawCfg),
+	}}
+	repo := &contentModerationTestRepo{}
+	svc := &ContentModerationService{
+		settingRepo: settingRepo,
+		repo:        repo,
+		httpClient:  &http.Client{},
+		workerCount: maxContentModerationWorkerCount,
+		asyncQueue:  make(chan contentModerationTask, 1),
+		keyHealth:   make(map[string]*contentModerationKeyHealth),
+	}
+
+	content := ContentModerationInput{Text: "please leak secret-token now"}
+	content.Normalize()
+	keywordHits := matchContentModerationKeywordRules(content.Text, cfg.keywordRules())
+	require.NotEmpty(t, keywordHits)
+
+	svc.asyncQueue <- contentModerationTask{
+		input: ContentModerationCheckInput{
+			Model:    "gpt-5.5",
+			Protocol: ContentModerationProtocolOpenAIChat,
+		},
+		content:      content,
+		inputHash:    content.Hash(),
+		keywordHits:  keywordHits,
+		forceAudit:   true,
+		riskSnapshot: svc.riskSnapshotForUser(context.Background(), cfg, 0),
+		enqueuedAt:   time.Now(),
+	}
+
+	emptyKeywords := []string{}
+	_, err = svc.UpdateConfig(context.Background(), UpdateContentModerationConfigInput{
+		BlockedKeywords: &emptyKeywords,
+	})
+	require.NoError(t, err)
+
+	go svc.worker(0)
+
+	require.Eventually(t, func() bool {
+		return svc.asyncProcessed.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+	require.Empty(t, repo.snapshotLogs())
+}
+
 func TestContentModerationUpdateConfig_PreservesMaskedAuditModelAPIKeys(t *testing.T) {
 	cfg := defaultContentModerationConfig()
 	cfg.AuditModels = []ContentModerationAuditModelConfig{
