@@ -1007,20 +1007,30 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	availableModels := h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, platform)
 	if apiKey != nil && apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
 		availableModels = filterModelsByCustomList(availableModels, defaultModelIDsForPlatform(platform), apiKey.Group.ModelsListConfig.Models)
-		writeCustomModelsList(c, platform, availableModels)
+		writeCustomModelsList(c, platform, availableModels, touchXModelListRequested(c, apiKey))
 		return
 	}
 
 	if len(availableModels) > 0 {
-		writeModelsList(c, availableModels)
+		touchX := touchXModelListRequested(c, apiKey)
+		if platform == service.PlatformOpenAI {
+			writeOpenAIModelsList(c, availableModels, touchX)
+			return
+		}
+		writeModelsList(c, availableModels, touchX)
 		return
 	}
 
 	// Fallback to default models
 	if platform == service.PlatformOpenAI {
+		models := openai.DefaultModels
+		if touchXModelListRequested(c, apiKey) {
+			models = openai.WithTouchXModelMetadata(models)
+			markTouchXProviderHeaders(c)
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
-			"data":   openai.DefaultModels,
+			"data":   models,
 		})
 		return
 	}
@@ -1039,15 +1049,38 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	})
 }
 
-func writeModelsList(c *gin.Context, modelIDs []string) {
+func touchXModelListRequested(c *gin.Context, apiKey *service.APIKey) bool {
+	if c == nil || apiKey == nil {
+		return false
+	}
+	return service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now())
+}
+
+func markTouchXProviderHeaders(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Header("X-Sub2api-Provider", openai.TouchXProviderName)
+	c.Header("X-Sub2api-Provider-Source", openai.TouchXSource)
+	c.Header("X-Sub2api-Provider-Accent-Color", openai.TouchXAccentColor)
+}
+
+func writeModelsList(c *gin.Context, modelIDs []string, touchX bool) {
 	models := make([]claude.Model, 0, len(modelIDs))
 	for _, modelID := range modelIDs {
+		displayName := modelID
+		if touchX {
+			displayName += " · " + openai.TouchXProviderName
+		}
 		models = append(models, claude.Model{
 			ID:          modelID,
 			Type:        "model",
-			DisplayName: modelID,
+			DisplayName: displayName,
 			CreatedAt:   "2024-01-01T00:00:00Z",
 		})
+	}
+	if touchX {
+		markTouchXProviderHeaders(c)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
@@ -1055,15 +1088,15 @@ func writeModelsList(c *gin.Context, modelIDs []string) {
 	})
 }
 
-func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string) {
+func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string, touchX bool) {
 	if platform == service.PlatformOpenAI {
-		writeOpenAIModelsList(c, modelIDs)
+		writeOpenAIModelsList(c, modelIDs, touchX)
 		return
 	}
-	writeModelsList(c, modelIDs)
+	writeModelsList(c, modelIDs, touchX)
 }
 
-func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
+func writeOpenAIModelsList(c *gin.Context, modelIDs []string, touchX bool) {
 	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels))
 	for _, model := range openai.DefaultModels {
 		defaultsByID[model.ID] = model
@@ -1083,6 +1116,10 @@ func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
 			Type:        "model",
 			DisplayName: modelID,
 		})
+	}
+	if touchX {
+		models = openai.WithTouchXModelMetadata(models)
+		markTouchXProviderHeaders(c)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",

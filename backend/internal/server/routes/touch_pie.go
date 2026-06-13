@@ -23,7 +23,9 @@ func RegisterTouchPieRoutes(
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
 	{
+		authenticated.GET("/bootstrap", h.TouchPie.Bootstrap)
 		authenticated.POST("/device/approve", h.TouchPie.ApproveDevice)
+		authenticated.POST("/api-keys", h.TouchPie.CreateAPIKey)
 		authenticated.POST("/api-keys/:id/export", h.TouchPie.ExportAPIKey)
 	}
 }

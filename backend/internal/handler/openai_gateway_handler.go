@@ -1578,6 +1578,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	}
 	if h.speedService != nil {
 		if service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now()) {
+			markTouchXProviderHeaders(c)
 			reqLog.Info("openai.websocket_touch_pie_fast", zap.Bool("touch_pie_fast", true))
 		} else {
 			if _, err := h.speedService.Decide(ctx, apiKey.User, apiKey.Group, subscription); err != nil {
@@ -2133,12 +2134,16 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareError(c *gin.Context, status 
 }
 
 func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription, streamStarted *bool, reqLog *zap.Logger, anthropicFormat bool) openAISpeedDecisionResult {
-	if h.speedService == nil || apiKey == nil {
+	if apiKey == nil {
 		return openAISpeedDecisionResult{OK: true}
 	}
 	if service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now()) {
+		markTouchXProviderHeaders(c)
 		if reqLog != nil {
 			reqLog.Info("openai.touch_pie_fast", zap.Bool("touch_pie_fast", true))
+		}
+		if h.speedService == nil {
+			return openAISpeedDecisionResult{OK: true}
 		}
 		return openAISpeedDecisionResult{
 			OK: true,
@@ -2147,6 +2152,9 @@ func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *servic
 				State:   "fast",
 			},
 		}
+	}
+	if h.speedService == nil {
+		return openAISpeedDecisionResult{OK: true}
 	}
 	decision, err := h.speedService.Decide(c.Request.Context(), apiKey.User, apiKey.Group, subscription)
 	if err != nil {

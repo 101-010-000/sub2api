@@ -197,6 +197,7 @@ var ProviderSet = wire.NewSet(
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
 	NewTouchPieHandler,
+	wire.Bind(new(touchPieAPIKeyManager), new(*service.APIKeyService)),
 
 	// Admin handlers
 	admin.NewDashboardHandler,

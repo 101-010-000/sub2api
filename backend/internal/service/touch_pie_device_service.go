@@ -136,6 +136,9 @@ func (s *TouchPieDeviceService) Approve(ctx context.Context, userCode string, us
 	if session.Status != TouchPieDeviceStatusPending && session.Status != TouchPieDeviceStatusApproved {
 		return ErrTouchPieDeviceNotFound
 	}
+	if session.Status == TouchPieDeviceStatusApproved && session.UserID != nil && *session.UserID != userID {
+		return ErrTouchPieDeviceConsumed
+	}
 	return s.repo.ApproveDeviceSession(ctx, session.ID, userID, now)
 }
 
