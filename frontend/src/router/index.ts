@@ -713,6 +713,7 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
+const ADMIN_COMPLIANCE_HOLD_PATH = '/home'
 const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
@@ -844,15 +845,31 @@ router.beforeEach(async (to, _from, next) => {
       return
     }
 
-    if (authStore.isAdmin) {
+    if (authStore.canAccessAdmin) {
       const adminComplianceStore = useAdminComplianceStore()
       if (!adminComplianceStore.initialized) {
         try {
-          await adminComplianceStore.fetchStatus()
+          const status = await adminComplianceStore.fetchStatus()
+          if (status.required) {
+            adminComplianceStore.setPendingRedirectPath(to.fullPath)
+            if (to.path === ADMIN_COMPLIANCE_HOLD_PATH) {
+              next(false)
+            } else {
+              next(ADMIN_COMPLIANCE_HOLD_PATH)
+            }
+            return
+          }
         } catch (error) {
           const err = error as { status?: number; code?: string; metadata?: Record<string, string> }
           if (err.status === 423 && err.code === 'ADMIN_COMPLIANCE_ACK_REQUIRED') {
             adminComplianceStore.requireAcknowledgement(err.metadata)
+            adminComplianceStore.setPendingRedirectPath(to.fullPath)
+            if (to.path === ADMIN_COMPLIANCE_HOLD_PATH) {
+              next(false)
+            } else {
+              next(ADMIN_COMPLIANCE_HOLD_PATH)
+            }
+            return
           }
         }
       }

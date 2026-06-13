@@ -98,6 +98,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useI18n } from 'vue-i18n'
@@ -110,6 +111,7 @@ import zhDocument from '../../../../docs/legal/admin-compliance.zh.md?raw'
 import enDocument from '../../../../docs/legal/admin-compliance.en.md?raw'
 
 const { t } = useI18n()
+const router = useRouter()
 const complianceStore = useAdminComplianceStore()
 const authStore = useAuthStore()
 const appStore = useAppStore()
@@ -121,7 +123,7 @@ marked.setOptions({
   gfm: true,
 })
 
-const visible = computed(() => authStore.isAuthenticated && authStore.isAdmin && complianceStore.shouldShow)
+const visible = computed(() => authStore.isAuthenticated && authStore.canAccessAdmin && complianceStore.shouldShow)
 const expectedPhrase = computed(() => complianceStore.expectedPhrase)
 const canSubmit = computed(() => typedPhrase.value.trim() === expectedPhrase.value)
 const currentDocument = computed(() => getLocale() === 'zh' ? zhDocument : enDocument)
@@ -170,6 +172,10 @@ async function submit(): Promise<void> {
       appStore.showSuccess(t('adminCompliance.accepted'))
       typedPhrase.value = ''
       attemptedSubmit.value = false
+      const redirectPath = complianceStore.consumePendingRedirectPath()
+      if (redirectPath) {
+        await router.replace(redirectPath)
+      }
     }
   } catch (error) {
     const message = (error as { message?: string })?.message || t('adminCompliance.acceptFailed')

@@ -12,6 +12,7 @@ export const useAdminComplianceStore = defineStore('adminCompliance', () => {
   const submitting = ref(false)
   const initialized = ref(false)
   const forceVisible = ref(false)
+  const pendingRedirectPath = ref('')
 
   const required = computed(() => status.value?.required === true)
   const shouldShow = computed(() => required.value || forceVisible.value)
@@ -44,6 +45,7 @@ export const useAdminComplianceStore = defineStore('adminCompliance', () => {
         language: currentLocale.value
       })
       status.value = nextStatus
+      initialized.value = true
       forceVisible.value = nextStatus.required
       return nextStatus
     } finally {
@@ -73,6 +75,17 @@ export const useAdminComplianceStore = defineStore('adminCompliance', () => {
     submitting.value = false
     initialized.value = false
     forceVisible.value = false
+    pendingRedirectPath.value = ''
+  }
+
+  function setPendingRedirectPath(path: string): void {
+    pendingRedirectPath.value = path
+  }
+
+  function consumePendingRedirectPath(): string {
+    const path = pendingRedirectPath.value
+    pendingRedirectPath.value = ''
+    return path
   }
 
   return {
@@ -80,12 +93,15 @@ export const useAdminComplianceStore = defineStore('adminCompliance', () => {
     loading,
     submitting,
     initialized,
+    pendingRedirectPath,
     required,
     shouldShow,
     expectedPhrase,
     fetchStatus,
     accept,
     requireAcknowledgement,
+    setPendingRedirectPath,
+    consumePendingRedirectPath,
     reset
   }
 })

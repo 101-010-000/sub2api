@@ -13,6 +13,7 @@ interface ApiErrorLike {
   reason?: string
   metadata?: Record<string, unknown>
   response?: {
+    status?: number
     data?: {
       detail?: string
       message?: string
@@ -20,6 +21,9 @@ interface ApiErrorLike {
     }
   }
 }
+
+const ADMIN_COMPLIANCE_ACK_REQUIRED = 'ADMIN_COMPLIANCE_ACK_REQUIRED'
+const ADMIN_COMPLIANCE_ACK_REQUIRED_MESSAGE = 'administrator compliance acknowledgement is required'
 
 /**
  * Extract the error code from an API error object.
@@ -33,6 +37,23 @@ export function extractApiErrorCode(err: unknown): string | undefined {
   const e = err as ApiErrorLike
   const code = e.reason ?? e.code ?? e.response?.data?.code
   return code != null ? String(code) : undefined
+}
+
+export function isAdminComplianceRequiredError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as ApiErrorLike
+  const status = e.status ?? e.response?.status
+  const code = extractApiErrorCode(err)
+  const message = e.message ?? e.response?.data?.message
+
+  return (
+    (status === 423 && code === ADMIN_COMPLIANCE_ACK_REQUIRED) ||
+    message === ADMIN_COMPLIANCE_ACK_REQUIRED_MESSAGE
+  )
+}
+
+export function isAdminComplianceRequiredMessage(message: unknown): boolean {
+  return typeof message === 'string' && message.trim() === ADMIN_COMPLIANCE_ACK_REQUIRED_MESSAGE
 }
 
 /**

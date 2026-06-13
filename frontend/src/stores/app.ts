@@ -13,6 +13,7 @@ import {
   type ReleaseInfo
 } from '@/api/admin/system'
 import { getPublicSettings as fetchPublicSettingsAPI } from '@/api/auth'
+import { isAdminComplianceRequiredMessage } from '@/utils/apiError'
 
 export const useAppStore = defineStore('app', () => {
   // ==================== State ====================
@@ -141,6 +142,9 @@ export const useAppStore = defineStore('app', () => {
    * @param duration - Auto-dismiss duration in ms (default: 5000)
    */
   function showError(message: string, duration: number = 5000): string {
+    if (isAdminComplianceRequiredMessage(message)) {
+      return ''
+    }
     return showToast('error', message, duration)
   }
 

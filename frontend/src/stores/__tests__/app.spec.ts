@@ -48,6 +48,13 @@ describe('useAppStore', () => {
       expect(store.toasts[0].message).toBe('出错了')
     })
 
+    it('showError 忽略后台合规未确认系统错误', () => {
+      const store = useAppStore()
+      store.showError('administrator compliance acknowledgement is required')
+
+      expect(store.toasts).toHaveLength(0)
+    })
+
     it('showWarning 创建 warning 类型 toast', () => {
       const store = useAppStore()
       store.showWarning('警告信息')

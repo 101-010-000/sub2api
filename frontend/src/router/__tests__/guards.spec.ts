@@ -3,6 +3,8 @@ import { setActivePinia, createPinia } from 'pinia'
 import { resolveCompletedSetupRedirectPath } from '@/router/setupRedirect'
 import { firstAccessibleAdminPath, resolveAdminRoutePermissions } from '@/utils/adminPermissions'
 
+const ADMIN_COMPLIANCE_HOLD_PATH = '/home'
+
 // Mock 导航加载状态
 vi.mock('@/composables/useNavigationLoading', () => {
   const mockStart = vi.fn()
@@ -57,6 +59,7 @@ interface MockAuthState {
   backendModeEnabled: boolean
   hasPendingAuthSession: boolean
   setupNeedsSetup?: boolean
+  adminComplianceRequired?: boolean
 }
 
 /**
@@ -67,6 +70,16 @@ function simulateGuard(
   toMeta: Record<string, any>,
   authState: MockAuthState
 ): string | null {
+  return simulateGuardResult(toPath, toMeta, authState).redirect
+}
+
+function simulateGuardResult(
+  toPath: string,
+  toMeta: Record<string, any>,
+  authState: MockAuthState
+): { redirect: string | false | null; shouldFetchAdminCompliance: boolean; pendingComplianceRedirect?: string } {
+  const allow = { redirect: null, shouldFetchAdminCompliance: false }
+  const redirect = (path: string) => ({ redirect: path, shouldFetchAdminCompliance: false })
   const requiresAuth = toMeta.requiresAuth !== false
   const requiresAdmin = toMeta.requiresAdmin === true
   const isSuperAdmin = authState.isAdmin
@@ -77,7 +90,7 @@ function simulateGuard(
   const adminHomePath = () => firstAccessibleAdminPath(hasAdminPermission)
 
   if (toPath === '/setup' && authState.setupNeedsSetup === false) {
-    return resolveCompletedSetupRedirectPath(authState.isAuthenticated, canAccessAdmin)
+    return redirect(resolveCompletedSetupRedirectPath(authState.isAuthenticated, canAccessAdmin))
   }
 
   // 不需要认证的路由
@@ -87,9 +100,9 @@ function simulateGuard(
       (toPath === '/login' || toPath === '/register')
     ) {
       if (authState.backendModeEnabled && !canAccessAdmin) {
-        return null
+        return allow
       }
-      return canAccessAdmin ? adminHomePath() : '/dashboard'
+      return redirect(canAccessAdmin ? adminHomePath() : '/dashboard')
     }
     if (authState.backendModeEnabled && !authState.isAuthenticated) {
       const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
@@ -106,29 +119,38 @@ function simulateGuard(
         callbackPaths.includes(toPath) ||
         (authState.hasPendingAuthSession && pendingAuthPaths.includes(toPath))
       if (!isAllowed) {
-        return '/login'
+        return redirect('/login')
       }
     }
-    return null // 允许通过
+    return allow // 允许通过
   }
 
   // 需要认证但未登录
   if (!authState.isAuthenticated) {
-    return '/login'
+    return redirect('/login')
   }
 
   // 需要管理员但不是管理员
   if (requiresAdmin && !canAccessAdmin) {
-    return '/dashboard'
+    return redirect('/dashboard')
   }
 
+  let shouldFetchAdminCompliance = false
   if (requiresAdmin) {
     if (toMeta.requiresSuperAdmin && !isSuperAdmin) {
-      return adminHomePath()
+      return redirect(adminHomePath())
     }
     const permissions = toMeta.adminPermission ? [toMeta.adminPermission] : resolveAdminRoutePermissions(toPath)
     if (permissions.length > 0 && !permissions.some(hasAdminPermission)) {
-      return adminHomePath()
+      return redirect(adminHomePath())
+    }
+    shouldFetchAdminCompliance = canAccessAdmin
+    if (authState.adminComplianceRequired) {
+      return {
+        redirect: toPath === ADMIN_COMPLIANCE_HOLD_PATH ? false : ADMIN_COMPLIANCE_HOLD_PATH,
+        shouldFetchAdminCompliance,
+        pendingComplianceRedirect: toPath,
+      }
     }
   }
 
@@ -142,14 +164,14 @@ function simulateGuard(
       '/redeem',
     ]
     if (restrictedPaths.some((path) => toPath.startsWith(path))) {
-      return canAccessAdmin ? adminHomePath() : '/dashboard'
+      return redirect(canAccessAdmin ? adminHomePath() : '/dashboard')
     }
   }
 
   // Backend mode: admin gets full access, non-admin blocked
   if (authState.backendModeEnabled) {
     if (authState.isAuthenticated && canAccessAdmin) {
-      return null
+      return { redirect: null, shouldFetchAdminCompliance }
     }
     const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
     const callbackPaths = [
@@ -165,11 +187,11 @@ function simulateGuard(
       callbackPaths.includes(toPath) ||
       (authState.hasPendingAuthSession && pendingAuthPaths.includes(toPath))
     if (!isAllowed) {
-      return '/login'
+      return redirect('/login')
     }
   }
 
-  return null // 允许通过
+  return { redirect: null, shouldFetchAdminCompliance } // 允许通过
 }
 
 describe('路由守卫逻辑', () => {
@@ -288,6 +310,28 @@ describe('路由守卫逻辑', () => {
     it('访问有 read 权限的后台页面允许通过', () => {
       const redirect = simulateGuard('/admin/users', { requiresAdmin: true }, authState)
       expect(redirect).toBeNull()
+    })
+
+    it('访问有权限的后台页面会触发合规预检查', () => {
+      const result = simulateGuardResult('/admin/users', { requiresAdmin: true }, authState)
+      expect(result).toEqual({
+        redirect: null,
+        shouldFetchAdminCompliance: true,
+      })
+    })
+
+    it('合规未确认时暂存目标后台页并跳转到安全承载页', () => {
+      const result = simulateGuardResult(
+        '/admin/users',
+        { requiresAdmin: true },
+        { ...authState, adminComplianceRequired: true },
+      )
+
+      expect(result).toEqual({
+        redirect: '/home',
+        shouldFetchAdminCompliance: true,
+        pendingComplianceRedirect: '/admin/users',
+      })
     })
 
     it('访问缺少权限的后台页面重定向到首个可访问后台页', () => {

@@ -190,6 +190,41 @@ describe('API Client', () => {
 
       window.removeEventListener('admin-compliance-required', listener)
     })
+
+    it('并发合规未确认错误只广播一次事件', async () => {
+      localStorage.setItem('auth_token', 'admin-token')
+      const listener = vi.fn()
+      window.addEventListener('admin-compliance-required', listener)
+
+      const adapter = vi.fn().mockRejectedValue({
+        response: {
+          status: 423,
+          data: {
+            code: 'ADMIN_COMPLIANCE_ACK_REQUIRED',
+            message: 'administrator compliance acknowledgement is required',
+            metadata: {
+              version: 'v2026.06.10',
+            },
+          },
+        },
+        config: {
+          url: '/admin/ops/dashboard/overview',
+          headers: { Authorization: 'Bearer admin-token' },
+        },
+        code: 'ERR_BAD_REQUEST',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await Promise.allSettled([
+        apiClient.get('/admin/ops/dashboard/overview'),
+        apiClient.get('/admin/ops/dashboard/latency-histogram'),
+        apiClient.get('/admin/ops/dashboard/error-trend'),
+      ])
+
+      expect(listener).toHaveBeenCalledTimes(1)
+
+      window.removeEventListener('admin-compliance-required', listener)
+    })
   })
 
   // --- 401 Token 刷新 ---

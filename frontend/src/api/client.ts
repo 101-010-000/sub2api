@@ -26,6 +26,9 @@ export const apiClient: AxiosInstance = axios.create({
 let isRefreshing = false
 // Queue of requests waiting for token refresh
 let refreshSubscribers: Array<(token: string) => void> = []
+let lastAdminComplianceEventAt = 0
+
+const ADMIN_COMPLIANCE_EVENT_THROTTLE_MS = 1500
 
 /**
  * Subscribe to token refresh completion
@@ -40,6 +43,22 @@ function subscribeTokenRefresh(callback: (token: string) => void): void {
 function onTokenRefreshed(token: string): void {
   refreshSubscribers.forEach((callback) => callback(token))
   refreshSubscribers = []
+}
+
+function dispatchAdminComplianceRequired(metadata: unknown): void {
+  const now = Date.now()
+  if (now - lastAdminComplianceEventAt < ADMIN_COMPLIANCE_EVENT_THROTTLE_MS) {
+    return
+  }
+  lastAdminComplianceEventAt = now
+
+  try {
+    window.dispatchEvent(new CustomEvent('admin-compliance-required', {
+      detail: metadata || {}
+    }))
+  } catch {
+    // ignore event failures
+  }
 }
 
 // ==================== Request Interceptor ====================
@@ -149,13 +168,7 @@ apiClient.interceptors.response.use(
       }
 
       if (status === 423 && apiData.code === 'ADMIN_COMPLIANCE_ACK_REQUIRED') {
-        try {
-          window.dispatchEvent(new CustomEvent('admin-compliance-required', {
-            detail: apiData.metadata || {}
-          }))
-        } catch {
-          // ignore event failures
-        }
+        dispatchAdminComplianceRequired(apiData.metadata)
 
         return Promise.reject({
           status,
