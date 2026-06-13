@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TouchPieAuthorizeView from '@/views/TouchPieAuthorizeView.vue'
 
-const { routeState, authState, bootstrapMock, createAPIKeyMock, approveDeviceMock } = vi.hoisted(() => ({
+const { routeState, authState, bootstrapMock, createAPIKeyMock, exportAPIKeyMock, approveDeviceMock } = vi.hoisted(() => ({
   routeState: {
     fullPath: '/touch-pie/authorize?user_code=ABCD1234',
     query: {
@@ -14,6 +14,7 @@ const { routeState, authState, bootstrapMock, createAPIKeyMock, approveDeviceMoc
   },
   bootstrapMock: vi.fn(),
   createAPIKeyMock: vi.fn(),
+  exportAPIKeyMock: vi.fn(),
   approveDeviceMock: vi.fn(),
 }))
 
@@ -28,6 +29,7 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('@/api/touchPie', () => ({
   bootstrap: (...args: any[]) => bootstrapMock(...args),
   createAPIKey: (...args: any[]) => createAPIKeyMock(...args),
+  exportAPIKey: (...args: any[]) => exportAPIKeyMock(...args),
   approveDevice: (...args: any[]) => approveDeviceMock(...args),
 }))
 
@@ -70,6 +72,17 @@ describe('TouchPieAuthorizeView', () => {
       provider_accent_color: '#8B5CF6',
       default_model: 'gpt-5.5',
     })
+    exportAPIKeyMock.mockReset()
+    exportAPIKeyMock.mockResolvedValue({
+      id: 7,
+      name: 'TouchX',
+      key: 'sk-existing',
+      status: 'active',
+      provider_name: 'TouchX',
+      provider_source: 'touchx',
+      provider_accent_color: '#8B5CF6',
+      default_model: 'gpt-5.5',
+    })
     approveDeviceMock.mockReset()
   })
 
@@ -99,9 +112,18 @@ describe('TouchPieAuthorizeView', () => {
 
   it('creates touchx api key, approves device and shows success state', async () => {
     approveDeviceMock.mockResolvedValue({ approved: true })
+    bootstrapMock.mockResolvedValue({
+      groups: [{ id: 3, name: 'OpenAI', status: 'active' }],
+      api_keys: [],
+      provider_name: 'TouchX',
+      provider_source: 'touchx',
+      provider_accent_color: '#8B5CF6',
+      default_model: 'gpt-5.5',
+    })
 
     const wrapper = mountView()
     await flushPromises()
+
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
@@ -109,9 +131,32 @@ describe('TouchPieAuthorizeView', () => {
       name: 'TouchX',
       group_id: 3,
     })
-    expect(approveDeviceMock).toHaveBeenCalledWith('ABCD1234')
+    expect(approveDeviceMock).toHaveBeenCalledWith('ABCD1234', 9)
     expect(wrapper.text()).toContain('已授权')
-    expect(wrapper.text()).toContain('已创建 TouchX 渠道')
+    expect(wrapper.text()).toContain('已授权 TouchX')
+  })
+
+  it('reuses existing touchx api key by default', async () => {
+    approveDeviceMock.mockResolvedValue({ approved: true })
+    bootstrapMock.mockResolvedValue({
+      groups: [{ id: 3, name: 'OpenAI', status: 'active' }],
+      api_keys: [{ id: 7, name: 'TouchX', status: 'active' }],
+      provider_name: 'TouchX',
+      provider_source: 'touchx',
+      provider_accent_color: '#8B5CF6',
+      default_model: 'gpt-5.5',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('本次会复用 TouchX')
+
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    expect(exportAPIKeyMock).toHaveBeenCalledWith(7)
+    expect(createAPIKeyMock).not.toHaveBeenCalled()
+    expect(approveDeviceMock).toHaveBeenCalledWith('ABCD1234', 7)
   })
 
   it('maps expired device error to setup retry copy', async () => {
@@ -127,6 +172,15 @@ describe('TouchPieAuthorizeView', () => {
   })
 
   it('loads groups and asks user to choose touchx channel group', async () => {
+    bootstrapMock.mockResolvedValue({
+      groups: [{ id: 3, name: 'OpenAI', status: 'active' }],
+      api_keys: [],
+      provider_name: 'TouchX',
+      provider_source: 'touchx',
+      provider_accent_color: '#8B5CF6',
+      default_model: 'gpt-5.5',
+    })
+
     const wrapper = mountView()
     await flushPromises()
 

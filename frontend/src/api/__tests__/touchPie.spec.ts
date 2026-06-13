@@ -36,7 +36,16 @@ describe('touch pie api', () => {
     expect(post).toHaveBeenCalledWith('/touch-pie/device/start', {})
   })
 
-  it('approves device with user code', async () => {
+  it('approves device with user code and selected api key', async () => {
+    await touchPieAPI.approveDevice('ABCD1234', 7)
+
+    expect(post).toHaveBeenCalledWith('/touch-pie/device/approve', {
+      user_code: 'ABCD1234',
+      api_key_id: 7
+    })
+  })
+
+  it('approves device without api key when not selected', async () => {
     await touchPieAPI.approveDevice('ABCD1234')
 
     expect(post).toHaveBeenCalledWith('/touch-pie/device/approve', {

@@ -13,7 +13,7 @@ import (
 )
 
 type touchPieDeviceRepoStub struct {
-	nextID   int64
+	nextID  int64
 	byUser  map[string]*TouchPieDeviceSession
 	byDev   map[string]*TouchPieDeviceSession
 	approve []int64
@@ -22,7 +22,7 @@ type touchPieDeviceRepoStub struct {
 
 func newTouchPieDeviceRepoStub() *touchPieDeviceRepoStub {
 	return &touchPieDeviceRepoStub{
-		nextID:  1,
+		nextID: 1,
 		byUser: make(map[string]*TouchPieDeviceSession),
 		byDev:  make(map[string]*TouchPieDeviceSession),
 	}
@@ -56,11 +56,12 @@ func (r *touchPieDeviceRepoStub) GetDeviceSessionByDeviceCodeHash(_ context.Cont
 	return &clone, nil
 }
 
-func (r *touchPieDeviceRepoStub) ApproveDeviceSession(_ context.Context, id int64, userID int64, now time.Time) error {
+func (r *touchPieDeviceRepoStub) ApproveDeviceSession(_ context.Context, id int64, userID int64, apiKeyID *int64, now time.Time) error {
 	for _, session := range r.byDev {
 		if session.ID == id && session.Status != TouchPieDeviceStatusConsumed && session.ExpiresAt.After(now) {
 			session.Status = TouchPieDeviceStatusApproved
 			session.UserID = &userID
+			session.APIKeyID = apiKeyID
 			session.ApprovedAt = &now
 			r.approve = append(r.approve, userID)
 			return nil
@@ -130,7 +131,7 @@ func TestTouchPieDeviceServiceFlow(t *testing.T) {
 	_, err = svc.Token(ctx, start.DeviceCode)
 	require.ErrorIs(t, err, ErrTouchPieDeviceAuthorizationWait)
 
-	require.NoError(t, svc.Approve(ctx, start.UserCode, 42))
+	require.NoError(t, svc.Approve(ctx, start.UserCode, 42, nil))
 	token, err := svc.Token(ctx, start.DeviceCode)
 	require.NoError(t, err)
 	require.NotEmpty(t, token.AccessToken)
@@ -150,11 +151,88 @@ func TestTouchPieApproveDoesNotOverwriteOtherUser(t *testing.T) {
 
 	start, err := svc.Start(ctx, "https://sub2api.test")
 	require.NoError(t, err)
-	require.NoError(t, svc.Approve(ctx, start.UserCode, 42))
+	require.NoError(t, svc.Approve(ctx, start.UserCode, 42, nil))
 
-	err = svc.Approve(ctx, start.UserCode, 99)
+	err = svc.Approve(ctx, start.UserCode, 99, nil)
 	require.ErrorIs(t, err, ErrTouchPieDeviceConsumed)
 	require.Equal(t, []int64{42}, repo.approve)
+}
+
+func TestTouchPieApproveStoresSelectedAPIKey(t *testing.T) {
+	ctx := context.Background()
+	repo := newTouchPieDeviceRepoStub()
+	userRepo := &userRepoStub{
+		user: &User{
+			ID:     42,
+			Email:  "user@example.com",
+			Role:   RoleUser,
+			Status: StatusActive,
+		},
+	}
+	authSvc := NewAuthService(
+		nil,
+		userRepo,
+		nil,
+		&refreshTokenCacheStub{},
+		&config.Config{JWT: config.JWTConfig{Secret: "test-secret", ExpireHour: 1, RefreshTokenExpireDays: 30}},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	groupID := int64(3)
+	apiKeyRepo := &apiKeyRepoStub{
+		apiKey: &APIKey{
+			ID:      7,
+			UserID:  42,
+			Name:    "TouchX",
+			Key:     "sk-test",
+			GroupID: &groupID,
+			Group:   &Group{ID: groupID, Platform: PlatformOpenAI},
+			Status:  StatusAPIKeyActive,
+		},
+	}
+	svc := NewTouchPieDeviceService(repo, authSvc, apiKeyRepo)
+
+	start, err := svc.Start(ctx, "https://sub2api.test")
+	require.NoError(t, err)
+	apiKeyID := int64(7)
+	require.NoError(t, svc.Approve(ctx, start.UserCode, 42, &apiKeyID))
+
+	token, err := svc.Token(ctx, start.DeviceCode)
+	require.NoError(t, err)
+	require.NotNil(t, token.APIKeyID)
+	require.Equal(t, apiKeyID, *token.APIKeyID)
+}
+
+func TestTouchPieApproveRejectsClaudeCodeOnlyAPIKey(t *testing.T) {
+	ctx := context.Background()
+	repo := newTouchPieDeviceRepoStub()
+	groupID := int64(4)
+	apiKeyRepo := &apiKeyRepoStub{
+		apiKey: &APIKey{
+			ID:      28,
+			UserID:  42,
+			Name:    "cc",
+			Key:     "sk-cc",
+			GroupID: &groupID,
+			Group:   &Group{ID: groupID, Platform: PlatformOpenAI, ClaudeCodeOnly: true},
+			Status:  StatusAPIKeyActive,
+		},
+	}
+	svc := NewTouchPieDeviceService(repo, nil, apiKeyRepo)
+
+	start, err := svc.Start(ctx, "https://sub2api.test")
+	require.NoError(t, err)
+	apiKeyID := int64(28)
+	err = svc.Approve(ctx, start.UserCode, 42, &apiKeyID)
+
+	require.ErrorIs(t, err, ErrTouchPieAPIKeyForbidden)
+	require.Empty(t, repo.approve)
 }
 
 func TestTouchPieExportAPIKeyChecksOwnership(t *testing.T) {

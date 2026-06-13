@@ -24,6 +24,7 @@ export interface TouchPieTokenResponse {
   expires_in: number
   token_type: 'Bearer' | string
   user_id: number
+  api_key_id?: number
 }
 
 export interface TouchPieExportAPIKeyResponse {
@@ -77,10 +78,12 @@ export async function createAPIKey(req: TouchPieCreateAPIKeyRequest): Promise<To
   return data
 }
 
-export async function approveDevice(userCode: string): Promise<TouchPieApproveResponse> {
-  const { data } = await apiClient.post<TouchPieApproveResponse>('/touch-pie/device/approve', {
-    user_code: userCode
-  })
+export async function approveDevice(userCode: string, apiKeyID?: number | null): Promise<TouchPieApproveResponse> {
+  const payload: { user_code: string; api_key_id?: number } = { user_code: userCode }
+  if (apiKeyID != null) {
+    payload.api_key_id = apiKeyID
+  }
+  const { data } = await apiClient.post<TouchPieApproveResponse>('/touch-pie/device/approve', payload)
   return data
 }
 

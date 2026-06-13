@@ -147,19 +147,21 @@ func TestTouchPieExportAPIKeyIncludesTouchXMetadata(t *testing.T) {
 func TestTouchPieBootstrapReturnsGroupsAndTouchXMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	groupID := int64(3)
 	h := NewTouchPieHandler(nil, &touchPieAPIKeyManagerStub{
 		groups: []service.Group{{
-			ID:             3,
+			ID:             groupID,
 			Name:           "OpenAI",
 			Platform:       "openai",
 			Status:         service.StatusActive,
 			RateMultiplier: 1,
 		}},
 		keys: []service.APIKey{{
-			ID:     7,
-			UserID: 42,
-			Name:   openai.TouchXProviderName,
-			Status: service.StatusAPIKeyActive,
+			ID:      7,
+			UserID:  42,
+			Name:    openai.TouchXProviderName,
+			GroupID: &groupID,
+			Status:  service.StatusAPIKeyActive,
 		}},
 	})
 
@@ -181,11 +183,75 @@ func TestTouchPieBootstrapReturnsGroupsAndTouchXMetadata(t *testing.T) {
 	require.Len(t, data["api_keys"], 1)
 }
 
+func TestTouchPieBootstrapReturnsExistingAPIKeysForSelection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	openAIGroupID := int64(3)
+	ccGroupID := int64(4)
+	h := NewTouchPieHandler(nil, &touchPieAPIKeyManagerStub{
+		groups: []service.Group{{
+			ID:       openAIGroupID,
+			Name:     "OpenAI",
+			Platform: service.PlatformOpenAI,
+			Status:   service.StatusActive,
+		}, {
+			ID:             ccGroupID,
+			Name:           "cc",
+			Platform:       service.PlatformOpenAI,
+			ClaudeCodeOnly: true,
+			Status:         service.StatusActive,
+		}},
+		keys: []service.APIKey{{
+			ID:      28,
+			UserID:  42,
+			Name:    "cc",
+			GroupID: &ccGroupID,
+			Status:  service.StatusAPIKeyActive,
+		}, {
+			ID:      22,
+			UserID:  42,
+			Name:    "pro",
+			GroupID: &openAIGroupID,
+			Status:  service.StatusAPIKeyActive,
+		}, {
+			ID:     15,
+			UserID: 42,
+			Name:   "ungrouped",
+			Status: service.StatusAPIKeyActive,
+		}},
+	})
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/touch-pie/bootstrap", nil)
+	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 42})
+
+	h.Bootstrap(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var envelope response.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &envelope))
+	data, ok := envelope.Data.(map[string]any)
+	require.True(t, ok)
+	keys, ok := data["api_keys"].([]any)
+	require.True(t, ok)
+	require.Len(t, keys, 1)
+	first, ok := keys[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "pro", first["name"])
+}
+
 func TestTouchPieCreateAPIKeyUsesSelectedGroup(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	groupID := int64(3)
 	manager := &touchPieAPIKeyManagerStub{
+		groups: []service.Group{{
+			ID:       groupID,
+			Name:     "OpenAI",
+			Platform: service.PlatformOpenAI,
+			Status:   service.StatusActive,
+		}},
 		createdKey: &service.APIKey{
 			ID:      9,
 			UserID:  42,
@@ -218,4 +284,32 @@ func TestTouchPieCreateAPIKeyUsesSelectedGroup(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "sk-touchx", data["key"])
 	require.Equal(t, openai.TouchXAccentColor, data["provider_accent_color"])
+}
+
+func TestTouchPieCreateAPIKeyRejectsClaudeCodeOnlyGroup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(4)
+	manager := &touchPieAPIKeyManagerStub{
+		groups: []service.Group{{
+			ID:             groupID,
+			Name:           "cc",
+			Platform:       service.PlatformOpenAI,
+			ClaudeCodeOnly: true,
+			Status:         service.StatusActive,
+		}},
+	}
+	h := NewTouchPieHandler(nil, manager)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/touch-pie/api-keys", bytes.NewBufferString(`{"group_id":4}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 42})
+
+	h.CreateAPIKey(c)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Nil(t, manager.createReq)
+	require.Contains(t, rec.Body.String(), "GROUP_NOT_ALLOWED")
 }
