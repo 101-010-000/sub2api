@@ -72,7 +72,9 @@ func (r *contentModerationInternalAuditUserRepo) Update(ctx context.Context, use
 	return nil
 }
 
-func (r *contentModerationInternalAuditUserRepo) Delete(context.Context, int64) error { panic("unexpected Delete call") }
+func (r *contentModerationInternalAuditUserRepo) Delete(context.Context, int64) error {
+	panic("unexpected Delete call")
+}
 func (r *contentModerationInternalAuditUserRepo) GetUserAvatar(context.Context, int64) (*UserAvatar, error) {
 	panic("unexpected GetUserAvatar call")
 }
@@ -152,7 +154,9 @@ type contentModerationInternalAuditGroupRepo struct {
 	groups map[int64]*Group
 }
 
-func (r *contentModerationInternalAuditGroupRepo) Create(context.Context, *Group) error { panic("unexpected Create call") }
+func (r *contentModerationInternalAuditGroupRepo) Create(context.Context, *Group) error {
+	panic("unexpected Create call")
+}
 func (r *contentModerationInternalAuditGroupRepo) GetByID(ctx context.Context, id int64) (*Group, error) {
 	group, ok := r.groups[id]
 	if !ok {
@@ -164,8 +168,12 @@ func (r *contentModerationInternalAuditGroupRepo) GetByID(ctx context.Context, i
 func (r *contentModerationInternalAuditGroupRepo) GetByIDLite(ctx context.Context, id int64) (*Group, error) {
 	return r.GetByID(ctx, id)
 }
-func (r *contentModerationInternalAuditGroupRepo) Update(context.Context, *Group) error { panic("unexpected Update call") }
-func (r *contentModerationInternalAuditGroupRepo) Delete(context.Context, int64) error { panic("unexpected Delete call") }
+func (r *contentModerationInternalAuditGroupRepo) Update(context.Context, *Group) error {
+	panic("unexpected Update call")
+}
+func (r *contentModerationInternalAuditGroupRepo) Delete(context.Context, int64) error {
+	panic("unexpected Delete call")
+}
 func (r *contentModerationInternalAuditGroupRepo) DeleteCascade(context.Context, int64) ([]int64, error) {
 	panic("unexpected DeleteCascade call")
 }
