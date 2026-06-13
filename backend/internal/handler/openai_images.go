@@ -161,6 +161,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 
 	for {
 		reqLog.Debug("openai.images.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
+		previousEffectiveGroupID := effectiveGroupID
 		selection, scheduleDecision, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
 			apiKey.Group,
 			apiKey.GroupID,
@@ -178,6 +179,8 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				)
 			},
 		)
+		markSuisuRoutedIfGroupChanged(c, previousEffectiveGroupID, newEffectiveGroupID)
+		requestCtx = service.WithOpenAIImageGenerationIntent(c.Request.Context())
 		effectiveGroupID = newEffectiveGroupID
 		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
 			if reqLog != nil {
@@ -228,13 +231,13 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 
 		account := selection.Account
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
-			reqLog.Debug("openai.images.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
-			setOpsSelectedAccount(c, account.ID, account.Platform)
+		reqLog.Debug("openai.images.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
+		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-			accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, sessionHash, selection, parsed.Stream, &streamStarted, reqLog)
-			if !acquired {
-				return
-			}
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, sessionHash, selection, parsed.Stream, &streamStarted, reqLog)
+		if !acquired {
+			return
+		}
 
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
@@ -370,12 +373,12 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				InboundEndpoint:    inboundEndpoint,
 				UpstreamEndpoint:   upstreamEndpoint,
 				UserAgent:          userAgent,
-					IPAddress:          clientIP,
-					RequestPayloadHash: requestPayloadHash,
-					APIKeyService:      h.apiKeyService,
-					ScheduledGroupID:   effectiveGroupID,
-					ChannelUsageFields: channelMapping.ToUsageFields(requestModel, upstreamModel),
-				}); err != nil {
+				IPAddress:          clientIP,
+				RequestPayloadHash: requestPayloadHash,
+				APIKeyService:      h.apiKeyService,
+				ScheduledGroupID:   effectiveGroupID,
+				ChannelUsageFields: channelMapping.ToUsageFields(requestModel, upstreamModel),
+			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.images"),
 					zap.Int64("user_id", subject.UserID),

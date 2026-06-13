@@ -123,6 +123,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 	routingStart := time.Now()
 
 	for {
+		previousEffectiveGroupID := effectiveGroupID
 		selection, _, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
 			apiKey.Group,
 			apiKey.GroupID,
@@ -143,6 +144,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 				)
 			},
 		)
+		markSuisuRoutedIfGroupChanged(c, previousEffectiveGroupID, newEffectiveGroupID)
 		effectiveGroupID = newEffectiveGroupID
 		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
 			if reqLog != nil {
@@ -264,12 +266,12 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 				Subscription:       subscription,
 				InboundEndpoint:    inboundEndpoint,
 				UpstreamEndpoint:   upstreamEndpoint,
-					UserAgent:          userAgent,
-					IPAddress:          clientIP,
-					APIKeyService:      h.apiKeyService,
-					ScheduledGroupID:   effectiveGroupID,
-					ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
-				}); err != nil {
+				UserAgent:          userAgent,
+				IPAddress:          clientIP,
+				APIKeyService:      h.apiKeyService,
+				ScheduledGroupID:   effectiveGroupID,
+				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.embeddings"),
 					zap.Int64("user_id", subject.UserID),
