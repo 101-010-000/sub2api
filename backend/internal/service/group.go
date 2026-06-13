@@ -69,16 +69,16 @@ type Group struct {
 	RPMLimit int
 
 	// 优速通配置：fast 额度正常转发，slow 额度在真实请求前延迟/抽样拒绝。
-	SpeedConfigEnabled            bool
-	UserSpeedConfigAllowed        bool
-	DefaultFastQuotaRatio         float64
-	MinFastQuotaRatio             float64
-	MaxFastQuotaRatio             float64
-	DefaultSlowDelayMinSeconds    int
-	DefaultSlowDelayMaxSeconds    int
-	MaxSlowDelaySeconds           int
-	DefaultSlowRejectRate         float64
-	MaxSlowRejectRate             float64
+	SpeedConfigEnabled         bool
+	UserSpeedConfigAllowed     bool
+	DefaultFastQuotaRatio      float64
+	MinFastQuotaRatio          float64
+	MaxFastQuotaRatio          float64
+	DefaultSlowDelayMinSeconds int
+	DefaultSlowDelayMaxSeconds int
+	MaxSlowDelaySeconds        int
+	DefaultSlowRejectRate      float64
+	MaxSlowRejectRate          float64
 
 	// 随速通配置：后台隐藏备用 OpenAI 分组路由，用户侧不可见。
 	SuisuEnabled         bool

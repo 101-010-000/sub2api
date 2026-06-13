@@ -9,19 +9,19 @@ import (
 )
 
 type User struct {
-	ID            int64      `json:"id"`
-	Email         string     `json:"email"`
-	Username      string     `json:"username"`
-	Role          string     `json:"role"`
-	AdminPermissions []string `json:"admin_permissions"`
-	Balance       float64    `json:"balance"`
-	Concurrency   int        `json:"concurrency"`
-	Status        string     `json:"status"`
-	AllowedGroups []int64    `json:"allowed_groups"`
-	LastActiveAt  *time.Time `json:"last_active_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	ID               int64      `json:"id"`
+	Email            string     `json:"email"`
+	Username         string     `json:"username"`
+	Role             string     `json:"role"`
+	AdminPermissions []string   `json:"admin_permissions"`
+	Balance          float64    `json:"balance"`
+	Concurrency      int        `json:"concurrency"`
+	Status           string     `json:"status"`
+	AllowedGroups    []int64    `json:"allowed_groups"`
+	LastActiveAt     *time.Time `json:"last_active_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	DeletedAt        *time.Time `json:"deleted_at,omitempty"`
 
 	// 余额不足通知
 	BalanceNotifyEnabled       bool               `json:"balance_notify_enabled"`
@@ -625,7 +625,7 @@ type AdminUserSubscription struct {
 	AssignedAt time.Time `json:"assigned_at"`
 	Notes      string    `json:"notes"`
 
-	AssignedByUser *User `json:"assigned_by_user,omitempty"`
+	AssignedByUser *User                    `json:"assigned_by_user,omitempty"`
 	SpeedStatus    *SubscriptionSpeedStatus `json:"speed_status,omitempty"`
 }
 

@@ -481,7 +481,6 @@ func clampSpeedRatio(v float64) float64 {
 	return v
 }
 
-
 func slowRequestCount(cfg *UserGroupSpeedConfig) int64 {
 	if cfg == nil {
 		return 0

@@ -490,10 +490,3 @@ func contextString(value any) string {
 	}
 	return ""
 }
-
-func contextValueText(value any) string {
-	var parts []string
-	var images []string
-	collectContextValue(value, &parts, &images)
-	return normalizeContentModerationText(strings.Join(parts, "\n"))
-}
