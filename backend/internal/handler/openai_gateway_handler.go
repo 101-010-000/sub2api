@@ -1577,10 +1577,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 	if h.speedService != nil {
-		if _, err := h.speedService.Decide(ctx, apiKey.User, apiKey.Group, subscription); err != nil {
-			reqLog.Info("openai.websocket_speed_check_failed", zap.Error(err))
-			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "speed check failed")
-			return
+		if service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now()) {
+			reqLog.Info("openai.websocket_touch_pie_fast", zap.Bool("touch_pie_fast", true))
+		} else {
+			if _, err := h.speedService.Decide(ctx, apiKey.User, apiKey.Group, subscription); err != nil {
+				reqLog.Info("openai.websocket_speed_check_failed", zap.Error(err))
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "speed check failed")
+				return
+			}
 		}
 	}
 
@@ -2131,6 +2135,18 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareError(c *gin.Context, status 
 func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription, streamStarted *bool, reqLog *zap.Logger, anthropicFormat bool) openAISpeedDecisionResult {
 	if h.speedService == nil || apiKey == nil {
 		return openAISpeedDecisionResult{OK: true}
+	}
+	if service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now()) {
+		if reqLog != nil {
+			reqLog.Info("openai.touch_pie_fast", zap.Bool("touch_pie_fast", true))
+		}
+		return openAISpeedDecisionResult{
+			OK: true,
+			Decision: &service.SpeedDecision{
+				Enabled: true,
+				State:   "fast",
+			},
+		}
 	}
 	decision, err := h.speedService.Decide(c.Request.Context(), apiKey.User, apiKey.Group, subscription)
 	if err != nil {

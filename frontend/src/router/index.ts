@@ -180,6 +180,16 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/touch-pie/authorize',
+    name: 'TouchPieAuthorize',
+    component: () => import('@/views/TouchPieAuthorizeView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Touch Pie Authorization'
+    }
+  },
+  {
     path: '/legal/:documentId',
     name: 'LegalDocument',
     component: () => import('@/views/public/LegalDocumentView.vue'),

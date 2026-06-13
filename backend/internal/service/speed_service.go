@@ -15,13 +15,15 @@ var (
 )
 
 const (
-	defaultFastQuotaRatio      = 0.30
-	defaultMinFastQuotaRatio   = 0.10
-	defaultMaxFastQuotaRatio   = 0.80
-	defaultSlowDelayMinSeconds = 1
-	defaultSlowDelayMaxSeconds = 5
-	defaultMaxSlowDelaySeconds = 30
-	defaultMaxSlowRejectRate   = 0.50
+	defaultFastQuotaRatio       = 0.30
+	defaultMinFastQuotaRatio    = 0.10
+	defaultMaxFastQuotaRatio    = 0.80
+	defaultSlowDelayMinSeconds  = 1
+	defaultSlowDelayMaxSeconds  = 5
+	defaultMaxSlowDelaySeconds  = 60
+	touchPieSlowDelayMinSeconds = 1
+	touchPieSlowDelayMaxSeconds = 60
+	defaultMaxSlowRejectRate    = 0.50
 
 	speedBillingModeSubscription = "subscription"
 )
@@ -445,11 +447,17 @@ func resolveSpeedState(windows ...*SpeedWindowStatus) string {
 }
 
 func randomSlowDelay(minSeconds, maxSeconds int) time.Duration {
-	if minSeconds < 0 {
-		minSeconds = 0
+	if minSeconds < touchPieSlowDelayMinSeconds {
+		minSeconds = touchPieSlowDelayMinSeconds
+	}
+	if minSeconds > touchPieSlowDelayMaxSeconds {
+		minSeconds = touchPieSlowDelayMaxSeconds
 	}
 	if maxSeconds < minSeconds {
 		maxSeconds = minSeconds
+	}
+	if maxSeconds > touchPieSlowDelayMaxSeconds {
+		maxSeconds = touchPieSlowDelayMaxSeconds
 	}
 	if maxSeconds == minSeconds {
 		return time.Duration(minSeconds) * time.Second
