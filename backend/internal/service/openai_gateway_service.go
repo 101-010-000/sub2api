@@ -555,6 +555,13 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
 	}
 }
 
+func (s *OpenAIGatewayService) RecordSpeedRefusedUsage(ctx context.Context, input *SpeedRefusedUsageInput) {
+	if s == nil {
+		return
+	}
+	recordSpeedRefusedUsageLog(ctx, s.usageLogRepo, input, "service.openai_gateway.speed_refused")
+}
+
 // CloseOpenAIWSPool 关闭 OpenAI WebSocket 连接池的后台 worker 和空闲连接。
 // 应在应用优雅关闭时调用。
 func (s *OpenAIGatewayService) CloseOpenAIWSPool() {
@@ -5957,6 +5964,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if subscription != nil {
 		usageLog.SubscriptionID = &subscription.ID
 	}
+	ApplySpeedUsageMetadataFromContext(ctx, usageLog)
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
 	accountStatsGroupID := apiKey.GroupID

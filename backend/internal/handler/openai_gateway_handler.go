@@ -86,7 +86,117 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
+	if speedState, _ := parent.Value(ctxkey.SpeedState).(string); strings.TrimSpace(speedState) != "" {
+		base = context.WithValue(base, ctxkey.SpeedState, strings.TrimSpace(speedState))
+	}
+	if speedWaitMs, ok := parent.Value(ctxkey.SpeedWaitMs).(int); ok {
+		base = context.WithValue(base, ctxkey.SpeedWaitMs, speedWaitMs)
+	}
+	if speedRoute, _ := parent.Value(ctxkey.SpeedRoute).(string); strings.TrimSpace(speedRoute) != "" {
+		base = context.WithValue(base, ctxkey.SpeedRoute, strings.TrimSpace(speedRoute))
+	}
 	return base
+}
+
+func setSpeedUsageMetadata(c *gin.Context, state string, waitMs int, route string) {
+	if c == nil || c.Request == nil {
+		return
+	}
+	c.Request = c.Request.WithContext(service.WithSpeedUsageMetadata(c.Request.Context(), state, waitMs, route))
+}
+
+func setSpeedRoute(c *gin.Context, route string) {
+	setSpeedUsageMetadata(c, "", 0, route)
+}
+
+func speedDecisionUsageState(decision *service.SpeedDecision) string {
+	if decision == nil || !decision.Enabled {
+		return ""
+	}
+	if decision.Rejected {
+		return service.SpeedStateRefused
+	}
+	switch decision.State {
+	case service.SpeedStateFast:
+		return service.SpeedStateFast
+	case service.SpeedStateSlow:
+		return service.SpeedStateSlow
+	case service.SpeedStateTouchPieFast:
+		return service.SpeedStateTouchPieFast
+	default:
+		return ""
+	}
+}
+
+func speedDecisionRoute(decision *service.SpeedDecision) string {
+	if decision == nil || strings.TrimSpace(decision.Route) == "" {
+		return service.SpeedRouteDirect
+	}
+	return decision.Route
+}
+
+func speedRejectMessage(decision *service.SpeedDecision) string {
+	if decision != nil {
+		if msg := strings.TrimSpace(decision.RejectMessage); msg != "" {
+			return msg
+		}
+	}
+	return service.DefaultSpeedSlowRejectMessage
+}
+
+func requestTypeFromContext(c *gin.Context, fallbackStream bool) service.RequestType {
+	if c != nil {
+		if v, ok := c.Get(opsRequestTypeKey); ok {
+			switch t := v.(type) {
+			case int16:
+				return service.RequestTypeFromInt16(t)
+			case int:
+				return service.RequestTypeFromInt16(int16(t))
+			case int64:
+				return service.RequestTypeFromInt16(int16(t))
+			case float64:
+				return service.RequestTypeFromInt16(int16(t))
+			}
+		}
+	}
+	return service.RequestTypeFromLegacy(fallbackStream, false)
+}
+
+func speedUsageModel(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if model, _ := c.Get(opsModelKey); model != nil {
+		if s, ok := model.(string); ok && strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
+		}
+	}
+	if c.Request != nil {
+		if s, _ := c.Request.Context().Value(ctxkey.Model).(string); strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
+}
+
+func speedUsageAPIKey(c *gin.Context) *service.APIKey {
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok {
+		return nil
+	}
+	return apiKey
+}
+
+func speedUsageSubscription(c *gin.Context) *service.UserSubscription {
+	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	return subscription
+}
+
+func openAISpeedWaitMs(decision *service.SpeedDecision) int {
+	if decision == nil || decision.WaitMs < 0 {
+		return 0
+	}
+	return decision.WaitMs
 }
 
 func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecordTask) service.UsageRecordTask {
@@ -166,11 +276,21 @@ func markSuisuRouted(c *gin.Context) {
 	c.Request = c.Request.WithContext(ctx)
 }
 
+func markSuisuRoutedWithRoute(c *gin.Context, route string) {
+	markSuisuRouted(c)
+	setSpeedRoute(c, route)
+}
+
 func markSuisuRoutedIfGroupChanged(c *gin.Context, beforeGroupID, afterGroupID *int64) {
 	if sameGroupID(beforeGroupID, afterGroupID) {
 		return
 	}
+	markSuisuRoutedWithRoute(c, service.SpeedRouteSuisuBusy)
+}
+
+func markSuisuSlowRouted(c *gin.Context) {
 	markSuisuRouted(c)
+	setSpeedUsageMetadata(c, service.SpeedStateSlow, 0, service.SpeedRouteSuisuSlow)
 }
 
 type openAIAccountSelectFunc func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error)
@@ -229,6 +349,7 @@ func (h *OpenAIGatewayHandler) applyOpenAISpeedDelay(
 	if reqLog != nil {
 		reqLog.Info("openai.speed_slow_delay", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
 	}
+	startedAt := time.Now()
 	if err := waitWithOptionalPing(c, decision.Delay, isStream, streamStarted, SSEPingFormatComment, h.concurrencyHelper.pingInterval); err != nil {
 		started := streamStarted != nil && *streamStarted
 		if anthropicFormat {
@@ -238,6 +359,8 @@ func (h *OpenAIGatewayHandler) applyOpenAISpeedDelay(
 		}
 		return false
 	}
+	decision.WaitMs = int(time.Since(startedAt).Milliseconds())
+	setSpeedUsageMetadata(c, service.SpeedStateSlow, decision.WaitMs, speedDecisionRoute(decision))
 	return true
 }
 
@@ -254,10 +377,23 @@ func (h *OpenAIGatewayHandler) finalizeOpenAISpeedDecision(
 	}
 	if errors.Is(result.Err, service.ErrSpeedSlowRejected) {
 		started := streamStarted != nil && *streamStarted
+		waitMs := openAISpeedWaitMs(result.Decision)
+		setSpeedUsageMetadata(c, service.SpeedStateRefused, waitMs, speedDecisionRoute(result.Decision))
+		if h.gatewayService != nil {
+			h.gatewayService.RecordSpeedRefusedUsage(c.Request.Context(), &service.SpeedRefusedUsageInput{
+				APIKey:          speedUsageAPIKey(c),
+				Subscription:    speedUsageSubscription(c),
+				Model:           speedUsageModel(c),
+				RequestType:     requestTypeFromContext(c, isStream),
+				InboundEndpoint: GetInboundEndpoint(c),
+				SpeedWaitMs:     waitMs,
+			})
+		}
+		message := speedRejectMessage(result.Decision)
 		if anthropicFormat {
-			h.anthropicStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
+			h.anthropicStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", message, started)
 		} else {
-			h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
+			h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", message, started)
 		}
 		return false
 	}
@@ -479,9 +615,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 	effectiveGroupID := apiKey.GroupID
 	var slowSuisuGroupID *int64
-	if speedDecision.Decision != nil && speedDecision.Decision.State == "slow" {
+	if speedDecision.Decision != nil && speedDecision.Decision.State == service.SpeedStateSlow {
 		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
-			markSuisuRouted(c)
+			markSuisuSlowRouted(c)
 			effectiveGroupID = suisuGroupID
 			slowSuisuGroupID = suisuGroupID
 		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, false) {
@@ -931,9 +1067,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	}
 	effectiveGroupID := apiKey.GroupID
 	var slowSuisuGroupID *int64
-	if speedDecision.Decision != nil && speedDecision.Decision.State == "slow" {
+	if speedDecision.Decision != nil && speedDecision.Decision.State == service.SpeedStateSlow {
 		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
-			markSuisuRouted(c)
+			markSuisuSlowRouted(c)
 			effectiveGroupID = suisuGroupID
 			slowSuisuGroupID = suisuGroupID
 		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, true) {
@@ -1576,16 +1712,49 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
 		return
 	}
-	if h.speedService != nil {
-		if service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now()) {
-			markTouchXProviderHeaders(c)
-			reqLog.Info("openai.websocket_touch_pie_fast", zap.Bool("touch_pie_fast", true))
-		} else {
-			if _, err := h.speedService.Decide(ctx, apiKey.User, apiKey.Group, subscription); err != nil {
-				reqLog.Info("openai.websocket_speed_check_failed", zap.Error(err))
-				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "speed check failed")
+	if service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now()) {
+		markTouchXProviderHeaders(c)
+		setSpeedUsageMetadata(c, service.SpeedStateTouchPieFast, 0, service.SpeedRouteDirect)
+		reqLog.Info("openai.websocket_touch_pie_fast", zap.Bool("touch_pie_fast", true))
+	} else if h.speedService != nil {
+		decision, err := h.speedService.Decide(ctx, apiKey.User, apiKey.Group, subscription)
+		if err != nil {
+			reqLog.Info("openai.websocket_speed_check_failed", zap.Error(err))
+			if errors.Is(err, service.ErrSpeedSlowRejected) {
+				waitMs := openAISpeedWaitMs(decision)
+				setSpeedUsageMetadata(c, service.SpeedStateRefused, waitMs, speedDecisionRoute(decision))
+				if h.gatewayService != nil {
+					h.gatewayService.RecordSpeedRefusedUsage(c.Request.Context(), &service.SpeedRefusedUsageInput{
+						APIKey:          apiKey,
+						Subscription:    subscription,
+						Model:           reqModel,
+						RequestType:     service.RequestTypeWSV2,
+						InboundEndpoint: GetInboundEndpoint(c),
+						SpeedWaitMs:     waitMs,
+					})
+				}
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, speedRejectMessage(decision))
 				return
 			}
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "speed check failed")
+			return
+		}
+		if decision != nil && decision.Delay > 0 {
+			reqLog.Info("openai.websocket_speed_slow_delay", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
+			startedAt := time.Now()
+			timer := time.NewTimer(decision.Delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "request cancelled during speed delay")
+				return
+			case <-timer.C:
+			}
+			timer.Stop()
+			decision.WaitMs = int(time.Since(startedAt).Milliseconds())
+		}
+		if state := speedDecisionUsageState(decision); state != "" {
+			setSpeedUsageMetadata(c, state, openAISpeedWaitMs(decision), speedDecisionRoute(decision))
 		}
 	}
 
@@ -2139,6 +2308,7 @@ func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *servic
 	}
 	if service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now()) {
 		markTouchXProviderHeaders(c)
+		setSpeedUsageMetadata(c, service.SpeedStateTouchPieFast, 0, service.SpeedRouteDirect)
 		if reqLog != nil {
 			reqLog.Info("openai.touch_pie_fast", zap.Bool("touch_pie_fast", true))
 		}
@@ -2149,7 +2319,8 @@ func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *servic
 			OK: true,
 			Decision: &service.SpeedDecision{
 				Enabled: true,
-				State:   "fast",
+				State:   service.SpeedStateTouchPieFast,
+				Route:   service.SpeedRouteDirect,
 			},
 		}
 	}
@@ -2175,6 +2346,9 @@ func (h *OpenAIGatewayHandler) applySpeedDecision(c *gin.Context, apiKey *servic
 	}
 	if reqLog != nil && decision != nil && decision.Delay > 0 {
 		reqLog.Debug("openai.speed_slow_decision", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
+	}
+	if state := speedDecisionUsageState(decision); state != "" && state != service.SpeedStateSlow {
+		setSpeedUsageMetadata(c, state, openAISpeedWaitMs(decision), speedDecisionRoute(decision))
 	}
 	return openAISpeedDecisionResult{OK: true, Decision: decision}
 }

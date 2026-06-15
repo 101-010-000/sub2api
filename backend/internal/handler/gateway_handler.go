@@ -1660,7 +1660,19 @@ func (h *GatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIK
 	if err != nil {
 		started := streamStarted != nil && *streamStarted
 		if errors.Is(err, service.ErrSpeedSlowRejected) {
-			h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "优速通慢速请求被限流", started)
+			setSpeedUsageMetadata(c, service.SpeedStateRefused, openAISpeedWaitMs(decision), speedDecisionRoute(decision))
+			if h.gatewayService != nil {
+				h.gatewayService.RecordSpeedRefusedUsage(c.Request.Context(), &service.SpeedRefusedUsageInput{
+					APIKey:          apiKey,
+					User:            apiKey.User,
+					Subscription:    subscription,
+					Model:           speedUsageModel(c),
+					RequestType:     requestTypeFromContext(c, isStream),
+					InboundEndpoint: GetInboundEndpoint(c),
+					SpeedWaitMs:     openAISpeedWaitMs(decision),
+				})
+			}
+			h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", speedRejectMessage(decision), started)
 			return false
 		}
 		status, code, message, retryAfter := billingErrorDetails(err)
@@ -1671,15 +1683,21 @@ func (h *GatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIK
 		return false
 	}
 	if decision == nil || decision.Delay <= 0 {
+		if state := speedDecisionUsageState(decision); state != "" {
+			setSpeedUsageMetadata(c, state, openAISpeedWaitMs(decision), speedDecisionRoute(decision))
+		}
 		return true
 	}
 	if reqLog != nil {
 		reqLog.Info("gateway.speed_slow_delay", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
 	}
+	startedAt := time.Now()
 	if err := waitWithOptionalPing(c, decision.Delay, isStream, streamStarted, SSEPingFormatClaude, h.concurrencyHelper.pingInterval); err != nil {
 		h.handleStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", streamStarted != nil && *streamStarted)
 		return false
 	}
+	decision.WaitMs = int(time.Since(startedAt).Milliseconds())
+	setSpeedUsageMetadata(c, service.SpeedStateSlow, decision.WaitMs, speedDecisionRoute(decision))
 	return true
 }
 

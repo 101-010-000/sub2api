@@ -567,6 +567,7 @@ export interface Group {
   max_slow_delay_seconds?: number
   default_slow_reject_rate?: number
   max_slow_reject_rate?: number
+  speed_slow_reject_message?: string
   created_at: string
   updated_at: string
 }
@@ -730,6 +731,7 @@ export interface CreateGroupRequest {
   max_slow_delay_seconds?: number
   default_slow_reject_rate?: number
   max_slow_reject_rate?: number
+  speed_slow_reject_message?: string
   suisu_enabled?: boolean
   suisu_fallback_group_id?: number | null
   suisu_slow_route_ratio?: number
@@ -779,6 +781,7 @@ export interface UpdateGroupRequest {
   max_slow_delay_seconds?: number
   default_slow_reject_rate?: number
   max_slow_reject_rate?: number
+  speed_slow_reject_message?: string
   suisu_enabled?: boolean
   suisu_fallback_group_id?: number | null
   suisu_slow_route_ratio?: number
@@ -1316,6 +1319,9 @@ export interface UsageLog {
   reasoning_effort?: string | null
   inbound_endpoint?: string | null
   upstream_endpoint?: string | null
+  speed_state?: 'fast' | 'slow' | 'refused' | 'touchpie_fast' | string | null
+  speed_wait_ms?: number
+  speed_route?: 'direct' | 'suisu_slow' | 'suisu_busy' | string | null
 
   group_id: number | null
   subscription_id: number | null

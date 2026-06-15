@@ -84,28 +84,21 @@ func (r *speedRepository) ClearUserGroupConfig(ctx context.Context, userID, grou
 	return err
 }
 
-func (r *speedRepository) ResetUserGroupUsage(ctx context.Context, userID, groupID int64, now time.Time) error {
+func (r *speedRepository) ResetUserGroupUsage(ctx context.Context, userID, groupID int64, _ time.Time) error {
 	if r == nil || r.db == nil {
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO user_group_speed_configs (
-			user_id, group_id, daily_window_start, weekly_window_start, monthly_window_start,
-			daily_usage_usd, weekly_usage_usd, monthly_usage_usd,
+			user_id, group_id,
 			slow_request_count, slow_reject_count, last_slow_at
-		) VALUES ($1, $2, $3, $3, $3, 0, 0, 0, 0, 0, NULL)
+		) VALUES ($1, $2, 0, 0, NULL)
 		ON CONFLICT (user_id, group_id) DO UPDATE SET
-			daily_window_start = EXCLUDED.daily_window_start,
-			weekly_window_start = EXCLUDED.weekly_window_start,
-			monthly_window_start = EXCLUDED.monthly_window_start,
-			daily_usage_usd = 0,
-			weekly_usage_usd = 0,
-			monthly_usage_usd = 0,
 			slow_request_count = 0,
 			slow_reject_count = 0,
 			last_slow_at = NULL,
 			updated_at = NOW()
-	`, userID, groupID, now)
+	`, userID, groupID)
 	return err
 }
 

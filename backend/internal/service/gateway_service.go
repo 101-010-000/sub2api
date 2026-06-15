@@ -8356,6 +8356,16 @@ type usageLogBestEffortWriter interface {
 	CreateBestEffort(ctx context.Context, log *UsageLog) error
 }
 
+type SpeedRefusedUsageInput struct {
+	APIKey          *APIKey
+	User            *User
+	Subscription    *UserSubscription
+	Model           string
+	RequestType     RequestType
+	InboundEndpoint string
+	SpeedWaitMs     int
+}
+
 // postUsageBillingParams 统一扣费所需的参数
 type postUsageBillingParams struct {
 	Cost                  *CostBreakdown
@@ -8818,6 +8828,61 @@ func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usage
 	}
 }
 
+func recordSpeedRefusedUsageLog(ctx context.Context, repo UsageLogRepository, input *SpeedRefusedUsageInput, logKey string) {
+	if repo == nil || input == nil || input.APIKey == nil {
+		return
+	}
+	user := input.User
+	if user == nil {
+		user = input.APIKey.User
+	}
+	if user == nil || user.ID <= 0 || input.APIKey.ID <= 0 {
+		return
+	}
+	model := strings.TrimSpace(input.Model)
+	if model == "" {
+		model = "unknown"
+	}
+	requestType := input.RequestType.Normalize()
+	if requestType == RequestTypeUnknown {
+		requestType = RequestTypeSync
+	}
+	stream, openAIWSMode := ApplyLegacyRequestFields(requestType, false, false)
+	speedWaitMs := input.SpeedWaitMs
+	if speedWaitMs < 0 {
+		speedWaitMs = 0
+	}
+	speedState := SpeedStateRefused
+	usageLog := &UsageLog{
+		UserID:             user.ID,
+		APIKeyID:           input.APIKey.ID,
+		RequestID:          resolveUsageBillingRequestID(ctx, ""),
+		Model:              model,
+		RequestedModel:     model,
+		InboundEndpoint:    optionalTrimmedStringPtr(input.InboundEndpoint),
+		RateMultiplier:     0,
+		BillingType:        BillingTypeSubscription,
+		RequestType:        requestType,
+		Stream:             stream,
+		OpenAIWSMode:       openAIWSMode,
+		GroupID:            input.APIKey.GroupID,
+		SubscriptionID:     optionalSubscriptionID(input.Subscription),
+		SpeedState:         &speedState,
+		SpeedWaitMs:        speedWaitMs,
+		SpeedRoute:         optionalTrimmedStringPtr(SpeedRouteDirect),
+		CacheTTLOverridden: false,
+		CreatedAt:          time.Now(),
+	}
+	writeUsageLogBestEffort(ctx, repo, usageLog, logKey)
+}
+
+func (s *GatewayService) RecordSpeedRefusedUsage(ctx context.Context, input *SpeedRefusedUsageInput) {
+	if s == nil {
+		return
+	}
+	recordSpeedRefusedUsageLog(ctx, s.usageLogRepo, input, "service.gateway.speed_refused")
+}
+
 // recordUsageOpts 内部选项，参数化普通计费与长上下文计费的差异点。
 type recordUsageOpts struct {
 	// 长上下文计费（仅 Gemini 路径需要）
@@ -9233,6 +9298,7 @@ func (s *GatewayService) buildRecordUsageLog(
 		usageLog.TotalCost = cost.TotalCost
 		usageLog.ActualCost = cost.ActualCost
 	}
+	ApplySpeedUsageMetadataFromContext(ctx, usageLog)
 
 	return usageLog
 }

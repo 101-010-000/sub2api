@@ -195,7 +195,7 @@ func TestOpenAIFinalizeSpeedDecisionSlowReject(t *testing.T) {
 	ok := h.finalizeOpenAISpeedDecision(c, openAISpeedDecisionResult{
 		OK: true,
 		Decision: &service.SpeedDecision{
-			State:    "slow",
+			State:    service.SpeedStateSlow,
 			Rejected: true,
 		},
 		Err: service.ErrSpeedSlowRejected,
@@ -203,7 +203,7 @@ func TestOpenAIFinalizeSpeedDecisionSlowReject(t *testing.T) {
 
 	require.False(t, ok)
 	require.Equal(t, http.StatusTooManyRequests, w.Code)
-	require.Contains(t, w.Body.String(), "优速通慢速请求被限流")
+	require.Contains(t, w.Body.String(), service.DefaultSpeedSlowRejectMessage)
 }
 
 func TestReadRequestBodyWithPrealloc(t *testing.T) {

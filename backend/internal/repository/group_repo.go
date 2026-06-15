@@ -596,7 +596,8 @@ func (r *groupRepository) saveSpeedSettings(ctx context.Context, groupIn *servic
 			default_slow_delay_max_seconds = $8,
 			max_slow_delay_seconds = $9,
 			default_slow_reject_rate = $10,
-			max_slow_reject_rate = $11
+			max_slow_reject_rate = $11,
+			speed_slow_reject_message = $12
 		WHERE id = $1
 	`, groupIn.ID,
 		groupIn.SpeedConfigEnabled,
@@ -609,6 +610,7 @@ func (r *groupRepository) saveSpeedSettings(ctx context.Context, groupIn *servic
 		groupIn.MaxSlowDelaySeconds,
 		groupIn.DefaultSlowRejectRate,
 		groupIn.MaxSlowRejectRate,
+		groupIn.SpeedSlowRejectMessage,
 	)
 	return err
 }
@@ -641,7 +643,8 @@ func (r *groupRepository) loadSpeedSettings(ctx context.Context, groups []*servi
 			default_slow_delay_max_seconds,
 			max_slow_delay_seconds,
 			default_slow_reject_rate,
-			max_slow_reject_rate
+			max_slow_reject_rate,
+			speed_slow_reject_message
 		FROM groups
 		WHERE id = ANY($1)
 	`, pq.Array(ids))
@@ -655,6 +658,7 @@ func (r *groupRepository) loadSpeedSettings(ctx context.Context, groups []*servi
 		var defaultFastQuotaRatio, minFastQuotaRatio, maxFastQuotaRatio float64
 		var defaultSlowDelayMinSeconds, defaultSlowDelayMaxSeconds, maxSlowDelaySeconds int
 		var defaultSlowRejectRate, maxSlowRejectRate float64
+		var speedSlowRejectMessage string
 		if err := rows.Scan(
 			&id,
 			&speedConfigEnabled,
@@ -667,6 +671,7 @@ func (r *groupRepository) loadSpeedSettings(ctx context.Context, groups []*servi
 			&maxSlowDelaySeconds,
 			&defaultSlowRejectRate,
 			&maxSlowRejectRate,
+			&speedSlowRejectMessage,
 		); err != nil {
 			return err
 		}
@@ -681,6 +686,7 @@ func (r *groupRepository) loadSpeedSettings(ctx context.Context, groups []*servi
 			g.MaxSlowDelaySeconds = maxSlowDelaySeconds
 			g.DefaultSlowRejectRate = defaultSlowRejectRate
 			g.MaxSlowRejectRate = maxSlowRejectRate
+			g.SpeedSlowRejectMessage = speedSlowRejectMessage
 		}
 	}
 	return rows.Err()

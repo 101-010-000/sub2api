@@ -127,6 +127,7 @@ type CreateGroupRequest struct {
 	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
 	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
 	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
+	SpeedSlowRejectMessage     string  `json:"speed_slow_reject_message"`
 	// 随速通配置
 	SuisuEnabled         bool    `json:"suisu_enabled"`
 	SuisuFallbackGroupID *int64  `json:"suisu_fallback_group_id"`
@@ -184,6 +185,7 @@ type UpdateGroupRequest struct {
 	MaxSlowDelaySeconds        *int     `json:"max_slow_delay_seconds"`
 	DefaultSlowRejectRate      *float64 `json:"default_slow_reject_rate"`
 	MaxSlowRejectRate          *float64 `json:"max_slow_reject_rate"`
+	SpeedSlowRejectMessage     *string  `json:"speed_slow_reject_message"`
 	// 随速通配置
 	SuisuEnabled         *bool    `json:"suisu_enabled"`
 	SuisuFallbackGroupID *int64   `json:"suisu_fallback_group_id"`
@@ -349,6 +351,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		MaxSlowDelaySeconds:             req.MaxSlowDelaySeconds,
 		DefaultSlowRejectRate:           req.DefaultSlowRejectRate,
 		MaxSlowRejectRate:               req.MaxSlowRejectRate,
+		SpeedSlowRejectMessage:          req.SpeedSlowRejectMessage,
 		SuisuEnabled:                    req.SuisuEnabled,
 		SuisuFallbackGroupID:            req.SuisuFallbackGroupID,
 		SuisuSlowRouteRatio:             req.SuisuSlowRouteRatio,
@@ -419,6 +422,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		MaxSlowDelaySeconds:             req.MaxSlowDelaySeconds,
 		DefaultSlowRejectRate:           req.DefaultSlowRejectRate,
 		MaxSlowRejectRate:               req.MaxSlowRejectRate,
+		SpeedSlowRejectMessage:          req.SpeedSlowRejectMessage,
 		SuisuEnabled:                    req.SuisuEnabled,
 		SuisuFallbackGroupID:            req.SuisuFallbackGroupID,
 		SuisuSlowRouteRatio:             req.SuisuSlowRouteRatio,

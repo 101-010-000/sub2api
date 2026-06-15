@@ -141,6 +141,7 @@ type Group struct {
 	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
 	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
 	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
+	SpeedSlowRejectMessage     string  `json:"speed_slow_reject_message"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -456,7 +457,7 @@ type UsageLog struct {
 	ID        int64  `json:"id"`
 	UserID    int64  `json:"user_id"`
 	APIKeyID  int64  `json:"api_key_id"`
-	AccountID int64  `json:"account_id"`
+	AccountID *int64 `json:"account_id"`
 	RequestID string `json:"request_id"`
 	Model     string `json:"model"`
 	// ServiceTier records the OpenAI service tier used for billing, e.g. "priority" / "flex".
@@ -468,6 +469,9 @@ type UsageLog struct {
 	InboundEndpoint *string `json:"inbound_endpoint,omitempty"`
 	// UpstreamEndpoint is the normalized upstream endpoint path, e.g. /v1/responses.
 	UpstreamEndpoint *string `json:"upstream_endpoint,omitempty"`
+	SpeedState       *string `json:"speed_state,omitempty"`
+	SpeedWaitMs      int     `json:"speed_wait_ms"`
+	SpeedRoute       *string `json:"speed_route,omitempty"`
 
 	GroupID        *int64 `json:"group_id"`
 	SubscriptionID *int64 `json:"subscription_id"`
