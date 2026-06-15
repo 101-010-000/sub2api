@@ -222,6 +222,9 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 	if err := r.hydrateAPIKeyUserIPPolicy(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := r.hydrateAPIKeyAuthGroupSpeedSettings(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -792,6 +795,93 @@ func (r *apiKeyRepository) hydrateAPIKeyUserIPPolicy(ctx context.Context, apiKey
 	}
 	apiKey.User.APIKeyMaxActiveIPs = maxActiveIPs
 	apiKey.User.APIKeyMaxActiveIPsVisible = visible
+	return nil
+}
+
+func (r *apiKeyRepository) hydrateAPIKeyAuthGroupSpeedSettings(ctx context.Context, apiKey *service.APIKey) error {
+	if apiKey == nil || apiKey.Group == nil || apiKey.Group.ID <= 0 || r.sql == nil {
+		return nil
+	}
+	var (
+		speedConfigEnabled         bool
+		userSpeedConfigAllowed     bool
+		defaultFastQuotaRatio      float64
+		minFastQuotaRatio          float64
+		maxFastQuotaRatio          float64
+		defaultSlowDelayMinSeconds int
+		defaultSlowDelayMaxSeconds int
+		maxSlowDelaySeconds        int
+		defaultSlowRejectRate      float64
+		maxSlowRejectRate          float64
+		speedSlowRejectMessage     string
+		suisuEnabled               bool
+		suisuFallbackGroupID       sql.NullInt64
+		suisuSlowRouteRatio        float64
+		suisuBusyRouteRatio        float64
+	)
+	err := scanSingleRow(ctx, r.sql, `
+		SELECT
+			speed_config_enabled,
+			user_speed_config_allowed,
+			default_fast_quota_ratio,
+			min_fast_quota_ratio,
+			max_fast_quota_ratio,
+			default_slow_delay_min_seconds,
+			default_slow_delay_max_seconds,
+			max_slow_delay_seconds,
+			default_slow_reject_rate,
+			max_slow_reject_rate,
+			speed_slow_reject_message,
+			suisu_enabled,
+			suisu_fallback_group_id,
+			suisu_slow_route_ratio,
+			suisu_busy_route_ratio
+		FROM groups
+		WHERE id = $1
+	`, []any{apiKey.Group.ID},
+		&speedConfigEnabled,
+		&userSpeedConfigAllowed,
+		&defaultFastQuotaRatio,
+		&minFastQuotaRatio,
+		&maxFastQuotaRatio,
+		&defaultSlowDelayMinSeconds,
+		&defaultSlowDelayMaxSeconds,
+		&maxSlowDelaySeconds,
+		&defaultSlowRejectRate,
+		&maxSlowRejectRate,
+		&speedSlowRejectMessage,
+		&suisuEnabled,
+		&suisuFallbackGroupID,
+		&suisuSlowRouteRatio,
+		&suisuBusyRouteRatio,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	apiKey.Group.SpeedConfigEnabled = speedConfigEnabled
+	apiKey.Group.UserSpeedConfigAllowed = userSpeedConfigAllowed
+	apiKey.Group.DefaultFastQuotaRatio = defaultFastQuotaRatio
+	apiKey.Group.MinFastQuotaRatio = minFastQuotaRatio
+	apiKey.Group.MaxFastQuotaRatio = maxFastQuotaRatio
+	apiKey.Group.DefaultSlowDelayMinSeconds = defaultSlowDelayMinSeconds
+	apiKey.Group.DefaultSlowDelayMaxSeconds = defaultSlowDelayMaxSeconds
+	apiKey.Group.MaxSlowDelaySeconds = maxSlowDelaySeconds
+	apiKey.Group.DefaultSlowRejectRate = defaultSlowRejectRate
+	apiKey.Group.MaxSlowRejectRate = maxSlowRejectRate
+	apiKey.Group.SpeedSlowRejectMessage = speedSlowRejectMessage
+	apiKey.Group.SuisuEnabled = suisuEnabled
+	if suisuFallbackGroupID.Valid {
+		value := suisuFallbackGroupID.Int64
+		apiKey.Group.SuisuFallbackGroupID = &value
+	} else {
+		apiKey.Group.SuisuFallbackGroupID = nil
+	}
+	apiKey.Group.SuisuSlowRouteRatio = suisuSlowRouteRatio
+	apiKey.Group.SuisuBusyRouteRatio = suisuBusyRouteRatio
 	return nil
 }
 

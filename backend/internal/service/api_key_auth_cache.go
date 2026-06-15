@@ -100,6 +100,23 @@ type APIKeyAuthGroupSnapshot struct {
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 级联判断。
 	RPMLimit int `json:"rpm_limit"`
+
+	// 优速通/随速通策略用于 OpenAI 请求热路径决策，必须随认证缓存保存。
+	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
+	UserSpeedConfigAllowed     bool    `json:"user_speed_config_allowed"`
+	DefaultFastQuotaRatio      float64 `json:"default_fast_quota_ratio"`
+	MinFastQuotaRatio          float64 `json:"min_fast_quota_ratio"`
+	MaxFastQuotaRatio          float64 `json:"max_fast_quota_ratio"`
+	DefaultSlowDelayMinSeconds int     `json:"default_slow_delay_min_seconds"`
+	DefaultSlowDelayMaxSeconds int     `json:"default_slow_delay_max_seconds"`
+	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
+	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
+	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
+	SpeedSlowRejectMessage     string  `json:"speed_slow_reject_message,omitempty"`
+	SuisuEnabled               bool    `json:"suisu_enabled"`
+	SuisuFallbackGroupID       *int64  `json:"suisu_fallback_group_id,omitempty"`
+	SuisuSlowRouteRatio        float64 `json:"suisu_slow_route_ratio"`
+	SuisuBusyRouteRatio        float64 `json:"suisu_busy_route_ratio"`
 }
 
 // APIKeyAuthCacheEntry 缓存条目，支持负缓存

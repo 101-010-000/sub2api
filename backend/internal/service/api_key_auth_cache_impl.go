@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 13 // v13: include exclusive groups and user-level API key active IP policy
+const apiKeyAuthSnapshotVersion = 14 // v14: include group speed/suisu policy for auth hot path
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -281,6 +281,21 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			MessagesDispatchModelConfig:     apiKey.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                apiKey.Group.ModelsListConfig,
 			RPMLimit:                        apiKey.Group.RPMLimit,
+			SpeedConfigEnabled:              apiKey.Group.SpeedConfigEnabled,
+			UserSpeedConfigAllowed:          apiKey.Group.UserSpeedConfigAllowed,
+			DefaultFastQuotaRatio:           apiKey.Group.DefaultFastQuotaRatio,
+			MinFastQuotaRatio:               apiKey.Group.MinFastQuotaRatio,
+			MaxFastQuotaRatio:               apiKey.Group.MaxFastQuotaRatio,
+			DefaultSlowDelayMinSeconds:      apiKey.Group.DefaultSlowDelayMinSeconds,
+			DefaultSlowDelayMaxSeconds:      apiKey.Group.DefaultSlowDelayMaxSeconds,
+			MaxSlowDelaySeconds:             apiKey.Group.MaxSlowDelaySeconds,
+			DefaultSlowRejectRate:           apiKey.Group.DefaultSlowRejectRate,
+			MaxSlowRejectRate:               apiKey.Group.MaxSlowRejectRate,
+			SpeedSlowRejectMessage:          apiKey.Group.SpeedSlowRejectMessage,
+			SuisuEnabled:                    apiKey.Group.SuisuEnabled,
+			SuisuFallbackGroupID:            apiKey.Group.SuisuFallbackGroupID,
+			SuisuSlowRouteRatio:             apiKey.Group.SuisuSlowRouteRatio,
+			SuisuBusyRouteRatio:             apiKey.Group.SuisuBusyRouteRatio,
 		}
 	}
 	return snapshot
@@ -359,6 +374,21 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			MessagesDispatchModelConfig:     snapshot.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                snapshot.Group.ModelsListConfig,
 			RPMLimit:                        snapshot.Group.RPMLimit,
+			SpeedConfigEnabled:              snapshot.Group.SpeedConfigEnabled,
+			UserSpeedConfigAllowed:          snapshot.Group.UserSpeedConfigAllowed,
+			DefaultFastQuotaRatio:           snapshot.Group.DefaultFastQuotaRatio,
+			MinFastQuotaRatio:               snapshot.Group.MinFastQuotaRatio,
+			MaxFastQuotaRatio:               snapshot.Group.MaxFastQuotaRatio,
+			DefaultSlowDelayMinSeconds:      snapshot.Group.DefaultSlowDelayMinSeconds,
+			DefaultSlowDelayMaxSeconds:      snapshot.Group.DefaultSlowDelayMaxSeconds,
+			MaxSlowDelaySeconds:             snapshot.Group.MaxSlowDelaySeconds,
+			DefaultSlowRejectRate:           snapshot.Group.DefaultSlowRejectRate,
+			MaxSlowRejectRate:               snapshot.Group.MaxSlowRejectRate,
+			SpeedSlowRejectMessage:          snapshot.Group.SpeedSlowRejectMessage,
+			SuisuEnabled:                    snapshot.Group.SuisuEnabled,
+			SuisuFallbackGroupID:            snapshot.Group.SuisuFallbackGroupID,
+			SuisuSlowRouteRatio:             snapshot.Group.SuisuSlowRouteRatio,
+			SuisuBusyRouteRatio:             snapshot.Group.SuisuBusyRouteRatio,
 		}
 	}
 	s.compileAPIKeyIPRules(apiKey)
