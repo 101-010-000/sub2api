@@ -478,8 +478,8 @@ func resolveSpeedState(windows ...*SpeedWindowStatus) string {
 }
 
 func randomSlowDelay(minSeconds, maxSeconds int) time.Duration {
-	if minSeconds < touchPieSlowDelayMinSeconds {
-		minSeconds = touchPieSlowDelayMinSeconds
+	if minSeconds < 0 {
+		minSeconds = 0
 	}
 	if minSeconds > touchPieSlowDelayMaxSeconds {
 		minSeconds = touchPieSlowDelayMaxSeconds
@@ -497,14 +497,14 @@ func randomSlowDelay(minSeconds, maxSeconds int) time.Duration {
 }
 
 func defaultedRatio(v, fallback float64) float64 {
-	if v <= 0 {
+	if v < 0 {
 		return fallback
 	}
 	return clampSpeedRatio(v)
 }
 
 func defaultedInt(v, fallback int) int {
-	if v <= 0 {
+	if v < 0 {
 		return fallback
 	}
 	return v

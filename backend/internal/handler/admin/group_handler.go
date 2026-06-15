@@ -117,17 +117,17 @@ type CreateGroupRequest struct {
 	// 分组 RPM 上限（0 = 不限制）
 	RPMLimit int `json:"rpm_limit"`
 	// 优速通配置
-	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
-	UserSpeedConfigAllowed     bool    `json:"user_speed_config_allowed"`
-	DefaultFastQuotaRatio      float64 `json:"default_fast_quota_ratio"`
-	MinFastQuotaRatio          float64 `json:"min_fast_quota_ratio"`
-	MaxFastQuotaRatio          float64 `json:"max_fast_quota_ratio"`
-	DefaultSlowDelayMinSeconds int     `json:"default_slow_delay_min_seconds"`
-	DefaultSlowDelayMaxSeconds int     `json:"default_slow_delay_max_seconds"`
-	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
-	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
-	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
-	SpeedSlowRejectMessage     string  `json:"speed_slow_reject_message"`
+	SpeedConfigEnabled         bool     `json:"speed_config_enabled"`
+	UserSpeedConfigAllowed     bool     `json:"user_speed_config_allowed"`
+	DefaultFastQuotaRatio      *float64 `json:"default_fast_quota_ratio"`
+	MinFastQuotaRatio          *float64 `json:"min_fast_quota_ratio"`
+	MaxFastQuotaRatio          *float64 `json:"max_fast_quota_ratio"`
+	DefaultSlowDelayMinSeconds *int     `json:"default_slow_delay_min_seconds"`
+	DefaultSlowDelayMaxSeconds *int     `json:"default_slow_delay_max_seconds"`
+	MaxSlowDelaySeconds        *int     `json:"max_slow_delay_seconds"`
+	DefaultSlowRejectRate      *float64 `json:"default_slow_reject_rate"`
+	MaxSlowRejectRate          *float64 `json:"max_slow_reject_rate"`
+	SpeedSlowRejectMessage     string   `json:"speed_slow_reject_message"`
 	// 随速通配置
 	SuisuEnabled         bool    `json:"suisu_enabled"`
 	SuisuFallbackGroupID *int64  `json:"suisu_fallback_group_id"`

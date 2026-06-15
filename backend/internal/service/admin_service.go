@@ -240,14 +240,14 @@ type CreateGroupInput struct {
 	// 优速通配置
 	SpeedConfigEnabled         bool
 	UserSpeedConfigAllowed     bool
-	DefaultFastQuotaRatio      float64
-	MinFastQuotaRatio          float64
-	MaxFastQuotaRatio          float64
-	DefaultSlowDelayMinSeconds int
-	DefaultSlowDelayMaxSeconds int
-	MaxSlowDelaySeconds        int
-	DefaultSlowRejectRate      float64
-	MaxSlowRejectRate          float64
+	DefaultFastQuotaRatio      *float64
+	MinFastQuotaRatio          *float64
+	MaxFastQuotaRatio          *float64
+	DefaultSlowDelayMinSeconds *int
+	DefaultSlowDelayMaxSeconds *int
+	MaxSlowDelaySeconds        *int
+	DefaultSlowRejectRate      *float64
+	MaxSlowRejectRate          *float64
 	SpeedSlowRejectMessage     string
 	// 随速通配置
 	SuisuEnabled         bool
@@ -2013,14 +2013,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		RPMLimit:                        input.RPMLimit,
 		SpeedConfigEnabled:              input.SpeedConfigEnabled,
 		UserSpeedConfigAllowed:          input.UserSpeedConfigAllowed,
-		DefaultFastQuotaRatio:           input.DefaultFastQuotaRatio,
-		MinFastQuotaRatio:               input.MinFastQuotaRatio,
-		MaxFastQuotaRatio:               input.MaxFastQuotaRatio,
-		DefaultSlowDelayMinSeconds:      input.DefaultSlowDelayMinSeconds,
-		DefaultSlowDelayMaxSeconds:      input.DefaultSlowDelayMaxSeconds,
-		MaxSlowDelaySeconds:             input.MaxSlowDelaySeconds,
-		DefaultSlowRejectRate:           input.DefaultSlowRejectRate,
-		MaxSlowRejectRate:               input.MaxSlowRejectRate,
+		DefaultFastQuotaRatio:           speedRatioValueOrDefault(input.DefaultFastQuotaRatio, defaultFastQuotaRatio),
+		MinFastQuotaRatio:               speedRatioValueOrDefault(input.MinFastQuotaRatio, defaultMinFastQuotaRatio),
+		MaxFastQuotaRatio:               speedRatioValueOrDefault(input.MaxFastQuotaRatio, defaultMaxFastQuotaRatio),
+		DefaultSlowDelayMinSeconds:      speedIntValueOrDefault(input.DefaultSlowDelayMinSeconds, defaultSlowDelayMinSeconds),
+		DefaultSlowDelayMaxSeconds:      speedIntValueOrDefault(input.DefaultSlowDelayMaxSeconds, defaultSlowDelayMaxSeconds),
+		MaxSlowDelaySeconds:             speedIntValueOrDefault(input.MaxSlowDelaySeconds, defaultMaxSlowDelaySeconds),
+		DefaultSlowRejectRate:           speedRatioValueOrDefault(input.DefaultSlowRejectRate, 0),
+		MaxSlowRejectRate:               speedRatioValueOrDefault(input.MaxSlowRejectRate, defaultMaxSlowRejectRate),
 		SpeedSlowRejectMessage:          input.SpeedSlowRejectMessage,
 		SuisuEnabled:                    input.SuisuEnabled,
 		SuisuFallbackGroupID:            input.SuisuFallbackGroupID,
@@ -2092,15 +2092,9 @@ func normalizeGroupSpeedConfig(group *Group) {
 		group.SpeedConfigEnabled = false
 		group.UserSpeedConfigAllowed = false
 	}
-	if group.DefaultFastQuotaRatio <= 0 {
-		group.DefaultFastQuotaRatio = defaultFastQuotaRatio
-	}
-	if group.MinFastQuotaRatio <= 0 {
-		group.MinFastQuotaRatio = defaultMinFastQuotaRatio
-	}
-	if group.MaxFastQuotaRatio <= 0 {
-		group.MaxFastQuotaRatio = defaultMaxFastQuotaRatio
-	}
+	group.DefaultFastQuotaRatio = normalizeSpeedRatio(group.DefaultFastQuotaRatio, defaultFastQuotaRatio)
+	group.MinFastQuotaRatio = normalizeSpeedRatio(group.MinFastQuotaRatio, defaultMinFastQuotaRatio)
+	group.MaxFastQuotaRatio = normalizeSpeedRatio(group.MaxFastQuotaRatio, defaultMaxFastQuotaRatio)
 	if group.MinFastQuotaRatio > group.MaxFastQuotaRatio {
 		group.MinFastQuotaRatio, group.MaxFastQuotaRatio = group.MaxFastQuotaRatio, group.MinFastQuotaRatio
 	}
@@ -2110,13 +2104,13 @@ func normalizeGroupSpeedConfig(group *Group) {
 	if group.DefaultFastQuotaRatio > group.MaxFastQuotaRatio {
 		group.DefaultFastQuotaRatio = group.MaxFastQuotaRatio
 	}
-	if group.DefaultSlowDelayMinSeconds <= 0 {
+	if group.DefaultSlowDelayMinSeconds < 0 {
 		group.DefaultSlowDelayMinSeconds = defaultSlowDelayMinSeconds
 	}
-	if group.DefaultSlowDelayMaxSeconds <= 0 {
+	if group.DefaultSlowDelayMaxSeconds < 0 {
 		group.DefaultSlowDelayMaxSeconds = defaultSlowDelayMaxSeconds
 	}
-	if group.MaxSlowDelaySeconds <= 0 {
+	if group.MaxSlowDelaySeconds < 0 {
 		group.MaxSlowDelaySeconds = defaultMaxSlowDelaySeconds
 	}
 	if group.DefaultSlowDelayMaxSeconds > group.MaxSlowDelaySeconds {
@@ -2125,16 +2119,33 @@ func normalizeGroupSpeedConfig(group *Group) {
 	if group.DefaultSlowDelayMinSeconds > group.DefaultSlowDelayMaxSeconds {
 		group.DefaultSlowDelayMinSeconds = group.DefaultSlowDelayMaxSeconds
 	}
-	if group.DefaultSlowRejectRate < 0 {
-		group.DefaultSlowRejectRate = 0
-	}
-	if group.MaxSlowRejectRate <= 0 {
-		group.MaxSlowRejectRate = defaultMaxSlowRejectRate
-	}
+	group.DefaultSlowRejectRate = normalizeSpeedRatio(group.DefaultSlowRejectRate, 0)
+	group.MaxSlowRejectRate = normalizeSpeedRatio(group.MaxSlowRejectRate, defaultMaxSlowRejectRate)
 	if group.DefaultSlowRejectRate > group.MaxSlowRejectRate {
 		group.DefaultSlowRejectRate = group.MaxSlowRejectRate
 	}
 	group.SpeedSlowRejectMessage = normalizeSpeedSlowRejectMessage(group.SpeedSlowRejectMessage)
+}
+
+func speedRatioValueOrDefault(value *float64, fallback float64) float64 {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func speedIntValueOrDefault(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func normalizeSpeedRatio(value, fallback float64) float64 {
+	if value < 0 {
+		return fallback
+	}
+	return clampSpeedRatio(value)
 }
 
 func normalizeSuisuRatio(value float64) (float64, error) {

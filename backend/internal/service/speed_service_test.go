@@ -62,12 +62,19 @@ func TestSpeedServiceDefaultFastRatioAndSlowState(t *testing.T) {
 	repo := &speedRepoStub{
 		state: &UserGroupSpeedState{
 			Group: &Group{
-				ID:                    7,
-				Name:                  "pro",
-				SpeedConfigEnabled:    true,
-				SubscriptionType:      SubscriptionTypeSubscription,
-				DefaultFastQuotaRatio: 0.3,
-				DailyLimitUSD:         &limit,
+				ID:                         7,
+				Name:                       "pro",
+				SpeedConfigEnabled:         true,
+				SubscriptionType:           SubscriptionTypeSubscription,
+				DefaultFastQuotaRatio:      0.3,
+				MinFastQuotaRatio:          defaultMinFastQuotaRatio,
+				MaxFastQuotaRatio:          defaultMaxFastQuotaRatio,
+				DefaultSlowDelayMinSeconds: defaultSlowDelayMinSeconds,
+				DefaultSlowDelayMaxSeconds: defaultSlowDelayMaxSeconds,
+				MaxSlowDelaySeconds:        defaultMaxSlowDelaySeconds,
+				DefaultSlowRejectRate:      0,
+				MaxSlowRejectRate:          defaultMaxSlowRejectRate,
+				DailyLimitUSD:              &limit,
 			},
 			Subscription: &UserSubscription{
 				UserID:           3,
@@ -87,6 +94,51 @@ func TestSpeedServiceDefaultFastRatioAndSlowState(t *testing.T) {
 	require.Equal(t, 3.0, status.Daily.FastLimitUSD)
 	require.Equal(t, 3.0, status.Daily.FastUsedUSD)
 	require.Equal(t, 1.0, status.Daily.SlowUsedUSD)
+}
+
+func TestSpeedServiceZeroFastRatioAndDelayAreEffective(t *testing.T) {
+	limit := 10.0
+	now := time.Now().Add(-time.Hour)
+	repo := &speedRepoStub{
+		state: &UserGroupSpeedState{
+			Group: &Group{
+				ID:                         7,
+				Name:                       "pro",
+				SpeedConfigEnabled:         true,
+				SubscriptionType:           SubscriptionTypeSubscription,
+				DefaultFastQuotaRatio:      0,
+				MinFastQuotaRatio:          0,
+				MaxFastQuotaRatio:          0,
+				DefaultSlowDelayMinSeconds: 0,
+				DefaultSlowDelayMaxSeconds: 0,
+				MaxSlowDelaySeconds:        0,
+				DefaultSlowRejectRate:      0,
+				MaxSlowRejectRate:          0,
+				DailyLimitUSD:              &limit,
+			},
+			Subscription: &UserSubscription{
+				UserID:           3,
+				GroupID:          7,
+				Status:           SubscriptionStatusActive,
+				DailyWindowStart: &now,
+				DailyUsageUSD:    0.01,
+			},
+		},
+	}
+	svc := NewSpeedService(repo)
+
+	status, err := svc.GetUserStatus(context.Background(), 3, 7, false)
+	require.NoError(t, err)
+	require.Equal(t, SpeedStateSlow, status.State)
+	require.Equal(t, 0.0, status.Config.FastQuotaRatio)
+	require.Equal(t, 0.0, status.Daily.FastLimitUSD)
+	require.Equal(t, 0.0, status.Daily.FastUsedUSD)
+	require.Equal(t, 0.01, status.Daily.SlowUsedUSD)
+
+	decision, err := svc.Decide(context.Background(), &User{ID: 3}, repo.state.Group, repo.state.Subscription)
+	require.NoError(t, err)
+	require.Equal(t, SpeedStateSlow, decision.State)
+	require.Equal(t, 0*time.Second, decision.Delay)
 }
 
 func TestSpeedServiceRejectsOutOfRangeUserConfig(t *testing.T) {
