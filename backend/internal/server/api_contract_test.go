@@ -405,6 +405,7 @@ func TestAPIContracts(t *testing.T) {
 						"max_slow_delay_seconds": 0,
 						"default_slow_reject_rate": 0,
 						"max_slow_reject_rate": 0,
+						"speed_slow_reject_message": "",
 						"created_at": "2025-01-02T03:04:05Z",
 						"updated_at": "2025-01-02T03:04:05Z"
 					}
@@ -621,6 +622,7 @@ func TestAPIContracts(t *testing.T) {
 							"stream": true,
 							"duration_ms": 100,
 							"first_token_ms": 50,
+							"speed_wait_ms": 0,
 							"image_count": 0,
 							"image_size": null,
 							"image_input_size": null,
