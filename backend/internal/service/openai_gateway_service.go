@@ -555,6 +555,13 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
 	}
 }
 
+func (s *OpenAIGatewayService) RecordSpeedRefusedUsage(ctx context.Context, input *SpeedRefusedUsageInput) {
+	if s == nil {
+		return
+	}
+	recordSpeedRefusedUsageLog(ctx, s.usageLogRepo, input, "service.openai_gateway.speed_refused")
+}
+
 // CloseOpenAIWSPool 关闭 OpenAI WebSocket 连接池的后台 worker 和空闲连接。
 // 应在应用优雅关闭时调用。
 func (s *OpenAIGatewayService) CloseOpenAIWSPool() {
@@ -1094,6 +1101,96 @@ func logOpenAIInstructionsRequiredDebug(
 	fields = appendCodexCLIOnlyRejectedRequestFields(fields, c, requestBody)
 
 	logger.FromContext(ctx).With(fields...).Warn("OpenAI 上游返回 Instructions are required，已记录请求详情用于排查")
+}
+
+func logOpenAIClaudeCodeRestriction403(ctx context.Context, c *gin.Context, account *Account, resp *http.Response, upstreamMsg string, upstreamBody []byte) {
+	upstreamStatusCode := 0
+	upstreamRequestID := ""
+	if resp != nil {
+		upstreamStatusCode = resp.StatusCode
+		upstreamRequestID = strings.TrimSpace(resp.Header.Get("x-request-id"))
+	}
+	msg := strings.TrimSpace(upstreamMsg)
+	if !isOpenAIClaudeCodeRestriction403(upstreamStatusCode, msg, upstreamBody) {
+		return
+	}
+	if ctx == nil {
+		if c != nil && c.Request != nil {
+			ctx = c.Request.Context()
+		} else {
+			ctx = context.Background()
+		}
+	}
+
+	accountID := int64(0)
+	accountName := ""
+	accountPlatform := ""
+	accountType := ""
+	baseURL := ""
+	if account != nil {
+		accountID = account.ID
+		accountName = strings.TrimSpace(account.Name)
+		accountPlatform = strings.TrimSpace(account.Platform)
+		accountType = strings.TrimSpace(account.Type)
+		baseURL = strings.TrimSpace(account.GetOpenAIBaseURL())
+	}
+
+	requestPath := ""
+	apiKeyID := int64(0)
+	groupID := int64(0)
+	if c != nil {
+		apiKeyID = getAPIKeyIDFromContext(c)
+		if c.Request != nil && c.Request.URL != nil {
+			requestPath = strings.TrimSpace(c.Request.URL.Path)
+		}
+		if apiKey := getAPIKeyFromContext(c); apiKey != nil {
+			groupID = derefGroupID(apiKey.GroupID)
+		}
+	}
+
+	fields := []zap.Field{
+		zap.String("component", "service.openai_gateway"),
+		zap.Int64("account_id", accountID),
+		zap.String("account_name", accountName),
+		zap.String("account_platform", accountPlatform),
+		zap.String("account_type", accountType),
+		zap.String("base_url", baseURL),
+		zap.Int64("api_key_id", apiKeyID),
+		zap.Int64("group_id", groupID),
+		zap.String("request_path", requestPath),
+		zap.Int("upstream_status_code", upstreamStatusCode),
+		zap.String("upstream_request_id", upstreamRequestID),
+		zap.String("upstream_error_message", msg),
+	}
+	if c != nil && c.Request != nil {
+		fields = append(fields,
+			zap.String("request_method", strings.TrimSpace(c.Request.Method)),
+			zap.String("request_user_agent", strings.TrimSpace(c.GetHeader("User-Agent"))),
+		)
+	}
+
+	logger.FromContext(ctx).With(fields...).Warn("openai.upstream_claude_code_restriction_403")
+}
+
+func isOpenAIClaudeCodeRestriction403(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if upstreamStatusCode != http.StatusForbidden {
+		return false
+	}
+
+	match := func(text string) bool {
+		lower := strings.ToLower(strings.TrimSpace(text))
+		return strings.Contains(lower, "restricted to claude code")
+	}
+	if match(upstreamMsg) {
+		return true
+	}
+	if len(upstreamBody) == 0 {
+		return false
+	}
+	if match(string(upstreamBody)) {
+		return true
+	}
+	return match(gjson.GetBytes(upstreamBody, "error.message").String())
 }
 
 func isOpenAIInstructionsRequiredError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
@@ -3532,6 +3629,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	logOpenAIClaudeCodeRestriction403(ctx, c, account, resp, upstreamMsg, body)
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
 	_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -3575,6 +3673,7 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	logOpenAIClaudeCodeRestriction403(ctx, c, account, resp, upstreamMsg, body)
 	// 透传模式保留原始上游错误响应，但运行态账号状态仍需更新，
 	// 避免粘性路由继续复用刚被限流的账号。
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
@@ -4277,6 +4376,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	logOpenAIClaudeCodeRestriction403(ctx, c, account, resp, upstreamMsg, body)
 
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 		logger.LegacyPrintf("service.openai_gateway",
@@ -4445,6 +4545,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		upstreamDetail = truncateString(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
+	logOpenAIClaudeCodeRestriction403(nil, c, account, resp, upstreamMsg, body)
 
 	// Apply error passthrough rules
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
@@ -5957,6 +6058,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if subscription != nil {
 		usageLog.SubscriptionID = &subscription.ID
 	}
+	ApplySpeedUsageMetadataFromContext(ctx, usageLog)
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
 	accountStatsGroupID := apiKey.GroupID

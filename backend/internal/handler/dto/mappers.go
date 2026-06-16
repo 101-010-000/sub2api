@@ -224,9 +224,17 @@ func groupFromServiceBase(g *service.Group) Group {
 		MaxSlowDelaySeconds:             g.MaxSlowDelaySeconds,
 		DefaultSlowRejectRate:           g.DefaultSlowRejectRate,
 		MaxSlowRejectRate:               g.MaxSlowRejectRate,
+		SpeedSlowRejectMessage:          g.SpeedSlowRejectMessage,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}
+}
+
+func usageLogAccountIDPtr(accountID int64) *int64 {
+	if accountID <= 0 {
+		return nil
+	}
+	return &accountID
 }
 
 func AccountFromServiceShallow(a *service.Account) *Account {
@@ -617,13 +625,16 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		ID:                    l.ID,
 		UserID:                l.UserID,
 		APIKeyID:              l.APIKeyID,
-		AccountID:             l.AccountID,
+		AccountID:             usageLogAccountIDPtr(l.AccountID),
 		RequestID:             l.RequestID,
 		Model:                 requestedModel,
 		ServiceTier:           l.ServiceTier,
 		ReasoningEffort:       l.ReasoningEffort,
 		InboundEndpoint:       l.InboundEndpoint,
 		UpstreamEndpoint:      l.UpstreamEndpoint,
+		SpeedState:            l.SpeedState,
+		SpeedWaitMs:           l.SpeedWaitMs,
+		SpeedRoute:            l.SpeedRoute,
 		GroupID:               l.GroupID,
 		SubscriptionID:        l.SubscriptionID,
 		InputTokens:           l.InputTokens,

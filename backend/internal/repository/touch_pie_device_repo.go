@@ -40,15 +40,19 @@ func (r *touchPieDeviceRepository) GetDeviceSessionByDeviceCodeHash(ctx context.
 	return r.getDeviceSession(ctx, "device_code_hash", hash)
 }
 
-func (r *touchPieDeviceRepository) ApproveDeviceSession(ctx context.Context, id int64, userID int64, now time.Time) error {
+func (r *touchPieDeviceRepository) ApproveDeviceSession(ctx context.Context, id int64, userID int64, apiKeyID *int64, now time.Time) error {
 	if r == nil || r.db == nil {
 		return service.ErrTouchPieDeviceNotFound
 	}
+	var keyID sql.NullInt64
+	if apiKeyID != nil {
+		keyID = sql.NullInt64{Int64: *apiKeyID, Valid: true}
+	}
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE touch_pie_device_sessions
-		SET status = $1, user_id = $2, approved_at = $3, updated_at = $3
-		WHERE id = $4 AND status IN ($5, $1) AND consumed_at IS NULL AND expires_at > $3
-	`, service.TouchPieDeviceStatusApproved, userID, now, id, service.TouchPieDeviceStatusPending)
+		SET status = $1, user_id = $2, api_key_id = $3, approved_at = $4, updated_at = $4
+		WHERE id = $5 AND status IN ($6, $1) AND consumed_at IS NULL AND expires_at > $4
+	`, service.TouchPieDeviceStatusApproved, userID, keyID, now, id, service.TouchPieDeviceStatusPending)
 	return touchPieRowsAffected(res, err)
 }
 
@@ -81,13 +85,13 @@ func (r *touchPieDeviceRepository) getDeviceSession(ctx context.Context, column 
 		return nil, service.ErrTouchPieDeviceNotFound
 	}
 	query := `
-		SELECT id, device_code_hash, user_code_hash, status, user_id, expires_at, approved_at, consumed_at, created_at, updated_at
+		SELECT id, device_code_hash, user_code_hash, status, user_id, api_key_id, expires_at, approved_at, consumed_at, created_at, updated_at
 		FROM touch_pie_device_sessions
 		WHERE ` + column + ` = $1
 		LIMIT 1
 	`
 	session := &service.TouchPieDeviceSession{}
-	var userID sql.NullInt64
+	var userID, apiKeyID sql.NullInt64
 	var approvedAt, consumedAt sql.NullTime
 	err := r.db.QueryRowContext(ctx, query, hash).Scan(
 		&session.ID,
@@ -95,6 +99,7 @@ func (r *touchPieDeviceRepository) getDeviceSession(ctx context.Context, column 
 		&session.UserCodeHash,
 		&session.Status,
 		&userID,
+		&apiKeyID,
 		&session.ExpiresAt,
 		&approvedAt,
 		&consumedAt,
@@ -109,6 +114,9 @@ func (r *touchPieDeviceRepository) getDeviceSession(ctx context.Context, column 
 	}
 	if userID.Valid {
 		session.UserID = &userID.Int64
+	}
+	if apiKeyID.Valid {
+		session.APIKeyID = &apiKeyID.Int64
 	}
 	if approvedAt.Valid {
 		session.ApprovedAt = &approvedAt.Time

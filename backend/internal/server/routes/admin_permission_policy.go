@@ -12,9 +12,6 @@ func resolveAdminAccessRule(method, fullPath string) middleware.AdminAccessRule 
 	path := adminSubPath(fullPath)
 	method = strings.ToUpper(strings.TrimSpace(method))
 
-	if method == http.MethodDelete {
-		return superOnlyRule()
-	}
 	if isSuperOnlyAdminPath(method, path) {
 		return superOnlyRule()
 	}
@@ -25,13 +22,15 @@ func resolveAdminAccessRule(method, fullPath string) middleware.AdminAccessRule 
 	}
 
 	switch {
+	case path == "/permissions" || path == "/compliance" || path == "/compliance/accept":
+		return delegatedAdminRule()
 	case path == "" || path == "/" || strings.HasPrefix(path, "/dashboard"):
 		return moduleRule(service.AdminPermissionDashboardRead, service.AdminPermissionDashboardWrite, action)
 	case strings.HasPrefix(path, "/ops"):
 		return moduleRule(service.AdminPermissionOpsRead, service.AdminPermissionOpsWrite, action)
-	case strings.Contains(path, "/scheduled-test-plans"):
+	case isNestedAdminPath(path, "/accounts", "scheduled-test-plans"):
 		return moduleRule(service.AdminPermissionScheduledTestsRead, service.AdminPermissionScheduledTestsWrite, action)
-	case strings.Contains(path, "/subscriptions"):
+	case isNestedAdminPath(path, "/users", "subscriptions"):
 		return moduleRule(service.AdminPermissionSubscriptionsRead, service.AdminPermissionSubscriptionsWrite, action)
 	case strings.HasPrefix(path, "/users"):
 		return moduleRule(service.AdminPermissionUsersRead, service.AdminPermissionUsersWrite, action)
@@ -100,7 +99,19 @@ func adminSubPath(fullPath string) string {
 	if out == "" {
 		return "/"
 	}
-	return out
+	return strings.TrimRight(out, "/")
+}
+
+func isNestedAdminPath(path, prefix, segment string) bool {
+	if !strings.HasPrefix(path, prefix+"/") {
+		return false
+	}
+	for _, part := range strings.Split(path, "/") {
+		if part == segment {
+			return true
+		}
+	}
+	return false
 }
 
 func moduleRule(readPermission, writePermission, action string) middleware.AdminAccessRule {
@@ -132,9 +143,6 @@ func isReadOnlyAdminPost(path string) bool {
 }
 
 func isSuperOnlyAdminPath(method, path string) bool {
-	if path == "/permissions" {
-		return true
-	}
 	if strings.Contains(path, "/admin-api-key") {
 		return true
 	}
@@ -165,4 +173,8 @@ func isSuperOnlyAdminPath(method, path string) bool {
 		return true
 	}
 	return false
+}
+
+func delegatedAdminRule() middleware.AdminAccessRule {
+	return middleware.AdminAccessRule{AllowDelegated: true}
 }

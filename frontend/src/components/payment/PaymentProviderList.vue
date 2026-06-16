@@ -22,6 +22,7 @@
             <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
           </button>
           <button
+            v-if="canManage"
             type="button"
             @click="emit('create')"
             :disabled="!canCreate"
@@ -47,12 +48,16 @@
         v-if="providers.length"
         v-model="localProviders"
         :animation="200"
-        handle=".drag-handle"
+        :disabled="!canManage"
+        :handle="canManage ? '.drag-handle' : undefined"
         class="space-y-3"
         @end="onDragEnd"
       >
         <div v-for="p in localProviders" :key="p.id" class="flex items-start gap-2">
-          <div class="drag-handle mt-3 flex cursor-grab items-center text-gray-300 hover:text-gray-500 active:cursor-grabbing dark:text-dark-600 dark:hover:text-dark-400">
+          <div
+            v-if="canManage"
+            class="drag-handle mt-3 flex cursor-grab items-center text-gray-300 hover:text-gray-500 active:cursor-grabbing dark:text-dark-600 dark:hover:text-dark-400"
+          >
             <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
             </svg>
@@ -62,6 +67,7 @@
               :provider="p"
               :enabled="isEnabled(p.provider_key)"
               :available-types="getTypes(p.provider_key)"
+              :can-manage="canManage"
               @toggle-field="(field) => emit('toggleField', p, field)"
               @toggle-type="(type) => emit('toggleType', p, type)"
               @edit="emit('edit', p)"
@@ -80,7 +86,7 @@
         </p>
         <button
           type="button"
-          v-if="canCreate"
+          v-if="canManage && canCreate"
           @click="emit('create')"
           class="btn btn-primary btn-sm mt-2"
         >
@@ -105,6 +111,7 @@ const props = defineProps<{
   providers: ProviderInstance[]
   loading: boolean
   canCreate: boolean
+  canManage: boolean
   enabledPaymentTypes: string[]
   allPaymentTypes: TypeOption[]
   redirectLabel: string
@@ -129,6 +136,7 @@ watch(() => props.providers, (val) => {
 }, { immediate: true })
 
 function onDragEnd() {
+  if (!props.canManage) return
   const updates = localProviders.value.map((p, idx) => ({
     id: p.id,
     sort_order: idx,

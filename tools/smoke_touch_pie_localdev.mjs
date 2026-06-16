@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { createHmac, randomBytes } from 'node:crypto'
 
 const repoRoot = resolve(new URL('..', import.meta.url).pathname)
 const envPath = resolve(repoRoot, 'deploy/.env.localdev')
@@ -22,6 +23,7 @@ const email = env.TOUCH_PIE_SMOKE_EMAIL ?? env.SUB2API_EMAIL ?? env.ADMIN_EMAIL
 const password = env.TOUCH_PIE_SMOKE_PASSWORD ?? env.SUB2API_PASSWORD ?? env.ADMIN_PASSWORD
 const apiKeyID = parseOptionalInt(env.TOUCH_PIE_SMOKE_API_KEY_ID)
 const timeoutMs = parseOptionalInt(env.TOUCH_PIE_SMOKE_TIMEOUT_MS) ?? 10000
+const smokeGroupName = env.TOUCH_PIE_SMOKE_GROUP_NAME ?? 'Touch Pie Smoke OpenAI'
 
 const checkpoints = []
 
@@ -73,9 +75,11 @@ async function main() {
     if (bootstrap?.default_model !== 'gpt-5.5') {
       throw new Error(`unexpected default_model: ${bootstrap?.default_model}`)
     }
-    const group = bootstrap?.groups?.[0]
-    if (!group?.id) {
-      throw new Error(`bootstrap returned no available group: ${JSON.stringify(redact(bootstrap))}`)
+    const group = bootstrap?.groups?.[0] ?? await ensureSmokeGroup(userToken)
+    const existing = bootstrap?.api_keys?.find?.((candidate) => candidate?.id && candidate?.status === 'active')
+      ?? bootstrap?.api_keys?.find?.((candidate) => candidate?.id)
+    if (existing?.id) {
+      return { id: existing.id, key: undefined, source: 'reused' }
     }
 
     const created = await request('POST', '/api/v1/touch-pie/api-keys', {
@@ -119,7 +123,7 @@ async function main() {
   await step('approve', '使用登录用户 approve user_code', async () => {
     const data = await request('POST', '/api/v1/touch-pie/device/approve', {
       token: userToken,
-      body: { user_code: device.user_code },
+      body: { user_code: device.user_code, api_key_id: key.id },
     })
     if (data?.approved !== true) {
       throw new Error(`approve returned unexpected payload: ${JSON.stringify(data)}`)
@@ -134,6 +138,9 @@ async function main() {
     assertString(data?.refresh_token, 'device_token.refresh_token')
     if (data?.token_type !== 'Bearer') {
       throw new Error(`unexpected token_type: ${data?.token_type}`)
+    }
+    if (Number(data?.api_key_id) !== Number(key.id)) {
+      throw new Error(`device token api_key_id mismatch: got ${data?.api_key_id}, want ${key.id}`)
     }
     return data
   })
@@ -168,6 +175,27 @@ async function main() {
     return data
   })
 
+  await step('models-fast-lane', '使用导出的 API key 签名验证 Touch Pie fast lane', async () => {
+    const signed = await requestMaybeError('GET', '/v1/models', {
+      token: exported.key,
+      headers: {
+        'x-touch-pie': signTouchPieHeader(exported.key),
+      },
+    })
+    if (!signed.ok) {
+      throw new Error(`HTTP ${signed.status} GET /v1/models: ${JSON.stringify(redact(signed.payload))}`)
+    }
+    const provider = signed.headers?.['x-sub2api-provider']
+    const providerSource = signed.headers?.['x-sub2api-provider-source']
+    if (provider !== 'TouchX' || providerSource !== 'touchx') {
+      throw new Error(`missing TouchX provider headers: ${JSON.stringify(signed.headers)}`)
+    }
+    const models = Array.isArray(signed.payload?.data) ? signed.payload.data : []
+    if (!models.some((model) => model?.id === 'gpt-5.5' && model?.owned_by === 'TouchX')) {
+      throw new Error(`TouchX model metadata missing from /v1/models: ${JSON.stringify(redact(signed.payload))}`)
+    }
+  })
+
   console.log('')
   console.log('Touch Pie smoke flow passed.')
   console.log(`- API key id: ${exported.id} (${key.source})`)
@@ -185,6 +213,57 @@ async function step(name, label, fn) {
     checkpoints.push({ name, ok: false, ms: Date.now() - started })
     throw new SmokeError(name, explainFailure(name, cause), cause)
   }
+}
+
+async function ensureSmokeGroup(token) {
+  let result = await requestMaybeError('POST', '/api/v1/admin/groups', {
+    token,
+    body: {
+      name: smokeGroupName,
+      description: 'Created by Touch Pie localdev smoke.',
+      platform: 'openai',
+      rate_multiplier: 1,
+      subscription_type: 'standard',
+      is_exclusive: false,
+    },
+  })
+  if (!result.ok && result.status === 423 && result.payload?.code === 'ADMIN_COMPLIANCE_ACK_REQUIRED') {
+    await acceptAdminCompliance(token)
+    result = await requestMaybeError('POST', '/api/v1/admin/groups', {
+      token,
+      body: {
+        name: smokeGroupName,
+        description: 'Created by Touch Pie localdev smoke.',
+        platform: 'openai',
+        rate_multiplier: 1,
+        subscription_type: 'standard',
+        is_exclusive: false,
+      },
+    })
+  }
+  if (!result.ok) {
+    throw new Error(`HTTP ${result.status} POST /api/v1/admin/groups: ${JSON.stringify(redact(result.payload))}`)
+  }
+  const created = result.payload
+  if (!created?.id) {
+    throw new Error(`failed to create smoke group: ${JSON.stringify(redact(created))}`)
+  }
+  return created
+}
+
+async function acceptAdminCompliance(token) {
+  const status = await request('GET', '/api/v1/admin/compliance', { token })
+  if (status?.required === false) {
+    return
+  }
+  const phrase = status?.ack_phrase_zh || '我已阅读、理解并同意 Sub2API 部署与运营合规承诺'
+  await request('POST', '/api/v1/admin/compliance/accept', {
+    token,
+    body: {
+      phrase,
+      language: 'zh',
+    },
+  })
 }
 
 async function request(method, path, options = {}) {
@@ -209,6 +288,7 @@ async function requestMaybeError(method, path, options = {}) {
     if (options.token) {
       headers.Authorization = `Bearer ${options.token}`
     }
+    Object.assign(headers, options.headers || {})
 
     const response = await fetch(`${baseURL}${path}`, {
       method,
@@ -218,20 +298,21 @@ async function requestMaybeError(method, path, options = {}) {
     })
     const text = await response.text()
     const parsed = text ? parseJSON(text) : null
+    const responseHeaders = Object.fromEntries(response.headers.entries())
 
     if (!response.ok) {
-      return { ok: false, status: response.status, payload: parsed ?? text }
+      return { ok: false, status: response.status, payload: parsed ?? text, headers: responseHeaders }
     }
     if (options.unwrap === false) {
-      return { ok: true, status: response.status, payload: parsed }
+      return { ok: true, status: response.status, payload: parsed, headers: responseHeaders }
     }
     if (parsed && typeof parsed === 'object' && 'code' in parsed) {
       if (parsed.code !== 0) {
-        return { ok: false, status: response.status, payload: parsed }
+        return { ok: false, status: response.status, payload: parsed, headers: responseHeaders }
       }
-      return { ok: true, status: response.status, payload: parsed.data }
+      return { ok: true, status: response.status, payload: parsed.data, headers: responseHeaders }
     }
-    return { ok: true, status: response.status, payload: parsed }
+    return { ok: true, status: response.status, payload: parsed, headers: responseHeaders }
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw new Error(`request timed out after ${timeoutMs}ms`)
@@ -261,6 +342,7 @@ function explainFailure(name, cause) {
     'token-after-approve': 'approve 后换 token 失败。优先检查 touch_pie_device_sessions 状态、user_id、AuthService.GenerateTokenPair。',
     'token-consumed': 'consume 状态校验失败。可能是 token 接口没有正确消费 device session。',
     'export-api-key': 'API key 导出失败。优先检查 Touch Pie token 是否能通过 JWT 中间件、key 所属 user_id 是否一致、ExportAPIKey 权限判断。',
+    'models-fast-lane': 'Touch Pie fast lane 验证失败。优先检查 x-touch-pie 签名算法、API Key 分组/余额/订阅状态，以及 /v1/models 的 TouchX metadata 标记。',
   }
   return `${hints[name] ?? 'smoke flow 失败。'}\n${detail}`
 }
@@ -337,6 +419,14 @@ function parseOptionalInt(value) {
 
 function trimTrailingSlash(value) {
   return String(value).replace(/\/+$/, '')
+}
+
+function signTouchPieHeader(apiKey) {
+  const ts = Math.floor(Date.now() / 1000)
+  const nonce = randomBytes(12).toString('hex')
+  const payload = `touch-pie:v1:${ts}:${nonce}`
+  const sig = createHmac('sha256', apiKey).update(payload).digest('base64url')
+  return `v1.${ts}.${nonce}.${sig}`
 }
 
 function mask(value) {

@@ -51,9 +51,16 @@ export function resolveAdminRoutePermissions(path: string): string[] {
   const normalized = path.trim()
   if (normalized === '/admin' || normalized.startsWith('/admin/dashboard')) return ['admin.dashboard.read']
   if (normalized.startsWith('/admin/ops')) return ['admin.ops.read']
-  if (normalized.startsWith('/admin/users')) return ['admin.users.read']
+  if (normalized.startsWith('/admin/users')) return ['admin.users.read', 'admin.user_attributes.read']
   if (normalized.startsWith('/admin/groups')) return ['admin.groups.read']
-  if (normalized.startsWith('/admin/accounts')) return ['admin.accounts.read']
+  if (normalized.startsWith('/admin/accounts')) {
+    return [
+      'admin.accounts.read',
+      'admin.error_passthrough.read',
+      'admin.tls_fingerprint_profiles.read',
+      'admin.scheduled_tests.read',
+    ]
+  }
   if (normalized.startsWith('/admin/channels/monitor')) return ['admin.channel_monitors.read']
   if (normalized.startsWith('/admin/channels')) return ['admin.channels.read']
   if (normalized.startsWith('/admin/subscriptions')) return ['admin.subscriptions.read']
@@ -62,7 +69,15 @@ export function resolveAdminRoutePermissions(path: string): string[] {
   if (normalized.startsWith('/admin/risk-control')) return ['admin.risk_control.read']
   if (normalized.startsWith('/admin/redeem')) return ['admin.redeem_codes.read']
   if (normalized.startsWith('/admin/promo-codes')) return ['admin.promo_codes.read']
-  if (normalized.startsWith('/admin/settings')) return ['admin.settings.read', 'admin.data_management.read', 'admin.backup.read', 'admin.system.read']
+  if (normalized.startsWith('/admin/settings')) {
+    return [
+      'admin.settings.read',
+      'admin.data_management.read',
+      'admin.backup.read',
+      'admin.system.read',
+      'admin.payment.read',
+    ]
+  }
   if (normalized.startsWith('/admin/usage')) return ['admin.usage.read']
   if (normalized.startsWith('/admin/affiliates')) return ['admin.affiliates.read']
   if (normalized.startsWith('/admin/orders')) return ['admin.payment.read']

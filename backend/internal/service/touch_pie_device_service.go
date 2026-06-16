@@ -40,6 +40,7 @@ type TouchPieDeviceSession struct {
 	UserCodeHash   string
 	Status         string
 	UserID         *int64
+	APIKeyID       *int64
 	ExpiresAt      time.Time
 	ApprovedAt     *time.Time
 	ConsumedAt     *time.Time
@@ -51,7 +52,7 @@ type TouchPieDeviceRepository interface {
 	CreateDeviceSession(ctx context.Context, session *TouchPieDeviceSession) error
 	GetDeviceSessionByUserCodeHash(ctx context.Context, hash string) (*TouchPieDeviceSession, error)
 	GetDeviceSessionByDeviceCodeHash(ctx context.Context, hash string) (*TouchPieDeviceSession, error)
-	ApproveDeviceSession(ctx context.Context, id int64, userID int64, now time.Time) error
+	ApproveDeviceSession(ctx context.Context, id int64, userID int64, apiKeyID *int64, now time.Time) error
 	ConsumeDeviceSession(ctx context.Context, id int64, now time.Time) error
 	ExpireDeviceSession(ctx context.Context, id int64, now time.Time) error
 }
@@ -71,6 +72,7 @@ type TouchPieDeviceTokenResult struct {
 	ExpiresIn    int    `json:"expires_in"`
 	TokenType    string `json:"token_type"`
 	UserID       int64  `json:"user_id"`
+	APIKeyID     *int64 `json:"api_key_id,omitempty"`
 }
 
 type TouchPieDeviceService struct {
@@ -117,9 +119,21 @@ func (s *TouchPieDeviceService) Start(ctx context.Context, baseURL string) (*Tou
 	}, nil
 }
 
-func (s *TouchPieDeviceService) Approve(ctx context.Context, userCode string, userID int64) error {
+func (s *TouchPieDeviceService) Approve(ctx context.Context, userCode string, userID int64, apiKeyID *int64) error {
 	if s == nil || s.repo == nil {
 		return infraerrors.ServiceUnavailable("TOUCH_PIE_UNAVAILABLE", "Touch Pie device service unavailable")
+	}
+	if apiKeyID != nil {
+		if *apiKeyID <= 0 {
+			return ErrTouchPieAPIKeyForbidden
+		}
+		apiKey, err := s.ExportAPIKey(ctx, userID, *apiKeyID)
+		if err != nil {
+			return err
+		}
+		if !isTouchPieResponsesAPIKey(apiKey) {
+			return ErrTouchPieAPIKeyForbidden
+		}
 	}
 	session, err := s.repo.GetDeviceSessionByUserCodeHash(ctx, hashTouchPieCode(userCode))
 	if err != nil {
@@ -139,7 +153,7 @@ func (s *TouchPieDeviceService) Approve(ctx context.Context, userCode string, us
 	if session.Status == TouchPieDeviceStatusApproved && session.UserID != nil && *session.UserID != userID {
 		return ErrTouchPieDeviceConsumed
 	}
-	return s.repo.ApproveDeviceSession(ctx, session.ID, userID, now)
+	return s.repo.ApproveDeviceSession(ctx, session.ID, userID, apiKeyID, now)
 }
 
 func (s *TouchPieDeviceService) Token(ctx context.Context, deviceCode string) (*TouchPieDeviceTokenResult, error) {
@@ -184,6 +198,7 @@ func (s *TouchPieDeviceService) Token(ctx context.Context, deviceCode string) (*
 		ExpiresIn:    tokenPair.ExpiresIn,
 		TokenType:    "Bearer",
 		UserID:       user.ID,
+		APIKeyID:     session.APIKeyID,
 	}, nil
 }
 
@@ -199,6 +214,13 @@ func (s *TouchPieDeviceService) ExportAPIKey(ctx context.Context, userID, keyID 
 		return nil, ErrTouchPieAPIKeyForbidden
 	}
 	return apiKey, nil
+}
+
+func isTouchPieResponsesAPIKey(apiKey *APIKey) bool {
+	return apiKey != nil &&
+		apiKey.Group != nil &&
+		apiKey.Group.Platform == PlatformOpenAI &&
+		!apiKey.Group.ClaudeCodeOnly
 }
 
 func hashTouchPieCode(value string) string {

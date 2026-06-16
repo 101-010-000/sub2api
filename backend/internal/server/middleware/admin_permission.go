@@ -10,8 +10,9 @@ import (
 )
 
 type AdminAccessRule struct {
-	Permission string
-	SuperOnly  bool
+	Permission     string
+	SuperOnly      bool
+	AllowDelegated bool
 }
 
 func RequireSuperAdmin() gin.HandlerFunc {
@@ -63,6 +64,10 @@ func AdminPermissionGuard(resolve func(method, fullPath string) AdminAccessRule)
 		}
 		rule := resolve(c.Request.Method, c.FullPath())
 		if rule.SuperOnly || strings.TrimSpace(rule.Permission) == "" {
+			if rule.AllowDelegated && len(GetAdminPermissionsFromContext(c)) > 0 {
+				c.Next()
+				return
+			}
 			AbortWithError(c, http.StatusForbidden, "FORBIDDEN", "Super admin access required")
 			return
 		}

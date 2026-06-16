@@ -94,6 +94,23 @@
           </span>
         </template>
 
+        <template #cell-speed="{ row }">
+          <div v-if="row.speed_state" class="space-y-1 text-xs">
+            <span
+              class="inline-flex items-center rounded px-2 py-0.5 font-medium"
+              :class="getSpeedStateBadgeClass(row.speed_state)"
+              :title="getSpeedTooltip(row)"
+            >
+              {{ getSpeedStateLabel(row.speed_state) }}
+            </span>
+            <div class="text-[11px] text-gray-500 dark:text-gray-400">
+              <span>{{ formatSpeedWait(row.speed_wait_ms) }}</span>
+              <span v-if="row.speed_route" class="ml-1">· {{ getSpeedRouteLabel(row.speed_route) }}</span>
+            </div>
+          </div>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
+
         <template #cell-tokens="{ row }">
           <!-- 图片生成请求（仅按次计费时显示图片格式） -->
           <div v-if="isImageUsage(row)" class="flex items-center gap-1.5">
@@ -489,7 +506,42 @@ const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
   return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
 }
 
+const getSpeedStateLabel = (state?: string | null): string => {
+  if (state === 'touchpie_fast') return 'TouchPie fast'
+  if (state === 'fast') return 'fast'
+  if (state === 'slow') return 'slow'
+  if (state === 'refused') return 'refused'
+  return state || '-'
+}
 
+const getSpeedStateBadgeClass = (state?: string | null): string => {
+  if (state === 'touchpie_fast') return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+  if (state === 'fast') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+  if (state === 'slow') return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+  if (state === 'refused') return 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+  return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+}
+
+const formatSpeedWait = (ms?: number | null): string => {
+  if (!ms || ms <= 0) return '0ms'
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
+const getSpeedRouteLabel = (route?: string | null): string => {
+  if (route === 'suisu_slow') return '随速通 slow'
+  if (route === 'suisu_busy') return '随速通 busy'
+  if (route === 'direct') return 'direct'
+  return route || '-'
+}
+
+const getSpeedTooltip = (row: AdminUsageLog): string => {
+  return [
+    `状态: ${getSpeedStateLabel(row.speed_state)}`,
+    `等待: ${formatSpeedWait(row.speed_wait_ms)}`,
+    `路由: ${getSpeedRouteLabel(row.speed_route)}`,
+  ].join('\n')
+}
 
 const formatUserAgent = (ua: string): string => {
   return ua

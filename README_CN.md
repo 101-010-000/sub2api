@@ -691,16 +691,6 @@ sub2api/
     └── install.sh            # 一键安装脚本
 ```
 
-## 免责声明
-
-> **使用本项目前请仔细阅读：**
->
-> :rotating_light: **服务条款风险**: 使用本项目可能违反 Anthropic 的服务条款。请在使用前仔细阅读 Anthropic 的用户协议，使用本项目的一切风险由用户自行承担。
->
-> :book: **免责声明**: 本项目仅供技术学习和研究使用，作者不对因使用本项目导致的账户封禁、服务中断或其他损失承担任何责任。
-
----
-
 ## Star History
 
 <a href="https://star-history.com/#TalexDreamSoul/sub2api&Date">

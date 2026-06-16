@@ -85,7 +85,7 @@ func TestOpenAICompatibleHandlersRejectInvalidStreamFieldType(t *testing.T) {
 	}
 }
 
-func TestGatewayOpenAICompatibleHandlersAllowBooleanStreamToContinue(t *testing.T) {
+func TestGatewayOpenAICompatibleHandlersValidateStreamBeforeClaudeCodeOnly(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -95,17 +95,17 @@ func TestGatewayOpenAICompatibleHandlersAllowBooleanStreamToContinue(t *testing.
 		run  func(*gin.Context)
 	}{
 		{
-			name: "responses_false",
+			name: "responses_string_stream",
 			path: "/v1/responses",
-			body: `{"model":"gpt-5","stream":false,"input":"hello"}`,
+			body: `{"model":"gpt-5","stream":"true","input":"hello"}`,
 			run: func(c *gin.Context) {
 				(&GatewayHandler{gatewayService: &service.GatewayService{}}).Responses(c)
 			},
 		},
 		{
-			name: "chat_completions_true",
+			name: "chat_completions_string_stream",
 			path: "/v1/chat/completions",
-			body: `{"model":"gpt-5","stream":true,"messages":[{"role":"user","content":"hello"}]}`,
+			body: `{"model":"gpt-5","stream":"true","messages":[{"role":"user","content":"hello"}]}`,
 			run: func(c *gin.Context) {
 				(&GatewayHandler{gatewayService: &service.GatewayService{}}).ChatCompletions(c)
 			},
@@ -118,8 +118,9 @@ func TestGatewayOpenAICompatibleHandlersAllowBooleanStreamToContinue(t *testing.
 
 			tt.run(c)
 
-			require.Equal(t, http.StatusForbidden, rec.Code)
-			require.Contains(t, rec.Body.String(), "This group is restricted to Claude Code clients")
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Equal(t, invalidStreamFieldTypeMessage, gjson.GetBytes(rec.Body.Bytes(), "error.message").String())
+			require.NotContains(t, rec.Body.String(), "This group is restricted to Claude Code clients")
 		})
 	}
 }

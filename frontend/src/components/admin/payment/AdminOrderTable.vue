@@ -95,7 +95,7 @@
             <span class="text-xs">{{ t('common.view') }}</span>
           </button>
           <button
-            v-if="row.status === 'PENDING'"
+            v-if="canWrite && row.status === 'PENDING'"
             @click="emit('cancel', row)"
             class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-yellow-50 hover:text-yellow-600 dark:hover:bg-yellow-900/20 dark:hover:text-yellow-400"
           >
@@ -103,7 +103,7 @@
             <span class="text-xs">{{ t('payment.orders.cancel') }}</span>
           </button>
           <button
-            v-if="row.status === 'FAILED'"
+            v-if="canWrite && row.status === 'FAILED'"
             @click="emit('retry', row)"
             class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
           >
@@ -111,7 +111,7 @@
             <span class="text-xs">{{ t('payment.admin.retry') }}</span>
           </button>
           <button
-            v-if="canRefundRow(row)"
+            v-if="canRefundPayment && canRefundRow(row)"
             @click="emit('refund', row)"
             class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
           >
@@ -146,13 +146,21 @@ import { statusBadgeClass, canRefund, formatOrderDateTime } from '@/components/p
 
 const { t } = useI18n()
 
-defineProps<{
+const props = withDefaults(defineProps<{
   orders: PaymentOrder[]
   loading: boolean
   page: number
   pageSize: number
   total: number
-}>()
+  canWrite?: boolean
+  canRefund?: boolean
+}>(), {
+  canWrite: false,
+  canRefund: false,
+})
+
+const canWrite = computed(() => props.canWrite)
+const canRefundPayment = computed(() => props.canRefund)
 
 const emit = defineEmits<{
   (e: 'detail', order: PaymentOrder): void

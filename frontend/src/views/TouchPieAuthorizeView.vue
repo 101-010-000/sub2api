@@ -24,7 +24,7 @@
           <div>
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">已授权</h2>
             <p class="mt-1 text-sm text-gray-600 dark:text-dark-300">
-              已创建 {{ createdAPIKey?.provider_name || providerName }} 渠道，可以回到 Touch Pie 继续 setup。
+              已授权 {{ approvedAPIKeyName }}，可以回到 Touch Pie 继续 setup。
             </p>
           </div>
         </div>
@@ -49,7 +49,21 @@
           </div>
 
           <div v-else class="space-y-4">
-            <div>
+            <div v-if="apiKeyCandidates.length > 0">
+              <label class="input-label">TouchX API Key</label>
+              <select
+                v-model="selectedAPIKeyValue"
+                class="input mt-1"
+                :disabled="submitting"
+              >
+                <option value="new">新建 {{ providerName }} Key</option>
+                <option v-for="key in apiKeyCandidates" :key="key.id" :value="String(key.id)">
+                  复用 {{ key.name }} #{{ key.id }} · {{ key.status }}
+                </option>
+              </select>
+            </div>
+
+            <div v-if="shouldCreateAPIKey">
               <label class="input-label">TouchX 渠道分组</label>
               <select
                 v-model.number="selectedGroupID"
@@ -66,14 +80,14 @@
             </div>
 
             <div
-              v-if="apiKeyCandidates.length > 0"
+              v-if="selectedExistingAPIKey"
               class="rounded-lg border px-4 py-3 text-sm"
               :style="{ borderColor: providerAccentColor, color: providerAccentColor }"
             >
-              已检测到 {{ apiKeyCandidates.length }} 个 {{ providerName }} Key，本次确认会按所选分组创建新的渠道 Key。
+              本次会复用 {{ selectedExistingAPIKey.name }}，不会创建新的 API Key。
             </div>
 
-            <div v-if="groups.length === 0" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            <div v-if="shouldCreateAPIKey && groups.length === 0" class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
               当前账号没有可绑定分组，暂时无法为 Touch Pie 创建 API Key。
             </div>
           </div>
@@ -85,7 +99,7 @@
           <div class="flex gap-3">
             <router-link to="/dashboard" class="btn btn-secondary flex-1">取消</router-link>
             <button class="btn btn-primary flex-1" :disabled="submitDisabled" @click="approve">
-              {{ submitting ? '创建并授权中...' : '创建 Key 并授权' }}
+              {{ submitButtonText }}
             </button>
           </div>
         </div>
@@ -97,7 +111,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { approveDevice, bootstrap, createAPIKey } from '@/api/touchPie'
+import { approveDevice, bootstrap, createAPIKey, exportAPIKey } from '@/api/touchPie'
 import { useAuthStore } from '@/stores/auth'
 import type { Group } from '@/types'
 import type { TouchPieAPIKeyCandidate, TouchPieExportAPIKeyResponse } from '@/api/touchPie'
@@ -111,6 +125,7 @@ const errorMessage = ref('')
 const groups = ref<Group[]>([])
 const apiKeyCandidates = ref<TouchPieAPIKeyCandidate[]>([])
 const selectedGroupID = ref<number | null>(null)
+const selectedAPIKeyValue = ref('new')
 const createdAPIKey = ref<TouchPieExportAPIKeyResponse | null>(null)
 const providerName = ref('TouchX')
 const providerAccentColor = ref('#8B5CF6')
@@ -127,8 +142,32 @@ const loginTarget = computed(() => ({
   }
 }))
 
+const selectedExistingAPIKey = computed(() => {
+  const id = Number(selectedAPIKeyValue.value)
+  if (!Number.isFinite(id) || id <= 0) return null
+  return apiKeyCandidates.value.find((key) => key.id === id) || null
+})
+
+const shouldCreateAPIKey = computed(() => selectedAPIKeyValue.value === 'new')
+
 const submitDisabled = computed(() => {
-  return submitting.value || loadingBootstrap.value || groups.value.length === 0 || selectedGroupID.value == null
+  return (
+    submitting.value ||
+    loadingBootstrap.value ||
+    (shouldCreateAPIKey.value && (groups.value.length === 0 || selectedGroupID.value == null)) ||
+    (!shouldCreateAPIKey.value && !selectedExistingAPIKey.value)
+  )
+})
+
+const submitButtonText = computed(() => {
+  if (submitting.value) {
+    return shouldCreateAPIKey.value ? '创建并授权中...' : '授权中...'
+  }
+  return shouldCreateAPIKey.value ? '创建 Key 并授权' : '复用 Key 并授权'
+})
+
+const approvedAPIKeyName = computed(() => {
+  return createdAPIKey.value?.name || createdAPIKey.value?.provider_name || providerName.value
 })
 
 function resolveErrorMessage(error: unknown): string {
@@ -160,6 +199,9 @@ async function loadBootstrap(): Promise<void> {
     apiKeyCandidates.value = data.api_keys || []
     providerName.value = data.provider_name || providerName.value
     providerAccentColor.value = data.provider_accent_color || providerAccentColor.value
+    if (apiKeyCandidates.value.length > 0) {
+      selectedAPIKeyValue.value = String(apiKeyCandidates.value[0].id)
+    }
     if (selectedGroupID.value == null && groups.value.length > 0) {
       selectedGroupID.value = groups.value[0].id
     }
@@ -175,11 +217,15 @@ async function approve(): Promise<void> {
   submitting.value = true
   errorMessage.value = ''
   try {
-    createdAPIKey.value = await createAPIKey({
-      name: providerName.value,
-      group_id: selectedGroupID.value
-    })
-    await approveDevice(userCode.value)
+    if (shouldCreateAPIKey.value) {
+      createdAPIKey.value = await createAPIKey({
+        name: providerName.value,
+        group_id: selectedGroupID.value
+      })
+    } else if (selectedExistingAPIKey.value) {
+      createdAPIKey.value = await exportAPIKey(selectedExistingAPIKey.value.id)
+    }
+    await approveDevice(userCode.value, createdAPIKey.value?.id)
     approved.value = true
   } catch (error: unknown) {
     errorMessage.value = resolveErrorMessage(error)

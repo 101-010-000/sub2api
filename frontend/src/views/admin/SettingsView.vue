@@ -47,7 +47,7 @@
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Admin API Key Settings -->
-          <div class="card">
+          <div v-if="canManageAdminApiKey" class="card">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >
@@ -6498,7 +6498,8 @@
             v-if="form.payment_enabled"
             :providers="providers"
             :loading="providersLoading"
-            :can-create="hasAnyPaymentTypeEnabled"
+            :can-create="canManagePaymentProviders && hasAnyPaymentTypeEnabled"
+            :can-manage="canManagePaymentProviders"
             :enabled-payment-types="form.payment_enabled_types"
             :all-payment-types="allPaymentTypes"
             :redirect-label="t('admin.settings.payment.easypayRedirect')"
@@ -6939,7 +6940,7 @@
         </div>
 
         <!-- Save Button -->
-        <div v-show="activeTab !== 'backup'" class="flex justify-end">
+        <div v-show="activeTab !== 'backup' && canWriteSettings" class="flex justify-end">
           <button
             type="submit"
             :disabled="saving || loadFailed"
@@ -7059,7 +7060,7 @@ import EmailTemplateEditor from "@/views/admin/settings/EmailTemplateEditor.vue"
 import { useClipboard } from "@/composables/useClipboard";
 import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
 import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
-import { useAppStore } from "@/stores";
+import { useAppStore, useAuthStore } from "@/stores";
 import { useAdminSettingsStore } from "@/stores/adminSettings";
 import { normalizeVisibleMethod } from "@/components/payment/paymentFlow";
 import {
@@ -7071,6 +7072,7 @@ import {
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
+const authStore = useAuthStore();
 const adminSettingsStore = useAdminSettingsStore();
 const isZhLocale = computed(() => locale.value.startsWith("zh"));
 
@@ -7101,17 +7103,35 @@ type SettingsTab =
   | "email"
   | "backup";
 const activeTab = ref<SettingsTab>("general");
-const settingsTabs = [
-  { key: "general" as SettingsTab, icon: "home" as const },
-  { key: "agreement" as SettingsTab, icon: "document" as const },
-  { key: "features" as SettingsTab, icon: "bolt" as const },
-  { key: "security" as SettingsTab, icon: "shield" as const },
-  { key: "users" as SettingsTab, icon: "user" as const },
-  { key: "gateway" as SettingsTab, icon: "server" as const },
-  { key: "payment" as SettingsTab, icon: "creditCard" as const },
-  { key: "email" as SettingsTab, icon: "mail" as const },
-  { key: "backup" as SettingsTab, icon: "database" as const },
+const canReadSettings = computed(() => authStore.hasAdminPermission("admin.settings.read"));
+const canWriteSettings = computed(() => authStore.hasAdminPermission("admin.settings.write"));
+const canReadBackup = computed(() => authStore.hasAdminPermission("admin.backup.read"));
+const canReadPayment = computed(() => authStore.hasAdminPermission("admin.payment.read"));
+const canManagePaymentProviders = computed(() => authStore.isSuperAdmin);
+const canManageAdminApiKey = computed(() => authStore.isSuperAdmin);
+const settingsTabDefinitions = [
+  { key: "general" as SettingsTab, icon: "home" as const, canShow: canReadSettings },
+  { key: "agreement" as SettingsTab, icon: "document" as const, canShow: canReadSettings },
+  { key: "features" as SettingsTab, icon: "bolt" as const, canShow: canReadSettings },
+  { key: "security" as SettingsTab, icon: "shield" as const, canShow: canReadSettings },
+  { key: "users" as SettingsTab, icon: "user" as const, canShow: canReadSettings },
+  { key: "gateway" as SettingsTab, icon: "server" as const, canShow: canReadSettings },
+  { key: "payment" as SettingsTab, icon: "creditCard" as const, canShow: canReadPayment },
+  { key: "email" as SettingsTab, icon: "mail" as const, canShow: canReadSettings },
+  { key: "backup" as SettingsTab, icon: "database" as const, canShow: canReadBackup },
 ];
+const settingsTabs = computed(() =>
+  settingsTabDefinitions.filter((tab) => tab.canShow.value),
+);
+
+function ensureActiveSettingsTab(): void {
+  if (settingsTabs.value.some((item) => item.key === activeTab.value)) {
+    return;
+  }
+  activeTab.value = settingsTabs.value[0]?.key ?? "general";
+}
+
+watch(settingsTabs, ensureActiveSettingsTab, { immediate: true });
 
 const settingsTabKeyboardActions = {
   ArrowLeft: -1,
@@ -7123,6 +7143,9 @@ const settingsTabKeyboardActions = {
 } as const;
 
 function selectSettingsTab(tab: SettingsTab): void {
+  if (!settingsTabs.value.some((item) => item.key === tab)) {
+    return;
+  }
   activeTab.value = tab;
 }
 
@@ -7142,19 +7165,23 @@ function handleSettingsTabKeydown(event: KeyboardEvent, tab: SettingsTab): void 
   }
 
   event.preventDefault();
-  const currentIndex = settingsTabs.findIndex((item) => item.key === tab);
+  const tabs = settingsTabs.value;
+  if (tabs.length === 0) {
+    return;
+  }
+  const currentIndex = tabs.findIndex((item) => item.key === tab);
   let nextIndex = currentIndex < 0 ? 0 : currentIndex;
 
   if (action === "first") {
     nextIndex = 0;
   } else if (action === "last") {
-    nextIndex = settingsTabs.length - 1;
+    nextIndex = tabs.length - 1;
   } else {
     nextIndex =
-      (nextIndex + action + settingsTabs.length) % settingsTabs.length;
+      (nextIndex + action + tabs.length) % tabs.length;
   }
 
-  const nextTab = settingsTabs[nextIndex]?.key;
+  const nextTab = tabs[nextIndex]?.key;
   if (!nextTab) {
     return;
   }
@@ -8404,6 +8431,9 @@ function findDuplicateDefaultSubscription(
 }
 
 async function saveSettings() {
+  if (!canWriteSettings.value) {
+    return;
+  }
   saving.value = true;
   try {
     const normalizedTableDefaultPageSize = Math.floor(
@@ -8946,6 +8976,10 @@ async function sendTestEmail() {
 
 // Admin API Key 方法
 async function loadAdminApiKey() {
+  if (!canManageAdminApiKey.value) {
+    adminApiKeyLoading.value = false;
+    return;
+  }
   adminApiKeyLoading.value = true;
   try {
     const status = await adminAPI.settings.getAdminApiKey();
@@ -8959,6 +8993,9 @@ async function loadAdminApiKey() {
 }
 
 async function createAdminApiKey() {
+  if (!canManageAdminApiKey.value) {
+    return;
+  }
   adminApiKeyOperating.value = true;
   try {
     const result = await adminAPI.settings.regenerateAdminApiKey();
@@ -8980,6 +9017,9 @@ async function regenerateAdminApiKey() {
 }
 
 async function deleteAdminApiKey() {
+  if (!canManageAdminApiKey.value) {
+    return;
+  }
   if (!confirm(t("admin.settings.adminApiKey.deleteConfirm"))) return;
   adminApiKeyOperating.value = true;
   try {
@@ -9364,6 +9404,9 @@ function togglePaymentType(type: string) {
 }
 
 async function disableProvidersByType(type: string) {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   const matching = providers.value.filter(
     (p) => p.provider_key === type && p.enabled,
   );
@@ -9526,6 +9569,10 @@ function showProviderEnablementConflict(
 }
 
 async function loadProviders() {
+  if (!canReadPayment.value && !canManagePaymentProviders.value) {
+    providers.value = [];
+    return;
+  }
   providersLoading.value = true;
   try {
     const res = await adminAPI.payment.getProviders();
@@ -9538,6 +9585,9 @@ async function loadProviders() {
 }
 
 function openCreateProvider() {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   editingProvider.value = null;
   providerDialogRef.value?.reset(
     enabledProviderKeyOptions.value[0]?.value || "easypay",
@@ -9546,12 +9596,18 @@ function openCreateProvider() {
 }
 
 function openEditProvider(provider: ProviderInstance) {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   editingProvider.value = provider;
   providerDialogRef.value?.loadProvider(provider);
   showProviderDialog.value = true;
 }
 
 async function handleSaveProvider(payload: Partial<ProviderInstance>) {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   providerSaving.value = true;
   try {
     const candidate: ProviderEnablementCandidate = {
@@ -9590,6 +9646,9 @@ async function handleToggleField(
   provider: ProviderInstance,
   field: "enabled" | "refund_enabled" | "allow_user_refund",
 ) {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   let newValue: boolean;
   if (field === "enabled") newValue = !provider.enabled;
   else if (field === "refund_enabled") newValue = !provider.refund_enabled;
@@ -9623,6 +9682,9 @@ async function handleToggleField(
 }
 
 async function handleToggleType(provider: ProviderInstance, type: string) {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   const updated = provider.supported_types.includes(type)
     ? provider.supported_types.filter((t) => t !== type)
     : [...provider.supported_types, type];
@@ -9648,6 +9710,9 @@ async function handleToggleType(provider: ProviderInstance, type: string) {
 }
 
 function confirmDeleteProvider(provider: ProviderInstance) {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   deletingProviderId.value = provider.id;
   showDeleteProviderDialog.value = true;
 }
@@ -9655,6 +9720,9 @@ function confirmDeleteProvider(provider: ProviderInstance) {
 async function handleReorderProviders(
   updates: { id: number; sort_order: number }[],
 ) {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   try {
     await Promise.all(
       updates.map((u) =>
@@ -9671,6 +9739,9 @@ async function handleReorderProviders(
 }
 
 async function handleDeleteProvider() {
+  if (!canManagePaymentProviders.value) {
+    return;
+  }
   if (!deletingProviderId.value) return;
   try {
     await adminAPI.payment.deleteProvider(deletingProviderId.value);
@@ -9682,16 +9753,31 @@ async function handleDeleteProvider() {
   }
 }
 
-onMounted(() => {
-  loadSettings();
-  loadSubscriptionGroups();
-  loadAdminApiKey();
-  loadOverloadCooldownSettings();
-  loadRateLimit429CooldownSettings();
-  loadStreamTimeoutSettings();
-  loadRectifierSettings();
-  loadBetaPolicySettings();
-  loadProviders();
+onMounted(async () => {
+  ensureActiveSettingsTab();
+
+  if (canReadSettings.value) {
+    loadSettings();
+    loadSubscriptionGroups();
+    if (canManageAdminApiKey.value) {
+      loadAdminApiKey();
+    } else {
+      adminApiKeyLoading.value = false;
+    }
+    loadOverloadCooldownSettings();
+    loadRateLimit429CooldownSettings();
+    loadStreamTimeoutSettings();
+    loadRectifierSettings();
+    loadBetaPolicySettings();
+  } else {
+    loading.value = false;
+    loadFailed.value = false;
+    adminApiKeyLoading.value = false;
+  }
+
+  if (canReadPayment.value || canManagePaymentProviders.value) {
+    await loadProviders();
+  }
 });
 
 // =========================

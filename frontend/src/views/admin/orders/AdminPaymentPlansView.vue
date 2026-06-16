@@ -6,7 +6,7 @@
         <button @click="loadPlans" :disabled="plansLoading" class="btn btn-secondary" :title="t('common.refresh')">
           <Icon name="refresh" size="md" :class="plansLoading ? 'animate-spin' : ''" />
         </button>
-        <button @click="openPlanEdit(null)" class="btn btn-primary">{{ t('payment.admin.createPlan') }}</button>
+        <button v-if="canWritePayment" @click="openPlanEdit(null)" class="btn btn-primary">{{ t('payment.admin.createPlan') }}</button>
       </div>
 
       <!-- Plans Table -->
@@ -39,8 +39,10 @@
         <template #cell-for_sale="{ value, row }">
           <button
             type="button"
+            :disabled="!canWritePayment"
             :class="[
-              'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              'relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              canWritePayment ? 'cursor-pointer' : 'cursor-not-allowed opacity-70',
               value ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'
             ]"
             @click="toggleForSale(row)"
@@ -52,7 +54,7 @@
           </button>
         </template>
         <template #cell-actions="{ row }">
-          <div class="flex items-center gap-2">
+          <div v-if="canWritePayment" class="flex items-center gap-2">
             <button @click="openPlanEdit(row)" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400">
               <Icon name="edit" size="sm" />
               <span class="text-xs">{{ t('common.edit') }}</span>
@@ -77,6 +79,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { adminPaymentAPI } from '@/api/admin/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import adminAPI from '@/api/admin'
@@ -93,6 +96,8 @@ import { platformTextClass } from '@/utils/platformColors'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const canWritePayment = computed(() => authStore.hasAdminPermission('admin.payment.write'))
 
 // ==================== Groups ====================
 
@@ -155,6 +160,7 @@ async function loadPlans() {
 }
 
 function openPlanEdit(plan: SubscriptionPlan | null) {
+  if (!canWritePayment.value) return
   editingPlan.value = plan
   showPlanDialog.value = true
 }
@@ -162,6 +168,7 @@ function openPlanEdit(plan: SubscriptionPlan | null) {
 
 /** Quick toggle for_sale from the list */
 async function toggleForSale(plan: SubscriptionPlan) {
+  if (!canWritePayment.value) return
   try {
     await adminPaymentAPI.updatePlan(plan.id, { for_sale: !plan.for_sale })
     plan.for_sale = !plan.for_sale
@@ -170,8 +177,13 @@ async function toggleForSale(plan: SubscriptionPlan) {
   }
 }
 
-function confirmDeletePlan(plan: SubscriptionPlan) { deletingPlanId.value = plan.id; showDeletePlanDialog.value = true }
+function confirmDeletePlan(plan: SubscriptionPlan) {
+  if (!canWritePayment.value) return
+  deletingPlanId.value = plan.id
+  showDeletePlanDialog.value = true
+}
 async function handleDeletePlan() {
+  if (!canWritePayment.value) return
   if (!deletingPlanId.value) return
   try { await adminPaymentAPI.deletePlan(deletingPlanId.value); appStore.showSuccess(t('common.deleted')); showDeletePlanDialog.value = false; loadPlans() }
   catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }

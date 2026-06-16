@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -26,6 +27,19 @@ const (
 	defaultMaxSlowRejectRate    = 0.50
 
 	speedBillingModeSubscription = "subscription"
+
+	SpeedStateFast         = "fast"
+	SpeedStateSlow         = "slow"
+	SpeedStateRefused      = "refused"
+	SpeedStateTouchPieFast = "touchpie_fast"
+	speedStateDisabled     = "disabled"
+	speedStateExhausted    = "exhausted"
+
+	SpeedRouteDirect    = "direct"
+	SpeedRouteSuisuSlow = "suisu_slow"
+	SpeedRouteSuisuBusy = "suisu_busy"
+
+	DefaultSpeedSlowRejectMessage = "You've sent too many requests."
 )
 
 type SpeedRepository interface {
@@ -109,11 +123,14 @@ type UserGroupSpeedState struct {
 }
 
 type SpeedDecision struct {
-	Enabled  bool
-	State    string
-	Delay    time.Duration
-	Rejected bool
-	Status   *UserGroupSpeedStatus
+	Enabled       bool
+	State         string
+	Delay         time.Duration
+	Rejected      bool
+	RejectMessage string
+	WaitMs        int
+	Route         string
+	Status        *UserGroupSpeedStatus
 }
 
 type SpeedService struct {
@@ -246,31 +263,45 @@ func (s *SpeedService) RecordUsage(ctx context.Context, userID, groupID int64, c
 
 func (s *SpeedService) Decide(ctx context.Context, user *User, group *Group, subscription *UserSubscription) (*SpeedDecision, error) {
 	if s == nil || s.repo == nil || user == nil || !speedSupportedGroup(group) || subscription == nil {
-		return &SpeedDecision{Enabled: false, State: "disabled"}, nil
+		return &SpeedDecision{Enabled: false, State: speedStateDisabled}, nil
 	}
 	state := &UserGroupSpeedState{Group: group, Subscription: subscription}
 	cfg, _ := s.repo.GetUserGroupConfig(ctx, user.ID, group.ID)
 	state.Config = cfg
 	status := s.statusFromState(state, time.Now().UTC())
-	if status.State == "disabled" || status.State == "fast" {
-		return &SpeedDecision{Enabled: status.Enabled, State: status.State, Status: status}, nil
+	if status.State == speedStateDisabled || status.State == SpeedStateFast {
+		return &SpeedDecision{Enabled: status.Enabled, State: status.State, Route: SpeedRouteDirect, Status: status}, nil
 	}
-	if status.State == "exhausted" {
-		return &SpeedDecision{Enabled: true, State: "exhausted", Status: status}, ErrSubscriptionInvalid
+	if status.State == speedStateExhausted {
+		return &SpeedDecision{Enabled: true, State: speedStateExhausted, Route: SpeedRouteDirect, Status: status}, ErrSubscriptionInvalid
 	}
 	if rand.Float64() < status.Config.SlowRejectRate {
 		_ = s.repo.RecordSlowDecision(ctx, user.ID, group.ID, true, time.Now().UTC())
-		return &SpeedDecision{Enabled: true, State: "slow", Rejected: true, Status: status}, ErrSpeedSlowRejected
+		return &SpeedDecision{
+			Enabled:       true,
+			State:         SpeedStateSlow,
+			Rejected:      true,
+			RejectMessage: normalizeSpeedSlowRejectMessage(group.SpeedSlowRejectMessage),
+			Route:         SpeedRouteDirect,
+			Status:        status,
+		}, ErrSpeedSlowRejected
 	}
 	delay := randomSlowDelay(status.Config.SlowDelayMinSeconds, status.Config.SlowDelayMaxSeconds)
 	_ = s.repo.RecordSlowDecision(ctx, user.ID, group.ID, false, time.Now().UTC())
-	return &SpeedDecision{Enabled: true, State: "slow", Delay: delay, Status: status}, nil
+	return &SpeedDecision{Enabled: true, State: SpeedStateSlow, Delay: delay, Route: SpeedRouteDirect, Status: status}, nil
+}
+
+func normalizeSpeedSlowRejectMessage(message string) string {
+	if trimmed := strings.TrimSpace(message); trimmed != "" {
+		return trimmed
+	}
+	return DefaultSpeedSlowRejectMessage
 }
 
 func (s *SpeedService) statusFromState(state *UserGroupSpeedState, now time.Time) *UserGroupSpeedStatus {
 	group := state.Group
 	if group == nil {
-		return &UserGroupSpeedStatus{State: "disabled"}
+		return &UserGroupSpeedStatus{State: speedStateDisabled}
 	}
 	cfg := mergeSpeedConfig(group, state.Config)
 	status := &UserGroupSpeedStatus{
@@ -278,7 +309,7 @@ func (s *SpeedService) statusFromState(state *UserGroupSpeedState, now time.Time
 		GroupName:        group.Name,
 		VisibleToUser:    group.UserSpeedConfigAllowed && group.SpeedConfigEnabled,
 		Enabled:          group.SpeedConfigEnabled,
-		State:            "disabled",
+		State:            speedStateDisabled,
 		Config:           cfg,
 		Limits:           effectiveSpeedLimits(group),
 		SlowRequestCount: slowRequestCount(state.Config),
@@ -431,19 +462,19 @@ func resolveSpeedState(windows ...*SpeedWindowStatus) string {
 		}
 		hasWindow = true
 		if w.TotalUsedUSD >= w.LimitUSD {
-			return "exhausted"
+			return speedStateExhausted
 		}
 		if w.TotalUsedUSD >= w.FastLimitUSD {
 			slow = true
 		}
 	}
 	if !hasWindow {
-		return "disabled"
+		return speedStateDisabled
 	}
 	if slow {
-		return "slow"
+		return SpeedStateSlow
 	}
-	return "fast"
+	return SpeedStateFast
 }
 
 func randomSlowDelay(minSeconds, maxSeconds int) time.Duration {

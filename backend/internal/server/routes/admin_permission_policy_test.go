@@ -37,16 +37,34 @@ func TestResolveAdminAccessRule(t *testing.T) {
 			permission: service.AdminPermissionUsersWrite,
 		},
 		{
-			name:      "delete_is_super_only",
-			method:    http.MethodDelete,
-			path:      "/api/v1/admin/users/:id",
-			superOnly: true,
+			name:       "delete_uses_module_write_permission",
+			method:     http.MethodDelete,
+			path:       "/api/v1/admin/users/:id",
+			permission: service.AdminPermissionUsersWrite,
 		},
 		{
-			name:      "permission_registry_is_super_only",
-			method:    http.MethodGet,
-			path:      "/api/v1/admin/permissions",
-			superOnly: true,
+			name:       "permission_registry_allows_delegated_admin",
+			method:     http.MethodGet,
+			path:       "/api/v1/admin/permissions",
+			permission: "",
+		},
+		{
+			name:       "compliance_status_allows_delegated_admin",
+			method:     http.MethodGet,
+			path:       "/api/v1/admin/compliance",
+			permission: "",
+		},
+		{
+			name:       "compliance_accept_allows_delegated_admin",
+			method:     http.MethodPost,
+			path:       "/api/v1/admin/compliance/accept",
+			permission: "",
+		},
+		{
+			name:       "compliance_accept_with_trailing_slash_allows_delegated_admin",
+			method:     http.MethodPost,
+			path:       "/api/v1/admin/compliance/accept/",
+			permission: "",
 		},
 		{
 			name:      "admin_api_key_read_is_super_only",
@@ -103,10 +121,22 @@ func TestResolveAdminAccessRule(t *testing.T) {
 			permission: service.AdminPermissionScheduledTestsRead,
 		},
 		{
+			name:       "accounts_route_with_similar_segment_keeps_accounts_read",
+			method:     http.MethodGet,
+			path:       "/api/v1/admin/accounts/:id/not-scheduled-test-plans",
+			permission: service.AdminPermissionAccountsRead,
+		},
+		{
 			name:       "nested_user_subscriptions_route_requires_subscriptions_read",
 			method:     http.MethodGet,
 			path:       "/api/v1/admin/users/:id/subscriptions",
 			permission: service.AdminPermissionSubscriptionsRead,
+		},
+		{
+			name:       "users_route_with_similar_segment_keeps_users_read",
+			method:     http.MethodGet,
+			path:       "/api/v1/admin/users/:id/not-subscriptions",
+			permission: service.AdminPermissionUsersRead,
 		},
 		{
 			name:      "unknown_admin_route_is_super_only",
@@ -122,6 +152,12 @@ func TestResolveAdminAccessRule(t *testing.T) {
 			rule := resolveAdminAccessRule(tc.method, tc.path)
 			require.Equal(t, tc.superOnly, rule.SuperOnly)
 			require.Equal(t, tc.permission, rule.Permission)
+			if tc.name == "permission_registry_allows_delegated_admin" ||
+				tc.name == "compliance_status_allows_delegated_admin" ||
+				tc.name == "compliance_accept_allows_delegated_admin" ||
+				tc.name == "compliance_accept_with_trailing_slash_allows_delegated_admin" {
+				require.True(t, rule.AllowDelegated)
+			}
 		})
 	}
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -395,4 +396,30 @@ func TestContentModerationAuditModelErrorMessageMapsChannelFailures(t *testing.T
 
 	message = contentModerationAuditModelErrorMessage(http.StatusInternalServerError, `upstream error`)
 	require.Equal(t, "审核模型上游请求失败，请检查分组渠道和账号健康", message)
+}
+
+func TestContentModerationAuditModelErrorMessageExplainsInternalAccessBlock(t *testing.T) {
+	body := `{"code":"SUBSCRIPTION_NOT_FOUND","message":"No active subscription found for this group"}`
+
+	require.True(t, contentModerationAuditModelIsInternalAccessBlocked(body))
+	require.Equal(
+		t,
+		"系统分组审计模型被订阅/分组权限拦截：内部审计账号应跳过订阅计费限制，请检查认证中间件配置",
+		contentModerationAuditModelErrorMessage(http.StatusForbidden, body),
+	)
+}
+
+func TestContentModerationAuditModelErrorDetailExplainsCanceledContext(t *testing.T) {
+	groupID := int64(42)
+	model := ContentModerationAuditModelConfig{
+		Protocol:  ContentModerationAuditProtocolInternalGroup,
+		Model:     "gpt-5.4-mini",
+		GroupID:   &groupID,
+		GroupName: "audit-group",
+	}
+
+	detail := contentModerationAuditModelErrorDetail(model, 0, fmt.Errorf("get internal audit group: %w", context.Canceled))
+	require.Contains(t, detail, "系统分组审计模型")
+	require.Contains(t, detail, "audit-group(42)")
+	require.Contains(t, detail, "请求上下文已取消")
 }

@@ -175,6 +175,98 @@ func TestSimpleModeBypassesQuotaCheck(t *testing.T) {
 		require.Equal(t, http.StatusTooManyRequests, w.Code)
 		require.Contains(t, w.Body.String(), "USAGE_LIMIT_EXCEEDED")
 	})
+
+	t.Run("standard_mode_blocks_missing_subscription", func(t *testing.T) {
+		cfg := &config.Config{RunMode: config.RunModeStandard}
+		apiKeyService := service.NewAPIKeyService(apiKeyRepo, nil, nil, nil, nil, nil, cfg)
+		subscriptionRepo := &stubUserSubscriptionRepo{
+			getActive: func(ctx context.Context, userID, groupID int64) (*service.UserSubscription, error) {
+				return nil, service.ErrSubscriptionNotFound
+			},
+		}
+		subscriptionService := service.NewSubscriptionService(nil, subscriptionRepo, nil, nil, cfg)
+		router := newAuthTestRouter(apiKeyService, subscriptionService, cfg)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/t", nil)
+		req.Header.Set("x-api-key", apiKey.Key)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Contains(t, w.Body.String(), "SUBSCRIPTION_NOT_FOUND")
+	})
+
+	t.Run("standard_mode_internal_audit_key_bypasses_subscription_limits", func(t *testing.T) {
+		cfg := &config.Config{RunMode: config.RunModeStandard}
+		internalKey := *apiKey
+		internalKey.ID = 101
+		internalKey.Key = "internal-audit-key"
+		internalKey.Name = "content-moderation-audit:42"
+
+		internalRepo := &stubApiKeyRepo{
+			getByKey: func(ctx context.Context, key string) (*service.APIKey, error) {
+				if key != internalKey.Key {
+					return nil, service.ErrAPIKeyNotFound
+				}
+				clone := internalKey
+				return &clone, nil
+			},
+		}
+		apiKeyService := service.NewAPIKeyService(internalRepo, nil, nil, nil, nil, nil, cfg)
+		subscriptionRepo := &stubUserSubscriptionRepo{
+			getActive: func(ctx context.Context, userID, groupID int64) (*service.UserSubscription, error) {
+				return nil, service.ErrSubscriptionNotFound
+			},
+		}
+		subscriptionService := service.NewSubscriptionService(nil, subscriptionRepo, nil, nil, cfg)
+		router := newAuthTestRouter(apiKeyService, subscriptionService, cfg)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/t", nil)
+		req.Header.Set("x-api-key", internalKey.Key)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("standard_mode_models_endpoint_bypasses_balance_check", func(t *testing.T) {
+		cfg := &config.Config{RunMode: config.RunModeStandard}
+		lowBalanceUser := *user
+		lowBalanceUser.Balance = 0
+		lowBalanceKey := *apiKey
+		lowBalanceKey.User = &lowBalanceUser
+		modelRepo := &stubApiKeyRepo{
+			getByKey: func(ctx context.Context, key string) (*service.APIKey, error) {
+				if key != lowBalanceKey.Key {
+					return nil, service.ErrAPIKeyNotFound
+				}
+				clone := lowBalanceKey
+				return &clone, nil
+			},
+		}
+		apiKeyService := service.NewAPIKeyService(modelRepo, nil, nil, nil, nil, nil, cfg)
+		router := gin.New()
+		router.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(apiKeyService, nil, cfg)))
+		router.GET("/v1/models", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
+		router.GET("/t", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
+
+		models := httptest.NewRecorder()
+		modelReq := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		modelReq.Header.Set("x-api-key", lowBalanceKey.Key)
+		router.ServeHTTP(models, modelReq)
+		require.Equal(t, http.StatusOK, models.Code)
+
+		regular := httptest.NewRecorder()
+		regularReq := httptest.NewRequest(http.MethodGet, "/t", nil)
+		regularReq.Header.Set("x-api-key", lowBalanceKey.Key)
+		router.ServeHTTP(regular, regularReq)
+		require.Equal(t, http.StatusForbidden, regular.Code)
+		require.Contains(t, regular.Body.String(), "INSUFFICIENT_BALANCE")
+	})
 }
 
 func TestAPIKeyAuthSetsGroupContext(t *testing.T) {

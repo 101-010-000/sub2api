@@ -628,6 +628,10 @@
                 <input v-model.number="createForm.max_slow_reject_rate" type="number" min="0" max="1" step="0.01" class="input" />
               </div>
             </div>
+            <div>
+              <label class="input-label">slow 拒绝提示</label>
+              <input v-model.trim="createForm.speed_slow_reject_message" type="text" class="input" placeholder="You've sent too many requests." />
+            </div>
           </div>
         </div>
         <div
@@ -2034,6 +2038,10 @@
                 <label class="input-label">slow 拒绝率上限</label>
                 <input v-model.number="editForm.max_slow_reject_rate" type="number" min="0" max="1" step="0.01" class="input" />
               </div>
+            </div>
+            <div>
+              <label class="input-label">slow 拒绝提示</label>
+              <input v-model.trim="editForm.speed_slow_reject_message" type="text" class="input" placeholder="You've sent too many requests." />
             </div>
           </div>
         </div>
@@ -3575,6 +3583,8 @@ const rateMultipliersGroup = ref<AdminGroup | null>(null);
 const showRPMOverridesModal = ref(false);
 const rpmOverridesGroup = ref<AdminGroup | null>(null);
 const sortableGroups = ref<AdminGroup[]>([]);
+
+const defaultSpeedSlowRejectMessage = "You've sent too many requests.";
 const createMessagesDispatchDefaults = createDefaultMessagesDispatchFormState();
 const editMessagesDispatchDefaults = createDefaultMessagesDispatchFormState();
 const createModelsListState = reactive(createInitialModelsListState());
@@ -3639,6 +3649,7 @@ const createForm = reactive({
   max_slow_delay_seconds: 30,
   default_slow_reject_rate: 0,
   max_slow_reject_rate: 0.5,
+  speed_slow_reject_message: defaultSpeedSlowRejectMessage,
   suisu_enabled: false,
   suisu_fallback_group_id: null as number | null,
   suisu_slow_route_ratio: 0,
@@ -3985,6 +3996,7 @@ const editForm = reactive({
   max_slow_delay_seconds: 30,
   default_slow_reject_rate: 0,
   max_slow_reject_rate: 0.5,
+  speed_slow_reject_message: defaultSpeedSlowRejectMessage,
   suisu_enabled: false,
   suisu_fallback_group_id: null as number | null,
   suisu_slow_route_ratio: 0,
@@ -4277,12 +4289,17 @@ const resetSpeedConfigForm = (
   form.max_slow_delay_seconds = group?.max_slow_delay_seconds ?? 30;
   form.default_slow_reject_rate = group?.default_slow_reject_rate ?? 0;
   form.max_slow_reject_rate = group?.max_slow_reject_rate ?? 0.5;
+  form.speed_slow_reject_message =
+    group?.speed_slow_reject_message?.trim() || defaultSpeedSlowRejectMessage;
 };
 
 const disableSpeedConfig = (form: typeof createForm | typeof editForm) => {
   form.speed_config_enabled = false;
   form.user_speed_config_allowed = false;
 };
+
+const normalizeSpeedSlowRejectMessage = (value?: string) =>
+  value?.trim() || defaultSpeedSlowRejectMessage;
 
 const resetSuisuConfigForm = (
   form: typeof createForm | typeof editForm,
@@ -4311,6 +4328,9 @@ const handleCreateGroup = async () => {
     // 构建请求数据，包含模型路由配置
     const requestData = {
       ...createForm,
+      speed_slow_reject_message: normalizeSpeedSlowRejectMessage(
+        createForm.speed_slow_reject_message,
+      ),
       daily_limit_usd: normalizeOptionalLimit(
         createForm.daily_limit_usd as number | string | null,
       ),
@@ -4456,6 +4476,9 @@ const handleUpdateGroup = async () => {
     // 转换 fallback_group_id: null -> 0 (后端使用 0 表示清除)
     const payload = {
       ...editForm,
+      speed_slow_reject_message: normalizeSpeedSlowRejectMessage(
+        editForm.speed_slow_reject_message,
+      ),
       daily_limit_usd: normalizeOptionalLimit(
         editForm.daily_limit_usd as number | string | null,
       ),

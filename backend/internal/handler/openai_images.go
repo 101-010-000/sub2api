@@ -139,8 +139,9 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 	}
 	effectiveGroupID := apiKey.GroupID
 	var slowSuisuGroupID *int64
-	if speedDecision.Decision != nil && speedDecision.Decision.State == "slow" {
+	if speedDecision.Decision != nil && speedDecision.Decision.State == service.SpeedStateSlow {
 		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
+			markSuisuSlowRouted(c)
 			effectiveGroupID = suisuGroupID
 			slowSuisuGroupID = suisuGroupID
 		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, parsed.Stream, &streamStarted, reqLog, false) {

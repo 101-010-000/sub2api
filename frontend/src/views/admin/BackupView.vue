@@ -17,34 +17,34 @@
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.endpoint') }}</label>
-            <input v-model="s3Form.endpoint" class="input w-full" placeholder="https://<account_id>.r2.cloudflarestorage.com" />
+            <input v-model="s3Form.endpoint" class="input w-full" :disabled="!canWriteBackup" placeholder="https://<account_id>.r2.cloudflarestorage.com" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.region') }}</label>
-            <input v-model="s3Form.region" class="input w-full" placeholder="auto" />
+            <input v-model="s3Form.region" class="input w-full" :disabled="!canWriteBackup" placeholder="auto" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.bucket') }}</label>
-            <input v-model="s3Form.bucket" class="input w-full" />
+            <input v-model="s3Form.bucket" class="input w-full" :disabled="!canWriteBackup" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.prefix') }}</label>
-            <input v-model="s3Form.prefix" class="input w-full" placeholder="backups/" />
+            <input v-model="s3Form.prefix" class="input w-full" :disabled="!canWriteBackup" placeholder="backups/" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.accessKeyId') }}</label>
-            <input v-model="s3Form.access_key_id" class="input w-full" />
+            <input v-model="s3Form.access_key_id" class="input w-full" :disabled="!canWriteBackup" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.secretAccessKey') }}</label>
-            <input v-model="s3Form.secret_access_key" type="password" class="input w-full" :placeholder="s3SecretConfigured ? t('admin.backup.s3.secretConfigured') : ''" />
+            <input v-model="s3Form.secret_access_key" type="password" class="input w-full" :disabled="!canWriteBackup" :placeholder="s3SecretConfigured ? t('admin.backup.s3.secretConfigured') : ''" />
           </div>
           <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 md:col-span-2">
-            <input v-model="s3Form.force_path_style" type="checkbox" />
+            <input v-model="s3Form.force_path_style" type="checkbox" :disabled="!canWriteBackup" />
             <span>{{ t('admin.backup.s3.forcePathStyle') }}</span>
           </label>
         </div>
-        <div class="mt-4 flex flex-wrap gap-2">
+        <div v-if="canWriteBackup" class="mt-4 flex flex-wrap gap-2">
           <button type="button" class="btn btn-secondary btn-sm" :disabled="testingS3" @click="testS3">
             {{ testingS3 ? t('common.loading') : t('admin.backup.s3.testConnection') }}
           </button>
@@ -66,26 +66,26 @@
         </div>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 md:col-span-2">
-            <input v-model="scheduleForm.enabled" type="checkbox" />
+            <input v-model="scheduleForm.enabled" type="checkbox" :disabled="!canWriteBackup" />
             <span>{{ t('admin.backup.schedule.enabled') }}</span>
           </label>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.schedule.cronExpr') }}</label>
-            <input v-model="scheduleForm.cron_expr" class="input w-full" placeholder="0 2 * * *" />
+            <input v-model="scheduleForm.cron_expr" class="input w-full" :disabled="!canWriteBackup" placeholder="0 2 * * *" />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.schedule.cronHint') }}</p>
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.schedule.retainDays') }}</label>
-            <input v-model.number="scheduleForm.retain_days" type="number" min="0" class="input w-full" />
+            <input v-model.number="scheduleForm.retain_days" type="number" min="0" class="input w-full" :disabled="!canWriteBackup" />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.schedule.retainDaysHint') }}</p>
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.schedule.retainCount') }}</label>
-            <input v-model.number="scheduleForm.retain_count" type="number" min="0" class="input w-full" />
+            <input v-model.number="scheduleForm.retain_count" type="number" min="0" class="input w-full" :disabled="!canWriteBackup" />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.schedule.retainCountHint') }}</p>
           </div>
         </div>
-        <div class="mt-4">
+        <div v-if="canWriteBackup" class="mt-4">
           <button type="button" class="btn btn-primary btn-sm" :disabled="savingSchedule" @click="saveSchedule">
             {{ savingSchedule ? t('common.loading') : t('common.save') }}
           </button>
@@ -104,11 +104,11 @@
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <div class="flex items-center gap-1">
+            <div v-if="canWriteBackup" class="flex items-center gap-1">
               <label class="text-xs text-gray-600 dark:text-gray-400">{{ t('admin.backup.operations.expireDays') }}</label>
               <input v-model.number="manualExpireDays" type="number" min="0" class="input w-20 text-xs" />
             </div>
-            <button type="button" class="btn btn-primary btn-sm" :disabled="creatingBackup" @click="createBackup">
+            <button v-if="canWriteBackup" type="button" class="btn btn-primary btn-sm" :disabled="creatingBackup" @click="createBackup">
               {{ creatingBackup ? t('admin.backup.operations.backing') : t('admin.backup.operations.createBackup') }}
             </button>
             <button type="button" class="btn btn-secondary btn-sm" :disabled="loadingBackups" @click="loadBackups">
@@ -156,7 +156,7 @@
                 <td class="py-3 text-xs">
                   <div class="flex flex-wrap gap-1">
                     <button
-                      v-if="record.status === 'completed'"
+                      v-if="canDownloadBackup && record.status === 'completed'"
                       type="button"
                       class="btn btn-secondary btn-xs"
                       @click="downloadBackup(record.id)"
@@ -164,7 +164,7 @@
                       {{ t('admin.backup.actions.download') }}
                     </button>
                     <button
-                      v-if="record.status === 'completed'"
+                      v-if="canRestoreBackup && record.status === 'completed'"
                       type="button"
                       class="btn btn-secondary btn-xs"
                       :disabled="restoringId === record.id"
@@ -173,6 +173,7 @@
                       {{ restoringId === record.id ? t('common.loading') : t('admin.backup.actions.restore') }}
                     </button>
                     <button
+                      v-if="canWriteBackup"
                       type="button"
                       class="btn btn-danger btn-xs"
                       @click="removeBackup(record.id)"
@@ -282,11 +283,16 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api'
-import { useAppStore } from '@/stores'
+import { useAppStore, useAuthStore } from '@/stores'
 import type { BackupS3Config, BackupScheduleConfig, BackupRecord } from '@/api/admin/backup'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const canReadBackup = computed(() => authStore.hasAdminPermission('admin.backup.read'))
+const canWriteBackup = computed(() => authStore.hasAdminPermission('admin.backup.write'))
+const canDownloadBackup = computed(() => authStore.isSuperAdmin)
+const canRestoreBackup = computed(() => authStore.isSuperAdmin)
 
 // S3 config
 const s3Form = ref<BackupS3Config>({
@@ -436,6 +442,7 @@ const r2ConfigRows = computed(() => [
 ])
 
 async function loadS3Config() {
+  if (!canReadBackup.value) return
   try {
     const cfg = await adminAPI.backup.getS3Config()
     s3Form.value = {
@@ -454,6 +461,7 @@ async function loadS3Config() {
 }
 
 async function saveS3Config() {
+  if (!canWriteBackup.value) return
   savingS3.value = true
   try {
     await adminAPI.backup.updateS3Config(s3Form.value)
@@ -467,6 +475,7 @@ async function saveS3Config() {
 }
 
 async function testS3() {
+  if (!canWriteBackup.value) return
   testingS3.value = true
   try {
     const result = await adminAPI.backup.testS3Connection(s3Form.value)
@@ -483,6 +492,7 @@ async function testS3() {
 }
 
 async function loadSchedule() {
+  if (!canReadBackup.value) return
   try {
     const cfg = await adminAPI.backup.getSchedule()
     scheduleForm.value = {
@@ -497,6 +507,7 @@ async function loadSchedule() {
 }
 
 async function saveSchedule() {
+  if (!canWriteBackup.value) return
   savingSchedule.value = true
   try {
     await adminAPI.backup.updateSchedule(scheduleForm.value)
@@ -509,6 +520,7 @@ async function saveSchedule() {
 }
 
 async function loadBackups() {
+  if (!canReadBackup.value) return
   loadingBackups.value = true
   try {
     const result = await adminAPI.backup.listBackups()
@@ -521,6 +533,7 @@ async function loadBackups() {
 }
 
 async function createBackup() {
+  if (!canWriteBackup.value) return
   creatingBackup.value = true
   try {
     const record = await adminAPI.backup.createBackup({ expire_days: manualExpireDays.value })
@@ -538,6 +551,7 @@ async function createBackup() {
 }
 
 async function downloadBackup(id: string) {
+  if (!canDownloadBackup.value) return
   try {
     const result = await adminAPI.backup.getDownloadURL(id)
     window.open(result.url, '_blank')
@@ -547,6 +561,7 @@ async function downloadBackup(id: string) {
 }
 
 async function restoreBackup(id: string) {
+  if (!canRestoreBackup.value) return
   if (!window.confirm(t('admin.backup.actions.restoreConfirm'))) return
   const password = window.prompt(t('admin.backup.actions.restorePasswordPrompt'))
   if (!password) return
@@ -566,6 +581,7 @@ async function restoreBackup(id: string) {
 }
 
 async function removeBackup(id: string) {
+  if (!canWriteBackup.value) return
   if (!window.confirm(t('admin.backup.actions.deleteConfirm'))) return
   try {
     await adminAPI.backup.deleteBackup(id)

@@ -96,6 +96,10 @@ const (
 	ContentModerationAuditProtocolOpenAICompatible = "openai_compatible"
 	ContentModerationAuditProtocolInternalGroup    = "internal_group"
 
+	contentModerationAuditModelStatusUnknown = "unknown"
+	contentModerationAuditModelStatusOK      = "ok"
+	contentModerationAuditModelStatusError   = "error"
+
 	contentModerationInternalAuditUserEmail = "content-moderation-audit@internal.local"
 	contentModerationInternalAuditUserName  = "Content Moderation Audit"
 	contentModerationInternalAuditKeyPrefix = "content-moderation-audit"
@@ -1757,7 +1761,7 @@ func (s *ContentModerationService) checkModelAuditSync(ctx context.Context, inpu
 			LatencyMS:   latencyMS,
 		}
 		if err != nil {
-			detail.Error = err.Error()
+			detail.Error = contentModerationAuditModelErrorDetail(modelCfg, httpStatus, err)
 		}
 		s.recordAuditModelCall(modelCfg, latencyMS, httpStatus, result.Violation, err)
 		details = append(details, detail)
@@ -2906,7 +2910,8 @@ func (s *ContentModerationService) callOpenAIChatCompletionAuditModel(ctx contex
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 128*1024))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return string(body), ContentModerationModelResult{}, resp.StatusCode, fmt.Errorf("audit model status %d: %s", resp.StatusCode, contentModerationAuditModelErrorMessage(resp.StatusCode, string(body)))
+		message := contentModerationAuditModelErrorMessage(resp.StatusCode, string(body))
+		return string(body), ContentModerationModelResult{}, resp.StatusCode, fmt.Errorf("audit model status %d: %s", resp.StatusCode, message)
 	}
 	var out openAIChatCompletionResponse
 	if err := json.Unmarshal(body, &out); err != nil {
@@ -2925,6 +2930,12 @@ func (s *ContentModerationService) callOpenAIChatCompletionAuditModel(ctx contex
 func contentModerationAuditModelErrorMessage(status int, body string) string {
 	trimmed := strings.TrimSpace(body)
 	lower := strings.ToLower(trimmed)
+	if status == http.StatusForbidden && contentModerationAuditModelIsInternalAccessBlocked(body) {
+		return "系统分组审计模型被订阅/分组权限拦截：内部审计账号应跳过订阅计费限制，请检查认证中间件配置"
+	}
+	if status == http.StatusUnauthorized && strings.Contains(lower, "invalid_api_key") {
+		return "系统分组审计模型内部 API Key 无效，请保存风控配置后重建内部审计 Key"
+	}
 	if strings.Contains(lower, "model_not_found") || strings.Contains(lower, "no available channel for model") {
 		return "所选分组没有可用该模型，请更换模型或补充渠道"
 	}
@@ -2932,6 +2943,56 @@ func contentModerationAuditModelErrorMessage(status int, body string) string {
 		return "审核模型上游请求失败，请检查分组渠道和账号健康"
 	}
 	return trimmed
+}
+
+func contentModerationAuditModelIsInternalAccessBlocked(body string) bool {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return false
+	}
+	var payload struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &payload); err == nil {
+		switch strings.ToUpper(strings.TrimSpace(payload.Code)) {
+		case "SUBSCRIPTION_NOT_FOUND", "SUBSCRIPTION_INVALID", "GROUP_NOT_ALLOWED", "GROUP_DISABLED", "GROUP_DELETED":
+			return true
+		}
+	}
+	lower := strings.ToLower(trimmed)
+	return strings.Contains(lower, "no active subscription found for this group") ||
+		strings.Contains(lower, "subscription_not_found") ||
+		strings.Contains(lower, "group_not_allowed") ||
+		strings.Contains(lower, "group_disabled") ||
+		strings.Contains(lower, "group_deleted")
+}
+
+func contentModerationAuditModelErrorDetail(model ContentModerationAuditModelConfig, httpStatus int, err error) string {
+	if err == nil {
+		return ""
+	}
+	groupLabel := "未配置"
+	if model.GroupID != nil && *model.GroupID > 0 {
+		groupLabel = fmt.Sprintf("%d", *model.GroupID)
+		if strings.TrimSpace(model.GroupName) != "" {
+			groupLabel = fmt.Sprintf("%s(%d)", strings.TrimSpace(model.GroupName), *model.GroupID)
+		}
+	}
+	prefix := fmt.Sprintf("审计模型 %q 调用失败", strings.TrimSpace(model.Model))
+	if model.Protocol == ContentModerationAuditProtocolInternalGroup {
+		prefix = fmt.Sprintf("系统分组审计模型 %q 调用失败，分组：%s", strings.TrimSpace(model.Model), groupLabel)
+	}
+	if errors.Is(err, context.Canceled) || strings.Contains(strings.ToLower(err.Error()), "context canceled") {
+		return prefix + "；原因：请求上下文已取消，通常是客户端断开、上游超时或流式请求提前结束"
+	}
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "deadline exceeded") {
+		return prefix + "；原因：请求超时，请检查审计模型超时配置、分组渠道延迟和账号健康"
+	}
+	if httpStatus > 0 {
+		return fmt.Sprintf("%s；HTTP %d；%s", prefix, httpStatus, err.Error())
+	}
+	return prefix + "；" + err.Error()
 }
 
 func (s *ContentModerationService) callModerationOnceWithInput(ctx context.Context, cfg *ContentModerationConfig, apiKey string, input any, httpStatus *int) (*moderationAPIResult, error) {
@@ -4093,7 +4154,7 @@ func (s *ContentModerationService) recordAuditModelCall(model ContentModerationA
 	}
 	if err != nil {
 		state.FailureCount++
-		state.LastError = trimRunes(err.Error(), 180)
+		state.LastError = trimRunes(contentModerationAuditModelErrorDetail(model, httpStatus, err), 180)
 		return
 	}
 	state.SuccessCount++
@@ -4134,7 +4195,7 @@ func (s *ContentModerationService) auditModelStatuses(models []ContentModeration
 			ModelID: model.ID,
 			Name:    model.Name,
 			Model:   model.Model,
-			Status:  "unknown",
+			Status:  contentModerationAuditModelStatusUnknown,
 		}
 		state := s.auditModelHealth[model.ID]
 		if state != nil {
@@ -4153,10 +4214,10 @@ func (s *ContentModerationService) auditModelStatuses(models []ContentModeration
 			if status.TotalCalls > 0 {
 				status.AvgLatencyMS = state.TotalLatencyMS / status.TotalCalls
 			}
-			if state.LastError != "" {
-				status.Status = "error"
+			if state.LastError != "" && state.FailureCount > 0 {
+				status.Status = contentModerationAuditModelStatusError
 			} else if status.TotalCalls > 0 {
-				status.Status = "ok"
+				status.Status = contentModerationAuditModelStatusOK
 			}
 		}
 		out = append(out, status)

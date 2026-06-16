@@ -248,6 +248,7 @@ type CreateGroupInput struct {
 	MaxSlowDelaySeconds        int
 	DefaultSlowRejectRate      float64
 	MaxSlowRejectRate          float64
+	SpeedSlowRejectMessage     string
 	// 随速通配置
 	SuisuEnabled         bool
 	SuisuFallbackGroupID *int64
@@ -305,6 +306,7 @@ type UpdateGroupInput struct {
 	MaxSlowDelaySeconds        *int
 	DefaultSlowRejectRate      *float64
 	MaxSlowRejectRate          *float64
+	SpeedSlowRejectMessage     *string
 	// 随速通配置
 	SuisuEnabled         *bool
 	SuisuFallbackGroupID *int64
@@ -2019,6 +2021,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MaxSlowDelaySeconds:             input.MaxSlowDelaySeconds,
 		DefaultSlowRejectRate:           input.DefaultSlowRejectRate,
 		MaxSlowRejectRate:               input.MaxSlowRejectRate,
+		SpeedSlowRejectMessage:          input.SpeedSlowRejectMessage,
 		SuisuEnabled:                    input.SuisuEnabled,
 		SuisuFallbackGroupID:            input.SuisuFallbackGroupID,
 		SuisuSlowRouteRatio:             input.SuisuSlowRouteRatio,
@@ -2131,6 +2134,7 @@ func normalizeGroupSpeedConfig(group *Group) {
 	if group.DefaultSlowRejectRate > group.MaxSlowRejectRate {
 		group.DefaultSlowRejectRate = group.MaxSlowRejectRate
 	}
+	group.SpeedSlowRejectMessage = normalizeSpeedSlowRejectMessage(group.SpeedSlowRejectMessage)
 }
 
 func normalizeSuisuRatio(value float64) (float64, error) {
@@ -2425,6 +2429,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.MaxSlowRejectRate != nil {
 		group.MaxSlowRejectRate = *input.MaxSlowRejectRate
+	}
+	if input.SpeedSlowRejectMessage != nil {
+		group.SpeedSlowRejectMessage = *input.SpeedSlowRejectMessage
 	}
 	normalizeGroupSpeedConfig(group)
 	if input.SuisuEnabled != nil {

@@ -35,6 +35,7 @@ type touchPieStartRequest struct {
 
 type touchPieApproveRequest struct {
 	UserCode string `json:"user_code" binding:"required"`
+	APIKeyID *int64 `json:"api_key_id"`
 }
 
 type touchPieTokenRequest struct {
@@ -99,7 +100,7 @@ func (h *TouchPieHandler) ApproveDevice(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	if err := h.deviceService.Approve(c.Request.Context(), req.UserCode, subject.UserID); err != nil {
+	if err := h.deviceService.Approve(c.Request.Context(), req.UserCode, subject.UserID, req.APIKeyID); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -136,12 +137,9 @@ func (h *TouchPieHandler) Bootstrap(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	outGroups := make([]dto.Group, 0, len(groups))
-	for i := range groups {
-		outGroups = append(outGroups, *dto.GroupFromService(&groups[i]))
-	}
+	outGroups, openAIGroupIDs := touchPieOpenAIGroups(groups)
 
-	keys, err := h.apiKeyService.SearchAPIKeys(c.Request.Context(), subject.UserID, openai.TouchXProviderName, 10)
+	keys, err := h.apiKeyService.SearchAPIKeys(c.Request.Context(), subject.UserID, "", 100)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -149,6 +147,12 @@ func (h *TouchPieHandler) Bootstrap(c *gin.Context) {
 	outKeys := make([]touchPieAPIKeyCandidate, 0, len(keys))
 	for i := range keys {
 		key := keys[i]
+		if key.GroupID == nil {
+			continue
+		}
+		if _, ok := openAIGroupIDs[*key.GroupID]; !ok {
+			continue
+		}
 		outKeys = append(outKeys, touchPieAPIKeyCandidate{
 			ID:      key.ID,
 			Name:    key.Name,
@@ -165,6 +169,19 @@ func (h *TouchPieHandler) Bootstrap(c *gin.Context) {
 		ProviderAccentColor: openai.TouchXAccentColor,
 		DefaultModel:        openai.DefaultLatestModel,
 	})
+}
+
+func touchPieOpenAIGroups(groups []service.Group) ([]dto.Group, map[int64]struct{}) {
+	outGroups := make([]dto.Group, 0, len(groups))
+	groupIDs := make(map[int64]struct{}, len(groups))
+	for i := range groups {
+		if groups[i].Platform != service.PlatformOpenAI || groups[i].ClaudeCodeOnly {
+			continue
+		}
+		groupIDs[groups[i].ID] = struct{}{}
+		outGroups = append(outGroups, *dto.GroupFromService(&groups[i]))
+	}
+	return outGroups, groupIDs
 }
 
 func (h *TouchPieHandler) CreateAPIKey(c *gin.Context) {
@@ -186,6 +203,20 @@ func (h *TouchPieHandler) CreateAPIKey(c *gin.Context) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = openai.TouchXProviderName
+	}
+	if req.GroupID == nil {
+		response.ErrorFrom(c, service.ErrGroupNotAllowed)
+		return
+	}
+	groups, err := h.apiKeyService.GetAvailableGroups(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	_, openAIGroupIDs := touchPieOpenAIGroups(groups)
+	if _, ok := openAIGroupIDs[*req.GroupID]; !ok {
+		response.ErrorFrom(c, service.ErrGroupNotAllowed)
+		return
 	}
 
 	apiKey, err := h.apiKeyService.Create(c.Request.Context(), subject.UserID, service.CreateAPIKeyRequest{

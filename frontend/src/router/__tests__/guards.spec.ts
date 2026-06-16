@@ -69,7 +69,7 @@ function simulateGuard(
   toPath: string,
   toMeta: Record<string, any>,
   authState: MockAuthState
-): string | null {
+): string | false | null {
   return simulateGuardResult(toPath, toMeta, authState).redirect
 }
 
@@ -347,6 +347,33 @@ describe('路由守卫逻辑', () => {
     it('访问 /login 重定向到首个可访问后台页', () => {
       const redirect = simulateGuard('/login', { requiresAuth: false }, authState)
       expect(redirect).toBe('/admin/users')
+    })
+
+    it('只有用户属性权限也可以进入用户父页面', () => {
+      const redirect = simulateGuard('/admin/users', { requiresAdmin: true }, {
+        ...authState,
+        adminPermissions: ['admin.user_attributes.read'],
+      })
+      expect(redirect).toBeNull()
+    })
+
+    it('只有账号子模块权限也可以进入账号父页面', () => {
+      const redirect = simulateGuard('/admin/accounts', { requiresAdmin: true }, {
+        ...authState,
+        adminPermissions: ['admin.scheduled_tests.read'],
+      })
+      expect(redirect).toBeNull()
+    })
+
+    it('只有备份或支付权限也可以进入设置父页面', () => {
+      expect(simulateGuard('/admin/settings', { requiresAdmin: true }, {
+        ...authState,
+        adminPermissions: ['admin.backup.read'],
+      })).toBeNull()
+      expect(simulateGuard('/admin/settings', { requiresAdmin: true }, {
+        ...authState,
+        adminPermissions: ['admin.payment.read'],
+      })).toBeNull()
     })
   })
 

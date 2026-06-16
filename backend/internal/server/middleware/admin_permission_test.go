@@ -103,6 +103,22 @@ func TestAdminPermissionGuard(t *testing.T) {
 		}))
 		require.Equal(t, http.StatusForbidden, w.Code)
 	})
+
+	t.Run("delegated_admin_rule_allows_any_delegated_permission", func(t *testing.T) {
+		w := serveAdminPermissionRequest(func(c *gin.Context) {
+			c.Set(string(ContextKeyAdminPermissions), []string{service.AdminPermissionUsersRead})
+		}, AdminPermissionGuard(func(string, string) AdminAccessRule {
+			return AdminAccessRule{AllowDelegated: true}
+		}))
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("delegated_admin_rule_forbids_user_without_permissions", func(t *testing.T) {
+		w := serveAdminPermissionRequest(func(c *gin.Context) {}, AdminPermissionGuard(func(string, string) AdminAccessRule {
+			return AdminAccessRule{AllowDelegated: true}
+		}))
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
 }
 
 func serveAdminPermissionRequest(seed gin.HandlerFunc, guard gin.HandlerFunc) *httptest.ResponseRecorder {

@@ -93,6 +93,10 @@ vi.mock("@/stores", () => ({
     showInfo: vi.fn(),
     fetchPublicSettings,
   }),
+  useAuthStore: () => ({
+    isSuperAdmin: true,
+    hasAdminPermission: () => true,
+  }),
 }));
 
 vi.mock("@/stores/adminSettings", () => ({
