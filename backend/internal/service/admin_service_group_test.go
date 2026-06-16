@@ -15,6 +15,14 @@ func ptrString[T ~string](v T) *string {
 	return &s
 }
 
+func ptrFloat64ForGroupTest(v float64) *float64 {
+	return &v
+}
+
+func ptrIntForGroupTest(v int) *int {
+	return &v
+}
+
 // groupRepoStubForAdmin 用于测试 AdminService 的 GroupRepository Stub
 type groupRepoStubForAdmin struct {
 	created *Group // 记录 Create 调用的参数
@@ -200,6 +208,85 @@ func TestAdminService_CreateGroup_NilImagePricing(t *testing.T) {
 	require.Nil(t, repo.created.ImagePrice1K)
 	require.Nil(t, repo.created.ImagePrice2K)
 	require.Nil(t, repo.created.ImagePrice4K)
+}
+
+func TestAdminService_CreateGroup_PreservesExplicitZeroSpeedConfig(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:                       "speed-zero",
+		Platform:                   PlatformOpenAI,
+		RateMultiplier:             1.0,
+		SubscriptionType:           SubscriptionTypeSubscription,
+		SpeedConfigEnabled:         true,
+		DefaultFastQuotaRatio:      ptrFloat64ForGroupTest(0),
+		MinFastQuotaRatio:          ptrFloat64ForGroupTest(0),
+		MaxFastQuotaRatio:          ptrFloat64ForGroupTest(0),
+		DefaultSlowDelayMinSeconds: ptrIntForGroupTest(0),
+		DefaultSlowDelayMaxSeconds: ptrIntForGroupTest(0),
+		MaxSlowDelaySeconds:        ptrIntForGroupTest(0),
+		DefaultSlowRejectRate:      ptrFloat64ForGroupTest(0),
+		MaxSlowRejectRate:          ptrFloat64ForGroupTest(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.NotNil(t, repo.created)
+	require.Equal(t, 0.0, repo.created.DefaultFastQuotaRatio)
+	require.Equal(t, 0.0, repo.created.MinFastQuotaRatio)
+	require.Equal(t, 0.0, repo.created.MaxFastQuotaRatio)
+	require.Equal(t, 0, repo.created.DefaultSlowDelayMinSeconds)
+	require.Equal(t, 0, repo.created.DefaultSlowDelayMaxSeconds)
+	require.Equal(t, 0, repo.created.MaxSlowDelaySeconds)
+	require.Equal(t, 0.0, repo.created.DefaultSlowRejectRate)
+	require.Equal(t, 0.0, repo.created.MaxSlowRejectRate)
+}
+
+func TestAdminService_UpdateGroup_PreservesExplicitZeroSpeedConfig(t *testing.T) {
+	repo := &groupRepoStubForAdmin{
+		getByID: &Group{
+			ID:                         1,
+			Name:                       "speed",
+			Platform:                   PlatformOpenAI,
+			RateMultiplier:             1,
+			Status:                     StatusActive,
+			SubscriptionType:           SubscriptionTypeSubscription,
+			SpeedConfigEnabled:         true,
+			DefaultFastQuotaRatio:      0.3,
+			MinFastQuotaRatio:          0.1,
+			MaxFastQuotaRatio:          0.8,
+			DefaultSlowDelayMinSeconds: 1,
+			DefaultSlowDelayMaxSeconds: 5,
+			MaxSlowDelaySeconds:        30,
+			DefaultSlowRejectRate:      0.5,
+			MaxSlowRejectRate:          0.5,
+		},
+	}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{
+		DefaultFastQuotaRatio:      ptrFloat64ForGroupTest(0),
+		MinFastQuotaRatio:          ptrFloat64ForGroupTest(0),
+		MaxFastQuotaRatio:          ptrFloat64ForGroupTest(0),
+		DefaultSlowDelayMinSeconds: ptrIntForGroupTest(0),
+		DefaultSlowDelayMaxSeconds: ptrIntForGroupTest(0),
+		MaxSlowDelaySeconds:        ptrIntForGroupTest(0),
+		DefaultSlowRejectRate:      ptrFloat64ForGroupTest(0),
+		MaxSlowRejectRate:          ptrFloat64ForGroupTest(0),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.NotNil(t, repo.updated)
+	require.Equal(t, 0.0, repo.updated.DefaultFastQuotaRatio)
+	require.Equal(t, 0.0, repo.updated.MinFastQuotaRatio)
+	require.Equal(t, 0.0, repo.updated.MaxFastQuotaRatio)
+	require.Equal(t, 0, repo.updated.DefaultSlowDelayMinSeconds)
+	require.Equal(t, 0, repo.updated.DefaultSlowDelayMaxSeconds)
+	require.Equal(t, 0, repo.updated.MaxSlowDelaySeconds)
+	require.Equal(t, 0.0, repo.updated.DefaultSlowRejectRate)
+	require.Equal(t, 0.0, repo.updated.MaxSlowRejectRate)
 }
 
 func TestAdminService_NormalizeAndValidateSuisuGroup(t *testing.T) {
