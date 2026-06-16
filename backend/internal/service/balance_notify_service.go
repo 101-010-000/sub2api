@@ -382,6 +382,10 @@ func (s *BalanceNotifyService) sendBalanceLowEmails(recipients []string, userID 
 	if displayName == "" {
 		displayName = userEmail
 	}
+	if len(recipients) == 0 {
+		slog.Warn("balance low email fallback skipped: no verified recipients", "user_id", userID, "user_email", userEmail)
+		return
+	}
 	if s.notificationEmailService != nil {
 		fallbackRecipients := make([]string, 0, len(recipients))
 		for _, to := range recipients {

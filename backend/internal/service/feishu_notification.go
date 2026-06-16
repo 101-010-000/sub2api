@@ -356,8 +356,8 @@ func (s *FeishuNotificationService) sendInteractiveCard(ctx context.Context, use
 	if err != nil {
 		return fmt.Errorf("send feishu message: %w", err)
 	}
-	if !resp.IsSuccessState() || feishuNotifyAPIErrorCode(resp.String()) != 0 {
-		return fmt.Errorf("send feishu message status=%d code=%s msg=%s", resp.StatusCode, getFeishuNotifyJSON(resp.String(), "code"), firstNonEmpty(getFeishuNotifyJSON(resp.String(), "msg"), getFeishuNotifyJSON(resp.String(), "message")))
+	if err := validateFeishuNotifyAPIResponse("send feishu message", resp); err != nil {
+		return err
 	}
 	slog.Info("feishu notification sent", "user_id", userID, "app_id", cfg.AppID)
 	return nil
@@ -398,8 +398,8 @@ func (s *FeishuNotificationService) fetchTenantAccessToken(ctx context.Context, 
 		return "", fmt.Errorf("request feishu tenant token: %w", err)
 	}
 	body := resp.String()
-	if !resp.IsSuccessState() || feishuNotifyAPIErrorCode(body) != 0 {
-		return "", fmt.Errorf("feishu tenant token status=%d code=%s msg=%s", resp.StatusCode, getFeishuNotifyJSON(body, "code"), firstNonEmpty(getFeishuNotifyJSON(body, "msg"), getFeishuNotifyJSON(body, "message")))
+	if err := validateFeishuNotifyAPIResponse("feishu tenant token", resp); err != nil {
+		return "", err
 	}
 	token := firstNonEmpty(getFeishuNotifyJSON(body, "tenant_access_token"), getFeishuNotifyJSON(body, "data.tenant_access_token"))
 	if token == "" {
@@ -424,13 +424,36 @@ func buildFeishuMessageURL(raw string) (string, error) {
 func feishuNotifyAPIErrorCode(body string) int64 {
 	body = strings.TrimSpace(body)
 	if body == "" {
-		return 0
+		return -1
 	}
 	code := gjson.Get(body, "code")
 	if !code.Exists() {
-		return 0
+		return -1
 	}
 	return code.Int()
+}
+
+func validateFeishuNotifyAPIResponse(operation string, resp *req.Response) error {
+	if resp == nil {
+		return fmt.Errorf("%s response is nil", operation)
+	}
+	body := strings.TrimSpace(resp.String())
+	if !resp.IsSuccessState() {
+		return fmt.Errorf("%s status=%d code=%s msg=%s", operation, resp.StatusCode, getFeishuNotifyJSON(body, "code"), firstNonEmpty(getFeishuNotifyJSON(body, "msg"), getFeishuNotifyJSON(body, "message")))
+	}
+	if body == "" {
+		return fmt.Errorf("%s status=%d empty response body", operation, resp.StatusCode)
+	}
+	if !gjson.Valid(body) {
+		return fmt.Errorf("%s status=%d invalid json response", operation, resp.StatusCode)
+	}
+	if !gjson.Get(body, "code").Exists() {
+		return fmt.Errorf("%s status=%d missing code in response", operation, resp.StatusCode)
+	}
+	if code := feishuNotifyAPIErrorCode(body); code != 0 {
+		return fmt.Errorf("%s status=%d code=%s msg=%s", operation, resp.StatusCode, getFeishuNotifyJSON(body, "code"), firstNonEmpty(getFeishuNotifyJSON(body, "msg"), getFeishuNotifyJSON(body, "message")))
+	}
+	return nil
 }
 
 func getFeishuNotifyJSON(body string, path string) string {
