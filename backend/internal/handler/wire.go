@@ -122,8 +122,8 @@ func ProvideGatewayHandler(gatewayService *service.GatewayService, geminiCompatS
 	return h
 }
 
-func ProvideOpenAIGatewayHandler(gatewayService *service.OpenAIGatewayService, concurrencyService *service.ConcurrencyService, billingCacheService *service.BillingCacheService, apiKeyService *service.APIKeyService, usageRecordWorkerPool *service.UsageRecordWorkerPool, errorPassthroughService *service.ErrorPassthroughService, contentModerationService *service.ContentModerationService, cfg *config.Config, speedService *service.SpeedService) *OpenAIGatewayHandler {
-	h := NewOpenAIGatewayHandler(gatewayService, concurrencyService, billingCacheService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, cfg)
+func ProvideOpenAIGatewayHandler(gatewayService *service.OpenAIGatewayService, concurrencyService *service.ConcurrencyService, billingCacheService *service.BillingCacheService, apiKeyService *service.APIKeyService, usageRecordWorkerPool *service.UsageRecordWorkerPool, errorPassthroughService *service.ErrorPassthroughService, contentModerationService *service.ContentModerationService, opsService *service.OpsService, cfg *config.Config, speedService *service.SpeedService) *OpenAIGatewayHandler {
+	h := NewOpenAIGatewayHandler(gatewayService, concurrencyService, billingCacheService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, opsService, cfg)
 	h.SetSpeedService(speedService)
 	return h
 }

@@ -158,8 +158,7 @@ func (h *ContentModerationHandler) UpdateConfig(c *gin.Context) {
 		BackgroundReviewRetryBackoffSeconds: req.BackgroundReviewRetryBackoffSeconds,
 		ContextCaptureEnabled:               req.ContextCaptureEnabled,
 		ContextMaxBytes:                     req.ContextMaxBytes,
-		CyberuseResponse:                    req.CyberuseResponse,
-	})
+		CyberuseResponse:                    req.CyberuseResponse})
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

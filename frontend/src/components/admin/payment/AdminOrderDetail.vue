@@ -102,7 +102,7 @@
           {{ t('payment.admin.retry') }}
         </button>
         <button
-          v-if="canRefundPayment && canRefund(order)"
+          v-if="canRefundPayment && canRefundOrder(order)"
           @click="emit('refund', order)"
           class="btn btn-sm rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
         >
@@ -158,7 +158,7 @@ const emit = defineEmits<{
   (e: 'refund', order: PaymentOrder): void
 }>()
 
-function canRefund(order: PaymentOrder): boolean {
+function canRefundOrder(order: PaymentOrder): boolean {
   return canRefundStatus(order.status)
 }
 

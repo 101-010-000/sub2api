@@ -164,6 +164,7 @@ export interface ContentModerationConfig {
   context_capture_enabled: boolean
   context_max_bytes: number
   cyberuse_response: ContentModerationCyberuseConfig
+  cyber_policy_exclude_from_ban_count: boolean
 }
 
 export type ContentModerationAPIKeyStatusValue = 'unknown' | 'ok' | 'error' | 'frozen'
@@ -260,6 +261,7 @@ export interface UpdateContentModerationConfig {
   context_capture_enabled?: boolean
   context_max_bytes?: number
   cyberuse_response?: ContentModerationCyberuseConfig
+  cyber_policy_exclude_from_ban_count?: boolean
 }
 
 export interface ContentModerationAuditModelRuntimeStatus {
@@ -276,8 +278,7 @@ export interface ContentModerationAuditModelRuntimeStatus {
   last_latency_ms: number
   last_http_status: number
   last_error: string
-  last_checked_at?: string
-}
+  last_checked_at?: string}
 
 export interface ContentModerationRuntimeStatus {
   enabled: boolean
