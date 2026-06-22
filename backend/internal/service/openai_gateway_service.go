@@ -4624,7 +4624,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		upstreamDetail = truncateString(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
-	logOpenAIClaudeCodeRestriction403(nil, c, account, resp, upstreamMsg, body)
+	logOpenAIClaudeCodeRestriction403(context.TODO(), c, account, resp, upstreamMsg, body)
 
 	// Apply error passthrough rules
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
