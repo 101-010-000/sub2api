@@ -1,4 +1,4 @@
-.PHONY: build build-backend build-frontend build-datamanagementd test test-backend test-frontend test-frontend-critical test-datamanagementd smoke-touch-pie-localdev secret-scan
+.PHONY: build build-backend build-frontend build-datamanagementd test test-backend test-frontend test-frontend-critical test-datamanagementd secret-scan
 
 FRONTEND_CRITICAL_VITEST := \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
@@ -39,9 +39,6 @@ test-frontend-critical:
 
 test-datamanagementd:
 	@cd datamanagement && go test ./...
-
-smoke-touch-pie-localdev:
-	@node tools/smoke_touch_pie_localdev.mjs
 
 secret-scan:
 	@python3 tools/secret_scan.py

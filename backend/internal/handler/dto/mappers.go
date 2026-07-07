@@ -12,13 +12,13 @@ func UserFromServiceShallow(u *service.User) *User {
 	if u == nil {
 		return nil
 	}
-	out := &User{
+	return &User{
 		ID:                         u.ID,
 		Email:                      u.Email,
 		Username:                   u.Username,
 		Role:                       u.Role,
-		AdminPermissions:           stringSliceOrEmpty(u.AdminPermissions),
 		Balance:                    u.Balance,
+		FrozenBalance:              u.FrozenBalance,
 		Concurrency:                u.Concurrency,
 		Status:                     u.Status,
 		AllowedGroups:              u.AllowedGroups,
@@ -33,19 +33,6 @@ func UserFromServiceShallow(u *service.User) *User {
 		RPMLimit:                   u.RPMLimit,
 		DeletedAt:                  u.DeletedAt,
 	}
-	if u.APIKeyMaxActiveIPsVisible {
-		maxActiveIPs := u.APIKeyMaxActiveIPs
-		out.APIKeyMaxActiveIPs = &maxActiveIPs
-		out.APIKeyMaxActiveIPsVisible = true
-	}
-	return out
-}
-
-func stringSliceOrEmpty(values []string) []string {
-	if len(values) == 0 {
-		return []string{}
-	}
-	return append([]string(nil), values...)
 }
 
 func UserFromService(u *service.User) *User {
@@ -81,12 +68,10 @@ func UserFromServiceAdmin(u *service.User) *AdminUser {
 		return nil
 	}
 	return &AdminUser{
-		User:                      *base,
-		Notes:                     u.Notes,
-		LastUsedAt:                u.LastUsedAt,
-		APIKeyMaxActiveIPs:        u.APIKeyMaxActiveIPs,
-		APIKeyMaxActiveIPsVisible: u.APIKeyMaxActiveIPsVisible,
-		GroupRates:                u.GroupRates,
+		User:       *base,
+		Notes:      u.Notes,
+		LastUsedAt: u.LastUsedAt,
+		GroupRates: u.GroupRates,
 	}
 }
 
@@ -95,34 +80,32 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		return nil
 	}
 	out := &APIKey{
-		ID:                   k.ID,
-		UserID:               k.UserID,
-		Key:                  k.Key,
-		Name:                 k.Name,
-		GroupID:              k.GroupID,
-		Status:               k.Status,
-		IPWhitelist:          k.IPWhitelist,
-		IPBlacklist:          k.IPBlacklist,
-		MaxActiveIPs:         k.MaxActiveIPs,
-		IPIdleTimeoutSeconds: k.IPIdleTimeoutSeconds,
-		MaxConcurrency:       k.MaxConcurrency,
-		LastUsedAt:           k.LastUsedAt,
-		Quota:                k.Quota,
-		QuotaUsed:            k.QuotaUsed,
-		ExpiresAt:            k.ExpiresAt,
-		CreatedAt:            k.CreatedAt,
-		UpdatedAt:            k.UpdatedAt,
-		RateLimit5h:          k.RateLimit5h,
-		RateLimit1d:          k.RateLimit1d,
-		RateLimit7d:          k.RateLimit7d,
-		Usage5h:              k.EffectiveUsage5h(),
-		Usage1d:              k.EffectiveUsage1d(),
-		Usage7d:              k.EffectiveUsage7d(),
-		Window5hStart:        k.Window5hStart,
-		Window1dStart:        k.Window1dStart,
-		Window7dStart:        k.Window7dStart,
-		User:                 UserFromServiceShallow(k.User),
-		Group:                GroupFromServiceShallow(k.Group),
+		ID:                 k.ID,
+		UserID:             k.UserID,
+		Key:                k.Key,
+		Name:               k.Name,
+		GroupID:            k.GroupID,
+		Status:             k.Status,
+		IPWhitelist:        k.IPWhitelist,
+		IPBlacklist:        k.IPBlacklist,
+		LastUsedAt:         k.LastUsedAt,
+		Quota:              k.Quota,
+		QuotaUsed:          k.QuotaUsed,
+		ExpiresAt:          k.ExpiresAt,
+		CreatedAt:          k.CreatedAt,
+		UpdatedAt:          k.UpdatedAt,
+		CurrentConcurrency: k.CurrentConcurrency,
+		RateLimit5h:        k.RateLimit5h,
+		RateLimit1d:        k.RateLimit1d,
+		RateLimit7d:        k.RateLimit7d,
+		Usage5h:            k.EffectiveUsage5h(),
+		Usage1d:            k.EffectiveUsage1d(),
+		Usage7d:            k.EffectiveUsage7d(),
+		Window5hStart:      k.Window5hStart,
+		Window1dStart:      k.Window1dStart,
+		Window7dStart:      k.Window7dStart,
+		User:               UserFromServiceShallow(k.User),
+		Group:              GroupFromServiceShallow(k.Group),
 	}
 	if k.Window5hStart != nil && !service.IsWindowExpired(k.Window5hStart, service.RateLimitWindow5h) {
 		t := k.Window5hStart.Add(service.RateLimitWindow5h)
@@ -173,10 +156,6 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		ActiveAccountCount:          g.ActiveAccountCount,
 		RateLimitedAccountCount:     g.RateLimitedAccountCount,
 		SortOrder:                   g.SortOrder,
-		SuisuEnabled:                g.SuisuEnabled,
-		SuisuFallbackGroupID:        g.SuisuFallbackGroupID,
-		SuisuSlowRouteRatio:         g.SuisuSlowRouteRatio,
-		SuisuBusyRouteRatio:         g.SuisuBusyRouteRatio,
 	}
 	if len(g.AccountGroups) > 0 {
 		out.AccountGroups = make([]AccountGroup, 0, len(g.AccountGroups))
@@ -202,8 +181,11 @@ func groupFromServiceBase(g *service.Group) Group {
 		WeeklyLimitUSD:                  g.WeeklyLimitUSD,
 		MonthlyLimitUSD:                 g.MonthlyLimitUSD,
 		AllowImageGeneration:            g.AllowImageGeneration,
+		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
 		ImageRateIndependent:            g.ImageRateIndependent,
 		ImageRateMultiplier:             g.ImageRateMultiplier,
+		BatchImageDiscountMultiplier:    g.BatchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:        g.BatchImageHoldMultiplier,
 		PeakRateEnabled:                 g.PeakRateEnabled,
 		PeakStart:                       g.PeakStart,
 		PeakEnd:                         g.PeakEnd,
@@ -218,27 +200,9 @@ func groupFromServiceBase(g *service.Group) Group {
 		RequireOAuthOnly:                g.RequireOAuthOnly,
 		RequirePrivacySet:               g.RequirePrivacySet,
 		RPMLimit:                        g.RPMLimit,
-		SpeedConfigEnabled:              g.SpeedConfigEnabled,
-		UserSpeedConfigAllowed:          g.UserSpeedConfigAllowed,
-		DefaultFastQuotaRatio:           g.DefaultFastQuotaRatio,
-		MinFastQuotaRatio:               g.MinFastQuotaRatio,
-		MaxFastQuotaRatio:               g.MaxFastQuotaRatio,
-		DefaultSlowDelayMinSeconds:      g.DefaultSlowDelayMinSeconds,
-		DefaultSlowDelayMaxSeconds:      g.DefaultSlowDelayMaxSeconds,
-		MaxSlowDelaySeconds:             g.MaxSlowDelaySeconds,
-		DefaultSlowRejectRate:           g.DefaultSlowRejectRate,
-		MaxSlowRejectRate:               g.MaxSlowRejectRate,
-		SpeedSlowRejectMessage:          g.SpeedSlowRejectMessage,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}
-}
-
-func usageLogAccountIDPtr(accountID int64) *int64 {
-	if accountID <= 0 {
-		return nil
-	}
-	return &accountID
 }
 
 func AccountFromServiceShallow(a *service.Account) *Account {
@@ -631,16 +595,12 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		ID:                    l.ID,
 		UserID:                l.UserID,
 		APIKeyID:              l.APIKeyID,
-		AccountID:             usageLogAccountIDPtr(l.AccountID),
+		AccountID:             l.AccountID,
 		RequestID:             l.RequestID,
 		Model:                 requestedModel,
 		ServiceTier:           l.ServiceTier,
 		ReasoningEffort:       l.ReasoningEffort,
 		InboundEndpoint:       l.InboundEndpoint,
-		UpstreamEndpoint:      l.UpstreamEndpoint,
-		SpeedState:            l.SpeedState,
-		SpeedWaitMs:           l.SpeedWaitMs,
-		SpeedRoute:            l.SpeedRoute,
 		GroupID:               l.GroupID,
 		SubscriptionID:        l.SubscriptionID,
 		InputTokens:           l.InputTokens,
@@ -785,44 +745,6 @@ func UserSubscriptionFromServiceAdmin(sub *service.UserSubscription) *AdminUserS
 		AssignedAt:       sub.AssignedAt,
 		Notes:            sub.Notes,
 		AssignedByUser:   UserFromServiceShallow(sub.AssignedByUser),
-	}
-}
-
-func SubscriptionSpeedStatusFromService(status *service.UserGroupSpeedStatus) *SubscriptionSpeedStatus {
-	if status == nil {
-		return nil
-	}
-	return &SubscriptionSpeedStatus{
-		Enabled:          status.Enabled,
-		State:            status.State,
-		FastQuotaRatio:   status.Config.FastQuotaRatio,
-		SlowRejectRate:   status.Config.SlowRejectRate,
-		SlowDelayMin:     status.Config.SlowDelayMinSeconds,
-		SlowDelayMax:     status.Config.SlowDelayMaxSeconds,
-		Daily:            subscriptionSpeedWindowFromService(status.Daily),
-		Weekly:           subscriptionSpeedWindowFromService(status.Weekly),
-		Monthly:          subscriptionSpeedWindowFromService(status.Monthly),
-		SlowRequestCount: status.SlowRequestCount,
-		SlowRejectCount:  status.SlowRejectCount,
-		LastSlowAt:       status.LastSlowAt,
-	}
-}
-
-func subscriptionSpeedWindowFromService(w *service.SpeedWindowStatus) *SubscriptionSpeedWindowStatus {
-	if w == nil {
-		return nil
-	}
-	return &SubscriptionSpeedWindowStatus{
-		LimitUSD:        w.LimitUSD,
-		FastLimitUSD:    w.FastLimitUSD,
-		FastUsedUSD:     w.FastUsedUSD,
-		SlowLimitUSD:    w.SlowLimitUSD,
-		SlowUsedUSD:     w.SlowUsedUSD,
-		TotalUsedUSD:    w.TotalUsedUSD,
-		RemainingUSD:    w.RemainingUSD,
-		WindowStart:     w.WindowStart,
-		ResetsAt:        w.ResetsAt,
-		ResetsInSeconds: w.ResetsInSeconds,
 	}
 }
 

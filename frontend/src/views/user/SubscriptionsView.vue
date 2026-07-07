@@ -241,10 +241,6 @@
               </div>
             </div>
 
-            <SpeedStatusSummary
-              v-if="speedStatusesByGroup[subscription.group_id]"
-              :status="speedStatusesByGroup[subscription.group_id]"
-            />
           </div>
         </div>
       </div>
@@ -258,11 +254,9 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import subscriptionsAPI from '@/api/subscriptions'
-import { userAPI } from '@/api'
-import type { UserSubscription, UserSpeedStatus } from '@/types'
+import type { UserSubscription } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
-import SpeedStatusSummary from '@/components/common/SpeedStatusSummary.vue'
 import { formatDateOnly } from '@/utils/format'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
 import { platformBorderClass, platformBadgeClass, platformButtonClass, platformLabel } from '@/utils/platformColors'
@@ -283,7 +277,6 @@ const router = useRouter()
 const appStore = useAppStore()
 
 const subscriptions = ref<UserSubscription[]>([])
-const speedStatusesByGroup = ref<Record<number, UserSpeedStatus>>({})
 const loading = ref(true)
 
 function subscriptionHasPeakRate(subscription: UserSubscription): boolean {
@@ -306,14 +299,6 @@ async function loadSubscriptions() {
   }
 }
 
-async function loadSpeedStatuses() {
-  try {
-    const statuses = await userAPI.getSpeedStatuses()
-    speedStatusesByGroup.value = Object.fromEntries(statuses.map((status) => [status.group_id, status]))
-  } catch (error) {
-    console.error('Failed to load speed statuses:', error)
-  }
-}
 
 function getProgressWidth(used: number | undefined, limit: number | null | undefined): string {
   if (!limit || limit === 0) return '0%'
@@ -399,6 +384,5 @@ function formatResetTime(windowStart: string | null, windowHours: number): strin
 
 onMounted(() => {
   loadSubscriptions()
-  loadSpeedStatuses()
 })
 </script>

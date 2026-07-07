@@ -22,7 +22,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -70,8 +69,6 @@ const (
 	// 被暂停的账号收不到流量，其快照永远不会从上游响应头刷新；该兜底让账号在快照
 	// 陈旧时放行一次请求，从而通过正常响应头自愈，而无需等待整个窗口（5h/7d）重置。
 	openAICodexAutoPauseStaleAfter = 2 * time.Hour
-	// 优速通请求在客户端断开后最多继续等待上游一小段时间，避免长时间占用连接。
-	suisuDisconnectedDrainTimeout = 8 * time.Second
 )
 
 // OpenAI allowed headers whitelist (for non-passthrough).
@@ -363,7 +360,6 @@ type OpenAIGatewayService struct {
 	balanceNotifyService  *BalanceNotifyService
 	settingService        *SettingService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
-	speedService          *SpeedService
 
 	openaiWSPoolOnce              sync.Once
 	openaiWSStateStoreOnce        sync.Once
@@ -410,7 +406,6 @@ func NewOpenAIGatewayService(
 	balanceNotifyService *BalanceNotifyService,
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
-	speedService *SpeedService,
 ) *OpenAIGatewayService {
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
@@ -444,7 +439,6 @@ func NewOpenAIGatewayService(
 		balanceNotifyService:  balanceNotifyService,
 		settingService:        settingService,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
-		speedService:          speedService,
 		responseHeaderFilter:  compileResponseHeaderFilter(cfg),
 		codexSnapshotThrottle: newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval),
 	}
@@ -557,16 +551,7 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
 		deferredService:       s.deferredService,
 		balanceNotifyService:  s.balanceNotifyService,
 		userPlatformQuotaRepo: s.userPlatformQuotaRepo,
-		speedService:          s.speedService,
-		cfg:                   s.cfg,
 	}
-}
-
-func (s *OpenAIGatewayService) RecordSpeedRefusedUsage(ctx context.Context, input *SpeedRefusedUsageInput) {
-	if s == nil {
-		return
-	}
-	recordSpeedRefusedUsageLog(ctx, s.usageLogRepo, input, "service.openai_gateway.speed_refused")
 }
 
 // CloseOpenAIWSPool 关闭 OpenAI WebSocket 连接池的后台 worker 和空闲连接。
@@ -1108,96 +1093,6 @@ func logOpenAIInstructionsRequiredDebug(
 	fields = appendCodexCLIOnlyRejectedRequestFields(fields, c, requestBody)
 
 	logger.FromContext(ctx).With(fields...).Warn("OpenAI 上游返回 Instructions are required，已记录请求详情用于排查")
-}
-
-func logOpenAIClaudeCodeRestriction403(ctx context.Context, c *gin.Context, account *Account, resp *http.Response, upstreamMsg string, upstreamBody []byte) {
-	upstreamStatusCode := 0
-	upstreamRequestID := ""
-	if resp != nil {
-		upstreamStatusCode = resp.StatusCode
-		upstreamRequestID = strings.TrimSpace(resp.Header.Get("x-request-id"))
-	}
-	msg := strings.TrimSpace(upstreamMsg)
-	if !isOpenAIClaudeCodeRestriction403(upstreamStatusCode, msg, upstreamBody) {
-		return
-	}
-	if ctx == nil {
-		if c != nil && c.Request != nil {
-			ctx = c.Request.Context()
-		} else {
-			ctx = context.Background()
-		}
-	}
-
-	accountID := int64(0)
-	accountName := ""
-	accountPlatform := ""
-	accountType := ""
-	baseURL := ""
-	if account != nil {
-		accountID = account.ID
-		accountName = strings.TrimSpace(account.Name)
-		accountPlatform = strings.TrimSpace(account.Platform)
-		accountType = strings.TrimSpace(account.Type)
-		baseURL = strings.TrimSpace(account.GetOpenAIBaseURL())
-	}
-
-	requestPath := ""
-	apiKeyID := int64(0)
-	groupID := int64(0)
-	if c != nil {
-		apiKeyID = getAPIKeyIDFromContext(c)
-		if c.Request != nil && c.Request.URL != nil {
-			requestPath = strings.TrimSpace(c.Request.URL.Path)
-		}
-		if apiKey := getAPIKeyFromContext(c); apiKey != nil {
-			groupID = derefGroupID(apiKey.GroupID)
-		}
-	}
-
-	fields := []zap.Field{
-		zap.String("component", "service.openai_gateway"),
-		zap.Int64("account_id", accountID),
-		zap.String("account_name", accountName),
-		zap.String("account_platform", accountPlatform),
-		zap.String("account_type", accountType),
-		zap.String("base_url", baseURL),
-		zap.Int64("api_key_id", apiKeyID),
-		zap.Int64("group_id", groupID),
-		zap.String("request_path", requestPath),
-		zap.Int("upstream_status_code", upstreamStatusCode),
-		zap.String("upstream_request_id", upstreamRequestID),
-		zap.String("upstream_error_message", msg),
-	}
-	if c != nil && c.Request != nil {
-		fields = append(fields,
-			zap.String("request_method", strings.TrimSpace(c.Request.Method)),
-			zap.String("request_user_agent", strings.TrimSpace(c.GetHeader("User-Agent"))),
-		)
-	}
-
-	logger.FromContext(ctx).With(fields...).Warn("openai.upstream_claude_code_restriction_403")
-}
-
-func isOpenAIClaudeCodeRestriction403(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
-	if upstreamStatusCode != http.StatusForbidden {
-		return false
-	}
-
-	match := func(text string) bool {
-		lower := strings.ToLower(strings.TrimSpace(text))
-		return strings.Contains(lower, "restricted to claude code")
-	}
-	if match(upstreamMsg) {
-		return true
-	}
-	if len(upstreamBody) == 0 {
-		return false
-	}
-	if match(string(upstreamBody)) {
-		return true
-	}
-	return match(gjson.GetBytes(upstreamBody, "error.message").String())
 }
 
 func isOpenAIInstructionsRequiredError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
@@ -2722,7 +2617,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": gin.H{
 				"type":    "forbidden_error",
-				"message": "This account only allows Codex official clients",
+				"message": CodexClientRestrictionMessage(restrictionResult),
 			},
 		})
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
@@ -3880,13 +3775,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		req.Header.Set("user-agent", codexCLIUserAgent)
 	}
 
-	// 浏览器型 UA 兜底：若最终 user-agent 仍为浏览器（Chrome/Firefox/Safari/Edge 等），
-	// 替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
+	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
+	// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
 	s.overrideBrowserUserAgent(ctx, account, req)
 
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
+
+	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
+	account.ApplyHeaderOverrides(req.Header)
 
 	return req, nil
 }
@@ -3921,7 +3819,6 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
-	logOpenAIClaudeCodeRestriction403(ctx, c, account, resp, upstreamMsg, body)
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
 	_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -3978,7 +3875,6 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
-	logOpenAIClaudeCodeRestriction403(ctx, c, account, resp, upstreamMsg, body)
 	// 透传模式保留原始上游错误响应，但运行态账号状态仍需更新，
 	// 避免粘性路由继续复用刚被限流的账号。cyber 例外：不冷却账号。
 	if !cyberHit {
@@ -4675,18 +4571,21 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		req.Header.Set("content-type", "application/json")
 	}
 
+	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
+	account.ApplyHeaderOverrides(req.Header)
+
 	return req, nil
 }
 
 // overrideBrowserUserAgent 检查请求的最终 user-agent，若为浏览器 UA 则替换为后台配置的 Codex UA。
-// 用于规避 Cloudflare 对浏览器型 UA 在 OpenAI/Codex 上游的访问质询。
-// 影响范围限定：仅 OpenAI OAuth 与 API Key 账号生效；其他平台账号原样透传。
+// 用于规避 Cloudflare 对浏览器型 UA 在 ChatGPT 内部接口上的访问质询。
+// 影响范围严格限定：仅 OAuth（Codex/ChatGPT 内部接口）账号生效；API Key 等其他账号原样透传。
 // 仅在识别为浏览器（Mozilla/...）时改写，其他 CLI/工具 UA 不动。
 func (s *OpenAIGatewayService) overrideBrowserUserAgent(ctx context.Context, account *Account, req *http.Request) {
 	if req == nil || account == nil {
 		return
 	}
-	if account.Platform != PlatformOpenAI || (account.Type != AccountTypeOAuth && account.Type != AccountTypeAPIKey) {
+	if account.Type != AccountTypeOAuth {
 		return
 	}
 	currentUA := req.Header.Get("user-agent")
@@ -4747,7 +4646,6 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
-	logOpenAIClaudeCodeRestriction403(ctx, c, account, resp, upstreamMsg, body)
 
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 		logger.LegacyPrintf("service.openai_gateway",
@@ -4942,7 +4840,6 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		upstreamDetail = truncateString(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
-	logOpenAIClaudeCodeRestriction403(context.TODO(), c, account, resp, upstreamMsg, body)
 
 	// Apply error passthrough rules
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
@@ -5128,29 +5025,6 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	// 否则下游 SDK（例如 OpenCode）会因为类型校验失败而报错。
 	errorEventSent := false
 	clientDisconnected := false // 客户端断开后继续 drain 上游以收集 usage
-	suisuRouted, _ := ctx.Value(ctxkey.SuisuRouted).(bool)
-	if suisuRouted && intervalCh == nil {
-		intervalTicker = time.NewTicker(suisuDisconnectedDrainTimeout)
-		defer intervalTicker.Stop()
-		intervalCh = intervalTicker.C
-		streamInterval = suisuDisconnectedDrainTimeout
-	}
-	disconnectDeadlineStarted := time.Time{}
-	markClientDisconnected := func(message string) {
-		clientDisconnected = true
-		if suisuRouted && disconnectDeadlineStarted.IsZero() {
-			disconnectDeadlineStarted = time.Now()
-		}
-		if message != "" {
-			logger.LegacyPrintf("service.openai_gateway", "%s", message)
-		}
-	}
-	disconnectDrainExpired := func() bool {
-		if !suisuRouted || !clientDisconnected {
-			return false
-		}
-		return time.Since(disconnectDeadlineStarted) >= suisuDisconnectedDrainTimeout
-	}
 	sawTerminalEvent := false
 	sawFailedEvent := false
 	failedMessage := ""
@@ -5164,15 +5038,15 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		errorEventSent = true
 		payload := `{"type":"error","sequence_number":0,"error":{"type":"upstream_error","message":` + strconv.Quote(reason) + `,"code":` + strconv.Quote(reason) + `}}`
 		if err := flushBuffered(); err != nil {
-			markClientDisconnected("")
+			clientDisconnected = true
 			return
 		}
 		if _, err := bufferedWriter.WriteString("data: " + payload + "\n\n"); err != nil {
-			markClientDisconnected("")
+			clientDisconnected = true
 			return
 		}
 		if err := flushBuffered(); err != nil {
-			markClientDisconnected("")
+			clientDisconnected = true
 			return
 		}
 		clientOutputStarted = true
@@ -5212,7 +5086,8 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		if !clientDisconnected {
 			hadBufferedData := bufferedWriter.Buffered() > 0
 			if err := flushBuffered(); err != nil {
-				markClientDisconnected("Client disconnected during final flush, returning collected usage")
+				clientDisconnected = true
+				logger.LegacyPrintf("service.openai_gateway", "Client disconnected during final flush, returning collected usage")
 			} else if hadBufferedData {
 				clientOutputStarted = true
 				lastDownstreamWriteAt = time.Now()
@@ -5337,12 +5212,15 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 					shouldFlush = true
 				}
 				if _, err := bufferedWriter.WriteString(line); err != nil {
-					markClientDisconnected("Client disconnected during streaming, continuing to drain upstream for billing")
+					clientDisconnected = true
+					logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 				} else if _, err := bufferedWriter.WriteString("\n"); err != nil {
-					markClientDisconnected("Client disconnected during streaming, continuing to drain upstream for billing")
+					clientDisconnected = true
+					logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 				} else if shouldFlush {
 					if err := flushBuffered(); err != nil {
-						markClientDisconnected("Client disconnected during streaming flush, continuing to drain upstream for billing")
+						clientDisconnected = true
+						logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming flush, continuing to drain upstream for billing")
 					} else {
 						clientOutputStarted = true
 						lastDownstreamWriteAt = time.Now()
@@ -5362,12 +5240,15 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		// Forward non-data lines as-is
 		if !clientDisconnected {
 			if _, err := bufferedWriter.WriteString(line); err != nil {
-				markClientDisconnected("Client disconnected during streaming, continuing to drain upstream for billing")
+				clientDisconnected = true
+				logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 			} else if _, err := bufferedWriter.WriteString("\n"); err != nil {
-				markClientDisconnected("Client disconnected during streaming, continuing to drain upstream for billing")
+				clientDisconnected = true
+				logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 			} else if queueDrained && clientOutputStarted {
 				if err := flushBuffered(); err != nil {
-					markClientDisconnected("Client disconnected during streaming flush, continuing to drain upstream for billing")
+					clientDisconnected = true
+					logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming flush, continuing to drain upstream for billing")
 				} else {
 					clientOutputStarted = true
 					lastDownstreamWriteAt = time.Now()
@@ -5383,9 +5264,6 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			processSSELine(scanner.Text(), true)
 			if streamFailoverErr != nil {
 				return resultWithUsage(), streamFailoverErr
-			}
-			if disconnectDrainExpired() {
-				return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect timeout")
 			}
 		}
 		if result, err, done := handleScanErr(scanner.Err()); done {
@@ -5439,22 +5317,13 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			if streamFailoverErr != nil {
 				return resultWithUsage(), streamFailoverErr
 			}
-			if disconnectDrainExpired() {
-				return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect timeout")
-			}
 
 		case <-intervalCh:
-			if suisuRouted && !clientDisconnected {
-				continue
-			}
 			lastRead := time.Unix(0, atomic.LoadInt64(&lastReadAt))
 			if time.Since(lastRead) < streamInterval {
 				continue
 			}
 			if clientDisconnected {
-				if suisuRouted {
-					return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect timeout")
-				}
 				return resultWithUsage(), fmt.Errorf("stream usage incomplete after timeout")
 			}
 			logger.LegacyPrintf("service.openai_gateway", "Stream data interval timeout: account=%d model=%s interval=%s", account.ID, originalModel, streamInterval)
@@ -5473,11 +5342,13 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				continue
 			}
 			if _, err := bufferedWriter.WriteString(":\n\n"); err != nil {
-				markClientDisconnected("Client disconnected during streaming, continuing to drain upstream for billing")
+				clientDisconnected = true
+				logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 				continue
 			}
 			if err := flushBuffered(); err != nil {
-				markClientDisconnected("Client disconnected during keepalive flush, continuing to drain upstream for billing")
+				clientDisconnected = true
+				logger.LegacyPrintf("service.openai_gateway", "Client disconnected during keepalive flush, continuing to drain upstream for billing")
 			} else {
 				lastDownstreamWriteAt = time.Now()
 			}
@@ -5797,7 +5668,13 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if isEventStreamResponse(resp.Header) {
 		return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel)
 	}
-	bodyLooksLikeSSE := bytes.Contains(body, []byte("data:")) || bytes.Contains(body, []byte("event:"))
+	// bodyLooksLikeSSE is a line-level heuristic: real SSE framing requires
+	// "data:"/"event:" field names at the very start of a physical line. A
+	// plain bytes.Contains scan would also match ordinary JSON responses
+	// whose string content merely echoes the literal text "data:" or
+	// "event:" (e.g. compact tool output), causing those JSON bodies to be
+	// misrouted into handleSSEToJSON and lose their usage accounting.
+	bodyLooksLikeSSE := bodyHasSSEFraming(body)
 
 	// For OAuth accounts, also fall back to a body-content heuristic because
 	// the upstream may omit the Content-Type header while still sending SSE.
@@ -5845,6 +5722,22 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 func isEventStreamResponse(header http.Header) bool {
 	contentType := strings.ToLower(header.Get("Content-Type"))
 	return strings.Contains(contentType, "text/event-stream")
+}
+
+// bodyHasSSEFraming reports whether body contains genuine SSE framing by
+// scanning for physical lines that begin with the "data:" or "event:"
+// field names, per the SSE spec. Unlike a raw substring scan, this does not
+// match when those strings only appear embedded inside JSON string values
+// (e.g. "data: foo" quoted as part of an assistant text field), since such
+// occurrences never start a physical line in a valid JSON encoding.
+func bodyHasSSEFraming(body []byte) bool {
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimRight(line, "\r")
+		if bytes.HasPrefix(line, []byte("data:")) || bytes.HasPrefix(line, []byte("event:")) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Context, body []byte, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {
@@ -6393,7 +6286,6 @@ type OpenAIRecordUsageInput struct {
 	IPAddress          string // 请求的客户端 IP 地址
 	RequestPayloadHash string
 	APIKeyService      APIKeyQuotaUpdater
-	ScheduledGroupID   *int64
 	QuotaPlatform      string // user×platform quota platform resolved by the handler before async billing.
 	// CyberBlocked 为 true 时把该用量行标记为 cyber（request_type=cyber），计费逻辑不变。
 	CyberBlocked bool
@@ -6655,16 +6547,11 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if subscription != nil {
 		usageLog.SubscriptionID = &subscription.ID
 	}
-	ApplySpeedUsageMetadataFromContext(ctx, usageLog)
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
-	accountStatsGroupID := apiKey.GroupID
-	if input.ScheduledGroupID != nil {
-		accountStatsGroupID = input.ScheduledGroupID
-	}
-	if accountStatsGroupID != nil {
+	if apiKey.GroupID != nil {
 		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
-			account.ID, *accountStatsGroupID, result.UpstreamModel, result.Model,
+			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
 			tokens, cost.TotalCost,
 		)
 	}
@@ -6695,7 +6582,6 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			AccountRateMultiplier: accountRateMultiplier,
 			APIKeyService:         input.APIKeyService,
 			Platform:              quotaPlatform,
-			SpeedService:          s.speedService,
 		}, s.billingDeps(), s.usageBillingRepo)
 		return err
 	}()

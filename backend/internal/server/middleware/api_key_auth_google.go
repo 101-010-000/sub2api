@@ -155,7 +155,7 @@ func APIKeyAuthWithSubscriptionGoogleWithRuntime(apiKeyService *service.APIKeySe
 				subscriptionService.DoWindowMaintenance(&maintenanceCopy)
 			}
 		} else {
-			if apiKey.User.Balance <= 0 {
+			if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 				abortWithGoogleError(c, 403, "Insufficient account balance")
 				return
 			}

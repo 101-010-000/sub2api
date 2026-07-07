@@ -93,6 +93,9 @@ func (Group) Fields() []ent.Field {
 		field.Bool("allow_image_generation").
 			Default(false).
 			Comment("是否允许该分组使用图片生成能力"),
+		field.Bool("allow_batch_image_generation").
+			Default(false).
+			Comment("是否允许该分组使用批量图片生成能力"),
 		field.Bool("image_rate_independent").
 			Default(false).
 			Comment("图片生成是否使用独立倍率；false 表示共享分组有效倍率"),
@@ -112,6 +115,14 @@ func (Group) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("batch_image_discount_multiplier").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Default(0.5).
+			Comment("批量图片生成折扣倍率，最终单价会乘以该值；0 表示免费"),
+		field.Float("batch_image_hold_multiplier").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Default(0.6).
+			Comment("批量图片生成冻结价格比例，按普通生图原价乘以该比例冻结，结算后释放差额"),
 
 		// Claude Code 客户端限制 (added by migration 029)
 		field.Bool("claude_code_only").
@@ -180,23 +191,6 @@ func (Group) Fields() []ent.Field {
 		field.Int("rpm_limit").
 			Default(0).
 			Comment("分组 RPM 上限，0 表示不限制；设置后接管该分组用户的限流"),
-
-		// 随速通配置：后台隐藏备用 OpenAI 分组路由。
-		field.Bool("suisu_enabled").
-			Default(false).
-			Comment("是否启用随速通备用分组路由"),
-		field.Int64("suisu_fallback_group_id").
-			Optional().
-			Nillable().
-			Comment("随速通备用 OpenAI 分组 ID"),
-		field.Float("suisu_slow_route_ratio").
-			SchemaType(map[string]string{dialect.Postgres: "decimal(6,4)"}).
-			Default(0.0).
-			Comment("优速通 slow 态路由到随速通的比例，0-1"),
-		field.Float("suisu_busy_route_ratio").
-			SchemaType(map[string]string{dialect.Postgres: "decimal(6,4)"}).
-			Default(0.0).
-			Comment("主池繁忙/无账号时路由到随速通的比例，0-1"),
 	}
 }
 

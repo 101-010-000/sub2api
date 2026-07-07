@@ -15,21 +15,12 @@ func ptrString[T ~string](v T) *string {
 	return &s
 }
 
-func ptrFloat64ForGroupTest(v float64) *float64 {
-	return &v
-}
-
-func ptrIntForGroupTest(v int) *int {
-	return &v
-}
-
 // groupRepoStubForAdmin 用于测试 AdminService 的 GroupRepository Stub
 type groupRepoStubForAdmin struct {
 	created *Group // 记录 Create 调用的参数
 	updated *Group // 记录 Update 调用的参数
 	getByID *Group // GetByID 返回值
 	getErr  error  // GetByID 返回的错误
-	groups  map[int64]*Group
 
 	listWithFiltersCalls       int
 	listWithFiltersParams      pagination.PaginationParams
@@ -52,19 +43,16 @@ func (s *groupRepoStubForAdmin) Update(_ context.Context, g *Group) error {
 	return nil
 }
 
-func (s *groupRepoStubForAdmin) GetByID(ctx context.Context, id int64) (*Group, error) {
-	return s.GetByIDLite(ctx, id)
-}
-
-func (s *groupRepoStubForAdmin) GetByIDLite(_ context.Context, id int64) (*Group, error) {
+func (s *groupRepoStubForAdmin) GetByID(_ context.Context, _ int64) (*Group, error) {
 	if s.getErr != nil {
 		return nil, s.getErr
 	}
-	if s.groups != nil {
-		if g, ok := s.groups[id]; ok {
-			return g, nil
-		}
-		return nil, ErrGroupNotFound
+	return s.getByID, nil
+}
+
+func (s *groupRepoStubForAdmin) GetByIDLite(_ context.Context, _ int64) (*Group, error) {
+	if s.getErr != nil {
+		return nil, s.getErr
 	}
 	return s.getByID, nil
 }
@@ -210,228 +198,6 @@ func TestAdminService_CreateGroup_NilImagePricing(t *testing.T) {
 	require.Nil(t, repo.created.ImagePrice4K)
 }
 
-func TestAdminService_CreateGroup_PreservesExplicitZeroSpeedConfig(t *testing.T) {
-	repo := &groupRepoStubForAdmin{}
-	svc := &adminServiceImpl{groupRepo: repo}
-
-	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
-		Name:                       "speed-zero",
-		Platform:                   PlatformOpenAI,
-		RateMultiplier:             1.0,
-		SubscriptionType:           SubscriptionTypeSubscription,
-		SpeedConfigEnabled:         true,
-		DefaultFastQuotaRatio:      ptrFloat64ForGroupTest(0),
-		MinFastQuotaRatio:          ptrFloat64ForGroupTest(0),
-		MaxFastQuotaRatio:          ptrFloat64ForGroupTest(0),
-		DefaultSlowDelayMinSeconds: ptrIntForGroupTest(0),
-		DefaultSlowDelayMaxSeconds: ptrIntForGroupTest(0),
-		MaxSlowDelaySeconds:        ptrIntForGroupTest(0),
-		DefaultSlowRejectRate:      ptrFloat64ForGroupTest(0),
-		MaxSlowRejectRate:          ptrFloat64ForGroupTest(0),
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, group)
-	require.NotNil(t, repo.created)
-	require.Equal(t, 0.0, repo.created.DefaultFastQuotaRatio)
-	require.Equal(t, 0.0, repo.created.MinFastQuotaRatio)
-	require.Equal(t, 0.0, repo.created.MaxFastQuotaRatio)
-	require.Equal(t, 0, repo.created.DefaultSlowDelayMinSeconds)
-	require.Equal(t, 0, repo.created.DefaultSlowDelayMaxSeconds)
-	require.Equal(t, 0, repo.created.MaxSlowDelaySeconds)
-	require.Equal(t, 0.0, repo.created.DefaultSlowRejectRate)
-	require.Equal(t, 0.0, repo.created.MaxSlowRejectRate)
-}
-
-func TestAdminService_UpdateGroup_PreservesExplicitZeroSpeedConfig(t *testing.T) {
-	repo := &groupRepoStubForAdmin{
-		getByID: &Group{
-			ID:                         1,
-			Name:                       "speed",
-			Platform:                   PlatformOpenAI,
-			RateMultiplier:             1,
-			Status:                     StatusActive,
-			SubscriptionType:           SubscriptionTypeSubscription,
-			SpeedConfigEnabled:         true,
-			DefaultFastQuotaRatio:      0.3,
-			MinFastQuotaRatio:          0.1,
-			MaxFastQuotaRatio:          0.8,
-			DefaultSlowDelayMinSeconds: 1,
-			DefaultSlowDelayMaxSeconds: 5,
-			MaxSlowDelaySeconds:        30,
-			DefaultSlowRejectRate:      0.5,
-			MaxSlowRejectRate:          0.5,
-		},
-	}
-	svc := &adminServiceImpl{groupRepo: repo}
-
-	group, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{
-		DefaultFastQuotaRatio:      ptrFloat64ForGroupTest(0),
-		MinFastQuotaRatio:          ptrFloat64ForGroupTest(0),
-		MaxFastQuotaRatio:          ptrFloat64ForGroupTest(0),
-		DefaultSlowDelayMinSeconds: ptrIntForGroupTest(0),
-		DefaultSlowDelayMaxSeconds: ptrIntForGroupTest(0),
-		MaxSlowDelaySeconds:        ptrIntForGroupTest(0),
-		DefaultSlowRejectRate:      ptrFloat64ForGroupTest(0),
-		MaxSlowRejectRate:          ptrFloat64ForGroupTest(0),
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, group)
-	require.NotNil(t, repo.updated)
-	require.Equal(t, 0.0, repo.updated.DefaultFastQuotaRatio)
-	require.Equal(t, 0.0, repo.updated.MinFastQuotaRatio)
-	require.Equal(t, 0.0, repo.updated.MaxFastQuotaRatio)
-	require.Equal(t, 0, repo.updated.DefaultSlowDelayMinSeconds)
-	require.Equal(t, 0, repo.updated.DefaultSlowDelayMaxSeconds)
-	require.Equal(t, 0, repo.updated.MaxSlowDelaySeconds)
-	require.Equal(t, 0.0, repo.updated.DefaultSlowRejectRate)
-	require.Equal(t, 0.0, repo.updated.MaxSlowRejectRate)
-}
-
-func TestAdminService_NormalizeAndValidateSuisuGroup(t *testing.T) {
-	fallbackID := int64(20)
-	selfID := int64(10)
-	nextID := int64(30)
-
-	tests := []struct {
-		name        string
-		currentID   int64
-		group       *Group
-		groups      map[int64]*Group
-		wantMessage string
-	}{
-		{
-			name: "disabled_allows_empty_fallback",
-			group: &Group{
-				Platform:            PlatformAnthropic,
-				SuisuEnabled:        false,
-				SuisuSlowRouteRatio: 1,
-				SuisuBusyRouteRatio: 0,
-			},
-		},
-		{
-			name: "ratio_below_zero_rejected",
-			group: &Group{
-				Platform:            PlatformOpenAI,
-				SuisuEnabled:        false,
-				SuisuSlowRouteRatio: -0.01,
-			},
-			wantMessage: "suisu route ratio must be between 0 and 1",
-		},
-		{
-			name: "ratio_above_one_rejected",
-			group: &Group{
-				Platform:            PlatformOpenAI,
-				SuisuEnabled:        false,
-				SuisuBusyRouteRatio: 1.01,
-			},
-			wantMessage: "suisu route ratio must be between 0 and 1",
-		},
-		{
-			name: "non_openai_source_rejected",
-			group: &Group{
-				Platform:             PlatformAnthropic,
-				SuisuEnabled:         true,
-				SuisuFallbackGroupID: &fallbackID,
-			},
-			wantMessage: "suisu only supports openai groups",
-		},
-		{
-			name: "missing_fallback_rejected",
-			group: &Group{
-				Platform:     PlatformOpenAI,
-				SuisuEnabled: true,
-			},
-			wantMessage: "suisu fallback group is required",
-		},
-		{
-			name:      "self_fallback_rejected",
-			currentID: selfID,
-			group: &Group{
-				ID:                   selfID,
-				Platform:             PlatformOpenAI,
-				SuisuEnabled:         true,
-				SuisuFallbackGroupID: &selfID,
-			},
-			wantMessage: "cannot set self as suisu fallback group",
-		},
-		{
-			name:      "inactive_fallback_rejected",
-			currentID: selfID,
-			group: &Group{
-				ID:                   selfID,
-				Platform:             PlatformOpenAI,
-				SuisuEnabled:         true,
-				SuisuFallbackGroupID: &fallbackID,
-			},
-			groups: map[int64]*Group{
-				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusDisabled},
-			},
-			wantMessage: "suisu fallback group must be active",
-		},
-		{
-			name:      "non_openai_fallback_rejected",
-			currentID: selfID,
-			group: &Group{
-				ID:                   selfID,
-				Platform:             PlatformOpenAI,
-				SuisuEnabled:         true,
-				SuisuFallbackGroupID: &fallbackID,
-			},
-			groups: map[int64]*Group{
-				fallbackID: {ID: fallbackID, Platform: PlatformAnthropic, Status: StatusActive},
-			},
-			wantMessage: "suisu fallback group must be openai platform",
-		},
-		{
-			name:      "cycle_rejected",
-			currentID: selfID,
-			group: &Group{
-				ID:                   selfID,
-				Platform:             PlatformOpenAI,
-				SuisuEnabled:         true,
-				SuisuFallbackGroupID: &fallbackID,
-			},
-			groups: map[int64]*Group{
-				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusActive, SuisuFallbackGroupID: &nextID},
-				nextID:     {ID: nextID, Platform: PlatformOpenAI, Status: StatusActive, SuisuFallbackGroupID: &selfID},
-			},
-			wantMessage: "suisu fallback group cycle detected",
-		},
-		{
-			name:      "valid_openai_fallback",
-			currentID: selfID,
-			group: &Group{
-				ID:                   selfID,
-				Platform:             PlatformOpenAI,
-				SuisuEnabled:         true,
-				SuisuFallbackGroupID: &fallbackID,
-				SuisuSlowRouteRatio:  1,
-				SuisuBusyRouteRatio:  0.5,
-			},
-			groups: map[int64]*Group{
-				fallbackID: {ID: fallbackID, Platform: PlatformOpenAI, Status: StatusActive},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := &groupRepoStubForAdmin{groups: tt.groups}
-			svc := &adminServiceImpl{groupRepo: repo}
-
-			err := svc.normalizeAndValidateSuisuGroup(context.Background(), tt.currentID, tt.group)
-			if tt.wantMessage != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.wantMessage)
-				return
-			}
-			require.NoError(t, err)
-		})
-	}
-}
-
 func TestAdminService_CreateGroup_DefaultsGrokMediaGenerationEnabled(t *testing.T) {
 	repo := &groupRepoStubForAdmin{}
 	svc := &adminServiceImpl{groupRepo: repo}
@@ -464,6 +230,46 @@ func TestAdminService_CreateGroup_PreservesNonGrokImageGenerationDisabled(t *tes
 	require.NotNil(t, repo.created)
 	require.False(t, repo.created.AllowImageGeneration)
 	require.False(t, group.AllowImageGeneration)
+}
+
+func TestAdminService_CreateGroup_DisablesBatchImageWhenImageGenerationDisabled(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:                      "gemini-no-image",
+		Description:               "Gemini group without image generation",
+		Platform:                  PlatformGemini,
+		RateMultiplier:            1.0,
+		AllowImageGeneration:      false,
+		AllowBatchImageGeneration: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.NotNil(t, repo.created)
+	require.False(t, repo.created.AllowImageGeneration)
+	require.False(t, repo.created.AllowBatchImageGeneration)
+	require.False(t, group.AllowBatchImageGeneration)
+}
+
+func TestAdminService_CreateGroup_DisablesBatchImageForNonGeminiPlatform(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:                      "openai-image",
+		Description:               "OpenAI image group",
+		Platform:                  PlatformOpenAI,
+		RateMultiplier:            1.0,
+		AllowImageGeneration:      true,
+		AllowBatchImageGeneration: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.NotNil(t, repo.created)
+	require.True(t, repo.created.AllowImageGeneration)
+	require.False(t, repo.created.AllowBatchImageGeneration)
+	require.False(t, group.AllowBatchImageGeneration)
 }
 
 // TestAdminService_UpdateGroup_WithImagePricing 测试更新分组时 ImagePrice 字段正确更新
@@ -560,6 +366,53 @@ func TestAdminService_UpdateGroup_PreservesImageGenerationControlsWhenOmitted(t 
 	require.InDelta(t, 0.5, repo.updated.ImageRateMultiplier, 1e-12)
 }
 
+func TestAdminService_UpdateGroup_DisablesBatchImageWhenImageGenerationDisabled(t *testing.T) {
+	existingGroup := &Group{
+		ID:                        1,
+		Name:                      "existing-gemini",
+		Platform:                  PlatformGemini,
+		Status:                    StatusActive,
+		AllowImageGeneration:      true,
+		AllowBatchImageGeneration: true,
+	}
+	repo := &groupRepoStubForAdmin{getByID: existingGroup}
+	svc := &adminServiceImpl{groupRepo: repo}
+	disabled := false
+
+	group, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{
+		AllowImageGeneration: &disabled,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.NotNil(t, repo.updated)
+	require.False(t, repo.updated.AllowImageGeneration)
+	require.False(t, repo.updated.AllowBatchImageGeneration)
+	require.False(t, group.AllowBatchImageGeneration)
+}
+
+func TestAdminService_UpdateGroup_DisablesBatchImageWhenPlatformChangesFromGemini(t *testing.T) {
+	existingGroup := &Group{
+		ID:                        1,
+		Name:                      "existing-gemini",
+		Platform:                  PlatformGemini,
+		Status:                    StatusActive,
+		AllowImageGeneration:      true,
+		AllowBatchImageGeneration: true,
+	}
+	repo := &groupRepoStubForAdmin{getByID: existingGroup}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{
+		Platform: PlatformOpenAI,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.NotNil(t, repo.updated)
+	require.Equal(t, PlatformOpenAI, repo.updated.Platform)
+	require.False(t, repo.updated.AllowBatchImageGeneration)
+	require.False(t, group.AllowBatchImageGeneration)
+}
+
 func TestAdminService_UpdateGroup_ClearsDescriptionWhenEmptyString(t *testing.T) {
 	existingGroup := &Group{
 		ID:          1,
@@ -616,6 +469,58 @@ func TestAdminService_UpdateGroup_RejectsNegativeImageRateMultiplier(t *testing.
 	})
 	require.Error(t, err)
 	require.Nil(t, repo.updated)
+}
+
+func TestAdminService_CreateGroup_BatchImagePricingSettings(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+	discount := 0.8
+	hold := 0.6
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:                         "batch-image-pricing",
+		Platform:                     PlatformGemini,
+		RateMultiplier:               1,
+		BatchImageDiscountMultiplier: &discount,
+		BatchImageHoldMultiplier:     &hold,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.NotNil(t, repo.created)
+	require.InDelta(t, 0.8, repo.created.BatchImageDiscountMultiplier, 1e-12)
+	require.InDelta(t, 0.6, repo.created.BatchImageHoldMultiplier, 1e-12)
+}
+
+func TestAdminService_GroupBatchImagePricingValidation(t *testing.T) {
+	tests := []struct {
+		name  string
+		input *CreateGroupInput
+	}{
+		{
+			name: "negative_discount",
+			input: func() *CreateGroupInput {
+				v := -0.1
+				return &CreateGroupInput{Name: "bad-discount", RateMultiplier: 1, BatchImageDiscountMultiplier: &v}
+			}(),
+		},
+		{
+			name: "negative_hold",
+			input: func() *CreateGroupInput {
+				v := -0.1
+				return &CreateGroupInput{Name: "bad-hold", RateMultiplier: 1, BatchImageHoldMultiplier: &v}
+			}(),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &groupRepoStubForAdmin{}
+			svc := &adminServiceImpl{groupRepo: repo}
+
+			_, err := svc.CreateGroup(context.Background(), tt.input)
+			require.Error(t, err)
+			require.Nil(t, repo.created)
+		})
+	}
 }
 
 func TestAdminService_UpdateGroup_InvalidatesAuthCacheOnRPMLimitChange(t *testing.T) {

@@ -133,79 +133,6 @@ func TestOpenAIHandleStreamingAwareError_NonStreaming(t *testing.T) {
 	assert.Equal(t, "test error", errorObj["message"])
 }
 
-func TestResolveSuisuGroupID(t *testing.T) {
-	fallbackID := int64(200)
-
-	t.Run("disabled", func(t *testing.T) {
-		got := resolveSuisuGroupID(&service.Group{
-			SuisuEnabled:         false,
-			SuisuFallbackGroupID: &fallbackID,
-			SuisuSlowRouteRatio:  1,
-		}, "slow")
-		require.Nil(t, got)
-	})
-
-	t.Run("slow_ratio_zero_misses", func(t *testing.T) {
-		got := resolveSuisuGroupID(&service.Group{
-			SuisuEnabled:         true,
-			SuisuFallbackGroupID: &fallbackID,
-			SuisuSlowRouteRatio:  0,
-		}, "slow")
-		require.Nil(t, got)
-	})
-
-	t.Run("slow_ratio_one_hits", func(t *testing.T) {
-		got := resolveSuisuGroupID(&service.Group{
-			SuisuEnabled:         true,
-			SuisuFallbackGroupID: &fallbackID,
-			SuisuSlowRouteRatio:  1,
-		}, "slow")
-		require.NotNil(t, got)
-		require.Equal(t, fallbackID, *got)
-	})
-
-	t.Run("busy_ratio_one_hits", func(t *testing.T) {
-		got := resolveSuisuGroupID(&service.Group{
-			SuisuEnabled:         true,
-			SuisuFallbackGroupID: &fallbackID,
-			SuisuBusyRouteRatio:  1,
-		}, "busy")
-		require.NotNil(t, got)
-		require.Equal(t, fallbackID, *got)
-	})
-
-	t.Run("unknown_reason_misses", func(t *testing.T) {
-		got := resolveSuisuGroupID(&service.Group{
-			SuisuEnabled:         true,
-			SuisuFallbackGroupID: &fallbackID,
-			SuisuSlowRouteRatio:  1,
-			SuisuBusyRouteRatio:  1,
-		}, "other")
-		require.Nil(t, got)
-	})
-}
-
-func TestOpenAIFinalizeSpeedDecisionSlowReject(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, EndpointResponses, nil)
-
-	h := &OpenAIGatewayHandler{}
-	ok := h.finalizeOpenAISpeedDecision(c, openAISpeedDecisionResult{
-		OK: true,
-		Decision: &service.SpeedDecision{
-			State:    service.SpeedStateSlow,
-			Rejected: true,
-		},
-		Err: service.ErrSpeedSlowRejected,
-	}, false, nil, nil, false)
-
-	require.False(t, ok)
-	require.Equal(t, http.StatusTooManyRequests, w.Code)
-	require.Contains(t, w.Body.String(), service.DefaultSpeedSlowRejectMessage)
-}
-
 func TestReadRequestBodyWithPrealloc(t *testing.T) {
 	payload := `{"model":"gpt-5","input":"hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(payload))
@@ -913,26 +840,14 @@ func (r *contentModerationHandlerSettingRepo) Delete(ctx context.Context, key st
 }
 
 type contentModerationHandlerTestRepo struct {
-	mu            sync.Mutex
-	logs          []service.ContentModerationLog
-	nextLogID     int64
-	profiles      map[int64]service.ContentModerationUserRiskProfile
-	events        []service.ContentModerationUserRiskEvent
-	contexts      []service.ContentModerationContext
-	nextContextID int64
+	mu   sync.Mutex
+	logs []service.ContentModerationLog
 }
 
 func (r *contentModerationHandlerTestRepo) CreateLog(ctx context.Context, log *service.ContentModerationLog) error {
 	if log != nil {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if log.ID <= 0 {
-			r.nextLogID++
-			log.ID = r.nextLogID
-		}
-		if log.CreatedAt.IsZero() {
-			log.CreatedAt = time.Now()
-		}
 		r.logs = append(r.logs, *log)
 	}
 	return nil
@@ -958,122 +873,8 @@ func (r *contentModerationHandlerTestRepo) CountFlaggedByUserSince(ctx context.C
 	return 0, nil
 }
 
-func (r *contentModerationHandlerTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time, contextBefore time.Time) (*service.ContentModerationCleanupResult, error) {
+func (r *contentModerationHandlerTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*service.ContentModerationCleanupResult, error) {
 	return &service.ContentModerationCleanupResult{}, nil
-}
-
-func (r *contentModerationHandlerTestRepo) UpsertUserBan(ctx context.Context, ban *service.ContentModerationUserBan) error {
-	return nil
-}
-
-func (r *contentModerationHandlerTestRepo) GetActiveUserBan(ctx context.Context, userID int64, now time.Time) (*service.ContentModerationUserBan, error) {
-	return nil, nil
-}
-
-func (r *contentModerationHandlerTestRepo) ClearUserBan(ctx context.Context, userID int64, now time.Time) error {
-	return nil
-}
-
-func (r *contentModerationHandlerTestRepo) CountSelfUnbanAttempts(ctx context.Context, userID int64, since time.Time) (int, error) {
-	return 0, nil
-}
-
-func (r *contentModerationHandlerTestRepo) CreateSelfUnbanRecord(ctx context.Context, record *service.ContentModerationSelfUnbanRecord) error {
-	return nil
-}
-
-func (r *contentModerationHandlerTestRepo) GetUserRiskProfile(ctx context.Context, userID int64) (*service.ContentModerationUserRiskProfile, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.profiles == nil {
-		return nil, nil
-	}
-	profile, ok := r.profiles[userID]
-	if !ok {
-		return nil, nil
-	}
-	return &profile, nil
-}
-
-func (r *contentModerationHandlerTestRepo) UpsertUserRiskProfile(ctx context.Context, profile *service.ContentModerationUserRiskProfile) error {
-	if profile == nil || profile.UserID <= 0 {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.profiles == nil {
-		r.profiles = map[int64]service.ContentModerationUserRiskProfile{}
-	}
-	r.profiles[profile.UserID] = *profile
-	return nil
-}
-
-func (r *contentModerationHandlerTestRepo) CreateUserRiskEvent(ctx context.Context, event *service.ContentModerationUserRiskEvent) error {
-	if event == nil || event.UserID <= 0 {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	clone := *event
-	if clone.ID <= 0 {
-		clone.ID = int64(len(r.events) + 1)
-	}
-	r.events = append(r.events, clone)
-	return nil
-}
-
-func (r *contentModerationHandlerTestRepo) ListUserRiskEvents(ctx context.Context, userID int64, limit int) ([]service.ContentModerationUserRiskEvent, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]service.ContentModerationUserRiskEvent, 0)
-	for i := len(r.events) - 1; i >= 0; i-- {
-		if r.events[i].UserID != userID {
-			continue
-		}
-		out = append(out, r.events[i])
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-	}
-	return out, nil
-}
-
-func (r *contentModerationHandlerTestRepo) CreateContext(ctx context.Context, item *service.ContentModerationContext) error {
-	if item == nil {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if item.ID <= 0 {
-		r.nextContextID++
-		item.ID = r.nextContextID
-	}
-	r.contexts = append(r.contexts, *item)
-	return nil
-}
-
-func (r *contentModerationHandlerTestRepo) ClaimPendingContexts(ctx context.Context, batchSize int) ([]service.ContentModerationContext, error) {
-	return nil, nil
-}
-
-func (r *contentModerationHandlerTestRepo) UpdateContextReview(ctx context.Context, update service.ContentModerationContextReviewUpdate) error {
-	return nil
-}
-
-func (r *contentModerationHandlerTestRepo) CountContextsByStatus(ctx context.Context) (*service.ContentModerationContextStatusCounts, error) {
-	return &service.ContentModerationContextStatusCounts{}, nil
-}
-
-func (r *contentModerationHandlerTestRepo) ListUserContexts(ctx context.Context, userID int64, limit int) ([]service.ContentModerationContext, error) {
-	return nil, nil
-}
-
-func (r *contentModerationHandlerTestRepo) GetContextByID(ctx context.Context, contextID int64) (*service.ContentModerationContext, error) {
-	return nil, nil
-}
-
-func (r *contentModerationHandlerTestRepo) CreateContextAccessLog(ctx context.Context, contextID int64, adminUserID int64, action string) error {
-	return nil
 }
 
 func (r *contentModerationHandlerTestRepo) UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error {
@@ -1115,13 +916,6 @@ func TestOpenAIResponsesWebSocket_ContentModerationBlocksFirstFrame(t *testing.T
 		nil,
 		nil,
 		nil,
-		nil, // openAITokenProvider
-		nil, // resolver
-		nil, // channelService
-		nil, // balanceNotifyService
-		nil, // settingService
-		nil, // userPlatformQuotaRepo
-		nil, // speedService
 	)
 	decision, err := moderationSvc.Check(context.Background(), service.ContentModerationCheckInput{
 		UserID:   1,
@@ -1605,14 +1399,13 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		billingCacheSvc,
 		nil,
 		&service.DeferredService{},
-		nil, // openAITokenProvider
-		nil, // grokTokenProvider
-		nil, // resolver
-		nil, // channelService
-		nil, // balanceNotifyService
-		nil, // settingService
-		nil, // userPlatformQuotaRepo
-		nil, // speedService
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 
 	cache := &concurrencyCacheMock{
@@ -1800,7 +1593,6 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		nil,
 		nil,
 		nil, // userPlatformQuotaRepo
-		nil, // speedService
 	)
 
 	cache := &concurrencyCacheMock{

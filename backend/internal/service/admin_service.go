@@ -71,7 +71,6 @@ type AdminService interface {
 
 	// API Key management (admin)
 	AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error)
-	AdminUpdateAPIKeyRuntimeLimits(ctx context.Context, keyID int64, input AdminUpdateAPIKeyRuntimeLimitsInput) (*APIKey, error)
 	AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error)
 
 	// ReplaceUserGroup 替换用户的专属分组：授予新分组权限、迁移 Key、移除旧分组权限
@@ -79,6 +78,12 @@ type AdminService interface {
 
 	// Account management
 	ListAccounts(ctx context.Context, page, pageSize int, platform, accountType, status, search string, groupID int64, privacyMode string, sortBy, sortOrder string) ([]Account, int64, error)
+	// ListAccountsForSchedulerScoreFilter 返回符合过滤条件的全部账号（不分页），
+	// 作为账号列表页计算 OpenAI 调度分数的过滤范围池。
+	ListAccountsForSchedulerScoreFilter(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) ([]Account, error)
+	// ListOpenAISchedulableAccountsForSchedulerScore 返回指定分组（nil 为未分组）内
+	// 可调度的 OpenAI 账号，用于按组计算调度分数。
+	ListOpenAISchedulableAccountsForSchedulerScore(ctx context.Context, groupID *int64) ([]Account, error)
 	GetAccount(ctx context.Context, id int64) (*Account, error)
 	GetAccountsByIDs(ctx context.Context, ids []int64) ([]*Account, error)
 	CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error)
@@ -136,32 +141,26 @@ type AdminService interface {
 
 // CreateUserInput represents input for creating a new user via admin operations.
 type CreateUserInput struct {
-	Email                     string
-	Password                  string
-	Username                  string
-	Notes                     string
-	AdminPermissions          *[]string
-	Balance                   *float64
-	Concurrency               int
-	RPMLimit                  int
-	APIKeyMaxActiveIPs        int
-	APIKeyMaxActiveIPsVisible bool
-	AllowedGroups             []int64
+	Email         string
+	Password      string
+	Username      string
+	Notes         string
+	Balance       *float64
+	Concurrency   int
+	RPMLimit      int
+	AllowedGroups []int64
 }
 
 type UpdateUserInput struct {
-	Email                     string
-	Password                  string
-	Username                  *string
-	Notes                     *string
-	AdminPermissions          *[]string
-	Balance                   *float64 // 使用指针区分"未提供"和"设置为0"
-	Concurrency               *int     // 使用指针区分"未提供"和"设置为0"
-	RPMLimit                  *int     // 使用指针区分"未提供"和"设置为0"
-	APIKeyMaxActiveIPs        *int     // 使用指针区分"未提供"和"设置为0"
-	APIKeyMaxActiveIPsVisible *bool    // 使用指针区分"未提供"和"设置为 false"
-	Status                    string
-	AllowedGroups             *[]int64 // 使用指针区分"未提供"和"设置为空数组"
+	Email         string
+	Password      string
+	Username      *string
+	Notes         *string
+	Balance       *float64 // 使用指针区分"未提供"和"设置为0"
+	Concurrency   *int     // 使用指针区分"未提供"和"设置为0"
+	RPMLimit      *int     // 使用指针区分"未提供"和"设置为0"
+	Status        string
+	AllowedGroups *[]int64 // 使用指针区分"未提供"和"设置为空数组"
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64
@@ -216,9 +215,12 @@ type CreateGroupInput struct {
 	WeeklyLimitUSD   *float64 // 周限额 (USD)
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
-	AllowImageGeneration bool
-	ImageRateIndependent bool
-	ImageRateMultiplier  *float64
+	AllowImageGeneration         bool
+	AllowBatchImageGeneration    bool
+	ImageRateIndependent         bool
+	ImageRateMultiplier          *float64
+	BatchImageDiscountMultiplier *float64
+	BatchImageHoldMultiplier     *float64
 	// 高峰时段倍率配置（PeakRateMultiplier 为 nil 时按 1.0 处理）
 	PeakRateEnabled    bool
 	PeakStart          string
@@ -246,23 +248,6 @@ type CreateGroupInput struct {
 	ModelsListConfig            GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制）
 	RPMLimit int
-	// 优速通配置
-	SpeedConfigEnabled         bool
-	UserSpeedConfigAllowed     bool
-	DefaultFastQuotaRatio      *float64
-	MinFastQuotaRatio          *float64
-	MaxFastQuotaRatio          *float64
-	DefaultSlowDelayMinSeconds *int
-	DefaultSlowDelayMaxSeconds *int
-	MaxSlowDelaySeconds        *int
-	DefaultSlowRejectRate      *float64
-	MaxSlowRejectRate          *float64
-	SpeedSlowRejectMessage     string
-	// 随速通配置
-	SuisuEnabled         bool
-	SuisuFallbackGroupID *int64
-	SuisuSlowRouteRatio  float64
-	SuisuBusyRouteRatio  float64
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -279,9 +264,12 @@ type UpdateGroupInput struct {
 	WeeklyLimitUSD   *float64 // 周限额 (USD)
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
-	AllowImageGeneration *bool
-	ImageRateIndependent *bool
-	ImageRateMultiplier  *float64
+	AllowImageGeneration         *bool
+	AllowBatchImageGeneration    *bool
+	ImageRateIndependent         *bool
+	ImageRateMultiplier          *float64
+	BatchImageDiscountMultiplier *float64
+	BatchImageHoldMultiplier     *float64
 	// 高峰时段倍率配置（nil 表示不修改）
 	PeakRateEnabled    *bool
 	PeakStart          *string
@@ -309,23 +297,6 @@ type UpdateGroupInput struct {
 	ModelsListConfig            *GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制），nil 表示未提供不改动。
 	RPMLimit *int
-	// 优速通配置
-	SpeedConfigEnabled         *bool
-	UserSpeedConfigAllowed     *bool
-	DefaultFastQuotaRatio      *float64
-	MinFastQuotaRatio          *float64
-	MaxFastQuotaRatio          *float64
-	DefaultSlowDelayMinSeconds *int
-	DefaultSlowDelayMaxSeconds *int
-	MaxSlowDelaySeconds        *int
-	DefaultSlowRejectRate      *float64
-	MaxSlowRejectRate          *float64
-	SpeedSlowRejectMessage     *string
-	// 随速通配置
-	SuisuEnabled         *bool
-	SuisuFallbackGroupID *int64
-	SuisuSlowRouteRatio  *float64
-	SuisuBusyRouteRatio  *float64
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -421,12 +392,6 @@ type AdminUpdateAPIKeyGroupIDResult struct {
 	AutoGrantedGroupAccess bool   // true if a new exclusive group permission was auto-added
 	GrantedGroupID         *int64 // the group ID that was auto-granted
 	GrantedGroupName       string // the group name that was auto-granted
-}
-
-type AdminUpdateAPIKeyRuntimeLimitsInput struct {
-	MaxActiveIPs         *int
-	IPIdleTimeoutSeconds *int
-	MaxConcurrency       *int
 }
 
 // ReplaceUserGroupResult 分组替换操作的结果
@@ -770,31 +735,17 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	} else if s.settingService != nil {
 		balance = s.settingService.GetDefaultBalance(ctx)
 	}
-	if input.APIKeyMaxActiveIPs < 0 {
-		return nil, ErrInvalidRuntimeLimit
-	}
-	adminPermissions := []string{}
-	if input.AdminPermissions != nil {
-		permissions, err := NormalizeAdminPermissions(*input.AdminPermissions)
-		if err != nil {
-			return nil, infraerrors.BadRequest("INVALID_ADMIN_PERMISSION", err.Error())
-		}
-		adminPermissions = permissions
-	}
 
 	user := &User{
-		Email:                     input.Email,
-		Username:                  input.Username,
-		Notes:                     input.Notes,
-		Role:                      RoleUser, // Always create as regular user, never admin
-		AdminPermissions:          adminPermissions,
-		Balance:                   balance,
-		Concurrency:               input.Concurrency,
-		RPMLimit:                  input.RPMLimit,
-		APIKeyMaxActiveIPs:        input.APIKeyMaxActiveIPs,
-		APIKeyMaxActiveIPsVisible: input.APIKeyMaxActiveIPsVisible,
-		Status:                    StatusActive,
-		AllowedGroups:             input.AllowedGroups,
+		Email:         input.Email,
+		Username:      input.Username,
+		Notes:         input.Notes,
+		Role:          RoleUser, // Always create as regular user, never admin
+		Balance:       balance,
+		Concurrency:   input.Concurrency,
+		RPMLimit:      input.RPMLimit,
+		Status:        StatusActive,
+		AllowedGroups: input.AllowedGroups,
 	}
 	if err := user.SetPassword(input.Password); err != nil {
 		return nil, err
@@ -846,10 +797,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	oldConcurrency := user.Concurrency
 	oldStatus := user.Status
 	oldRole := user.Role
-	oldAdminPermissions := append([]string(nil), user.AdminPermissions...)
 	oldRPMLimit := user.RPMLimit
-	oldAPIKeyMaxActiveIPs := user.APIKeyMaxActiveIPs
-	oldAPIKeyMaxActiveIPsVisible := user.APIKeyMaxActiveIPsVisible
 	oldAllowedGroups := append([]int64(nil), user.AllowedGroups...)
 
 	if input.Email != "" {
@@ -868,14 +816,6 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		user.Notes = *input.Notes
 	}
 
-	if input.AdminPermissions != nil {
-		permissions, err := NormalizeAdminPermissions(*input.AdminPermissions)
-		if err != nil {
-			return nil, infraerrors.BadRequest("INVALID_ADMIN_PERMISSION", err.Error())
-		}
-		user.AdminPermissions = permissions
-	}
-
 	if input.Status != "" {
 		user.Status = input.Status
 	}
@@ -886,17 +826,6 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 
 	if input.RPMLimit != nil {
 		user.RPMLimit = *input.RPMLimit
-	}
-
-	if input.APIKeyMaxActiveIPs != nil {
-		if *input.APIKeyMaxActiveIPs < 0 {
-			return nil, ErrInvalidRuntimeLimit
-		}
-		user.APIKeyMaxActiveIPs = *input.APIKeyMaxActiveIPs
-	}
-
-	if input.APIKeyMaxActiveIPsVisible != nil {
-		user.APIKeyMaxActiveIPsVisible = *input.APIKeyMaxActiveIPsVisible
 	}
 
 	if input.AllowedGroups != nil {
@@ -916,8 +845,8 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 
 	if s.authCacheInvalidator != nil {
 		// RPMLimit 直接参与 billing_cache_service.checkRPM 的三级级联，
-		// allowed_groups 和用户级 API Key 活跃 IP 策略也参与 API Key 授权热路径。
-		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || !sameStringSet(user.AdminPermissions, oldAdminPermissions) || user.RPMLimit != oldRPMLimit || user.APIKeyMaxActiveIPs != oldAPIKeyMaxActiveIPs || user.APIKeyMaxActiveIPsVisible != oldAPIKeyMaxActiveIPsVisible || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) {
+		// allowed_groups 参与 API Key 专属分组授权判断；不失效缓存会让修改在一个 L2 TTL 内失去效果。
+		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || user.RPMLimit != oldRPMLimit || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
 		}
 	}
@@ -944,26 +873,6 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	}
 
 	return user, nil
-}
-
-func sameStringSet(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	if len(a) == 0 {
-		return true
-	}
-	counts := make(map[string]int, len(a))
-	for _, v := range a {
-		counts[v]++
-	}
-	for _, v := range b {
-		if counts[v] == 0 {
-			return false
-		}
-		counts[v]--
-	}
-	return true
 }
 
 func sameInt64Set(a, b []int64) bool {
@@ -1754,8 +1663,6 @@ func normalizeAdminAuthIdentityProviderType(input string) string {
 		return "wechat"
 	case "dingtalk":
 		return "dingtalk"
-	case "feishu":
-		return "feishu"
 	default:
 		return ""
 	}
@@ -1956,6 +1863,20 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		}
 		imageRateMultiplier = *input.ImageRateMultiplier
 	}
+	batchImageDiscountMultiplier := defaultBatchImageDiscountMultiplier
+	if input.BatchImageDiscountMultiplier != nil {
+		if *input.BatchImageDiscountMultiplier < 0 {
+			return nil, errors.New("batch_image_discount_multiplier must be >= 0")
+		}
+		batchImageDiscountMultiplier = *input.BatchImageDiscountMultiplier
+	}
+	batchImageHoldMultiplier := defaultBatchImageHoldMultiplier
+	if input.BatchImageHoldMultiplier != nil {
+		if *input.BatchImageHoldMultiplier < 0 {
+			return nil, errors.New("batch_image_hold_multiplier must be >= 0")
+		}
+		batchImageHoldMultiplier = *input.BatchImageHoldMultiplier
+	}
 
 	peakRateMultiplier := 1.0
 	if input.PeakRateMultiplier != nil {
@@ -1991,6 +1912,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	}
 
 	allowImageGeneration := input.AllowImageGeneration || defaultAllowImageGenerationForPlatform(platform)
+	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && platform == PlatformGemini
 
 	// 如果指定了复制账号的源分组，先获取账号 ID 列表
 	var accountIDsToCopy []int64
@@ -2036,8 +1958,11 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		WeeklyLimitUSD:                  weeklyLimit,
 		MonthlyLimitUSD:                 monthlyLimit,
 		AllowImageGeneration:            allowImageGeneration,
+		AllowBatchImageGeneration:       allowBatchImageGeneration,
 		ImageRateIndependent:            input.ImageRateIndependent,
 		ImageRateMultiplier:             imageRateMultiplier,
+		BatchImageDiscountMultiplier:    batchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:        batchImageHoldMultiplier,
 		PeakRateEnabled:                 peakRateEnabled,
 		PeakStart:                       peakStart,
 		PeakEnd:                         peakEnd,
@@ -2058,25 +1983,6 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MessagesDispatchModelConfig:     normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
 		ModelsListConfig:                normalizeGroupModelsListConfig(input.ModelsListConfig),
 		RPMLimit:                        input.RPMLimit,
-		SpeedConfigEnabled:              input.SpeedConfigEnabled,
-		UserSpeedConfigAllowed:          input.UserSpeedConfigAllowed,
-		DefaultFastQuotaRatio:           speedRatioValueOrDefault(input.DefaultFastQuotaRatio, defaultFastQuotaRatio),
-		MinFastQuotaRatio:               speedRatioValueOrDefault(input.MinFastQuotaRatio, defaultMinFastQuotaRatio),
-		MaxFastQuotaRatio:               speedRatioValueOrDefault(input.MaxFastQuotaRatio, defaultMaxFastQuotaRatio),
-		DefaultSlowDelayMinSeconds:      speedIntValueOrDefault(input.DefaultSlowDelayMinSeconds, defaultSlowDelayMinSeconds),
-		DefaultSlowDelayMaxSeconds:      speedIntValueOrDefault(input.DefaultSlowDelayMaxSeconds, defaultSlowDelayMaxSeconds),
-		MaxSlowDelaySeconds:             speedIntValueOrDefault(input.MaxSlowDelaySeconds, defaultMaxSlowDelaySeconds),
-		DefaultSlowRejectRate:           speedRatioValueOrDefault(input.DefaultSlowRejectRate, 0),
-		MaxSlowRejectRate:               speedRatioValueOrDefault(input.MaxSlowRejectRate, defaultMaxSlowRejectRate),
-		SpeedSlowRejectMessage:          input.SpeedSlowRejectMessage,
-		SuisuEnabled:                    input.SuisuEnabled,
-		SuisuFallbackGroupID:            input.SuisuFallbackGroupID,
-		SuisuSlowRouteRatio:             input.SuisuSlowRouteRatio,
-		SuisuBusyRouteRatio:             input.SuisuBusyRouteRatio,
-	}
-	normalizeGroupSpeedConfig(group)
-	if err := s.normalizeAndValidateSuisuGroup(ctx, 0, group); err != nil {
-		return nil, err
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if err := s.groupRepo.Create(ctx, group); err != nil {
@@ -2129,135 +2035,6 @@ func normalizePrice(price *float64) *float64 {
 		return nil
 	}
 	return price
-}
-
-func normalizeGroupSpeedConfig(group *Group) {
-	if group == nil {
-		return
-	}
-	if !group.IsSubscriptionType() {
-		group.SpeedConfigEnabled = false
-		group.UserSpeedConfigAllowed = false
-	}
-	group.DefaultFastQuotaRatio = normalizeSpeedRatio(group.DefaultFastQuotaRatio, defaultFastQuotaRatio)
-	group.MinFastQuotaRatio = normalizeSpeedRatio(group.MinFastQuotaRatio, defaultMinFastQuotaRatio)
-	group.MaxFastQuotaRatio = normalizeSpeedRatio(group.MaxFastQuotaRatio, defaultMaxFastQuotaRatio)
-	if group.MinFastQuotaRatio > group.MaxFastQuotaRatio {
-		group.MinFastQuotaRatio, group.MaxFastQuotaRatio = group.MaxFastQuotaRatio, group.MinFastQuotaRatio
-	}
-	if group.DefaultFastQuotaRatio < group.MinFastQuotaRatio {
-		group.DefaultFastQuotaRatio = group.MinFastQuotaRatio
-	}
-	if group.DefaultFastQuotaRatio > group.MaxFastQuotaRatio {
-		group.DefaultFastQuotaRatio = group.MaxFastQuotaRatio
-	}
-	if group.DefaultSlowDelayMinSeconds < 0 {
-		group.DefaultSlowDelayMinSeconds = defaultSlowDelayMinSeconds
-	}
-	if group.DefaultSlowDelayMaxSeconds < 0 {
-		group.DefaultSlowDelayMaxSeconds = defaultSlowDelayMaxSeconds
-	}
-	if group.MaxSlowDelaySeconds < 0 {
-		group.MaxSlowDelaySeconds = defaultMaxSlowDelaySeconds
-	}
-	if group.DefaultSlowDelayMaxSeconds > group.MaxSlowDelaySeconds {
-		group.DefaultSlowDelayMaxSeconds = group.MaxSlowDelaySeconds
-	}
-	if group.DefaultSlowDelayMinSeconds > group.DefaultSlowDelayMaxSeconds {
-		group.DefaultSlowDelayMinSeconds = group.DefaultSlowDelayMaxSeconds
-	}
-	group.DefaultSlowRejectRate = normalizeSpeedRatio(group.DefaultSlowRejectRate, 0)
-	group.MaxSlowRejectRate = normalizeSpeedRatio(group.MaxSlowRejectRate, defaultMaxSlowRejectRate)
-	if group.DefaultSlowRejectRate > group.MaxSlowRejectRate {
-		group.DefaultSlowRejectRate = group.MaxSlowRejectRate
-	}
-	group.SpeedSlowRejectMessage = normalizeSpeedSlowRejectMessage(group.SpeedSlowRejectMessage)
-}
-
-func speedRatioValueOrDefault(value *float64, fallback float64) float64 {
-	if value == nil {
-		return fallback
-	}
-	return *value
-}
-
-func speedIntValueOrDefault(value *int, fallback int) int {
-	if value == nil {
-		return fallback
-	}
-	return *value
-}
-
-func normalizeSpeedRatio(value, fallback float64) float64 {
-	if value < 0 {
-		return fallback
-	}
-	return clampSpeedRatio(value)
-}
-
-func normalizeSuisuRatio(value float64) (float64, error) {
-	if value < 0 || value > 1 {
-		return 0, fmt.Errorf("suisu route ratio must be between 0 and 1")
-	}
-	return value, nil
-}
-
-func (s *adminServiceImpl) normalizeAndValidateSuisuGroup(ctx context.Context, currentGroupID int64, group *Group) error {
-	if group == nil {
-		return nil
-	}
-	var err error
-	group.SuisuSlowRouteRatio, err = normalizeSuisuRatio(group.SuisuSlowRouteRatio)
-	if err != nil {
-		return err
-	}
-	group.SuisuBusyRouteRatio, err = normalizeSuisuRatio(group.SuisuBusyRouteRatio)
-	if err != nil {
-		return err
-	}
-	if !group.SuisuEnabled {
-		return nil
-	}
-	if group.Platform != PlatformOpenAI {
-		return fmt.Errorf("suisu only supports openai groups")
-	}
-	if group.SuisuFallbackGroupID == nil || *group.SuisuFallbackGroupID <= 0 {
-		return fmt.Errorf("suisu fallback group is required")
-	}
-	return s.validateSuisuFallbackGroup(ctx, currentGroupID, *group.SuisuFallbackGroupID)
-}
-
-func (s *adminServiceImpl) validateSuisuFallbackGroup(ctx context.Context, currentGroupID, fallbackGroupID int64) error {
-	if currentGroupID > 0 && currentGroupID == fallbackGroupID {
-		return fmt.Errorf("cannot set self as suisu fallback group")
-	}
-
-	visited := map[int64]struct{}{}
-	nextID := fallbackGroupID
-	for {
-		if _, seen := visited[nextID]; seen {
-			return fmt.Errorf("suisu fallback group cycle detected")
-		}
-		visited[nextID] = struct{}{}
-		if currentGroupID > 0 && nextID == currentGroupID {
-			return fmt.Errorf("suisu fallback group cycle detected")
-		}
-
-		fallbackGroup, err := s.groupRepo.GetByIDLite(ctx, nextID)
-		if err != nil {
-			return fmt.Errorf("suisu fallback group not found: %w", err)
-		}
-		if fallbackGroup.Status != StatusActive {
-			return fmt.Errorf("suisu fallback group must be active")
-		}
-		if fallbackGroup.Platform != PlatformOpenAI {
-			return fmt.Errorf("suisu fallback group must be openai platform")
-		}
-		if fallbackGroup.SuisuFallbackGroupID == nil {
-			return nil
-		}
-		nextID = *fallbackGroup.SuisuFallbackGroupID
-	}
 }
 
 // validateFallbackGroup 校验降级分组的有效性
@@ -2370,6 +2147,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
 	}
+	if input.AllowBatchImageGeneration != nil {
+		group.AllowBatchImageGeneration = *input.AllowBatchImageGeneration
+	}
+	if !group.AllowImageGeneration || group.Platform != PlatformGemini {
+		group.AllowBatchImageGeneration = false
+	}
 	if input.ImageRateIndependent != nil {
 		group.ImageRateIndependent = *input.ImageRateIndependent
 	}
@@ -2378,6 +2161,18 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			return nil, errors.New("image_rate_multiplier must be >= 0")
 		}
 		group.ImageRateMultiplier = *input.ImageRateMultiplier
+	}
+	if input.BatchImageDiscountMultiplier != nil {
+		if *input.BatchImageDiscountMultiplier < 0 {
+			return nil, errors.New("batch_image_discount_multiplier must be >= 0")
+		}
+		group.BatchImageDiscountMultiplier = *input.BatchImageDiscountMultiplier
+	}
+	if input.BatchImageHoldMultiplier != nil {
+		if *input.BatchImageHoldMultiplier < 0 {
+			return nil, errors.New("batch_image_hold_multiplier must be >= 0")
+		}
+		group.BatchImageHoldMultiplier = *input.BatchImageHoldMultiplier
 	}
 	if input.PeakRateEnabled != nil {
 		group.PeakRateEnabled = *input.PeakRateEnabled
@@ -2476,59 +2271,6 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.RPMLimit != nil {
 		group.RPMLimit = *input.RPMLimit
-	}
-	if input.SpeedConfigEnabled != nil {
-		group.SpeedConfigEnabled = *input.SpeedConfigEnabled
-	}
-	if input.UserSpeedConfigAllowed != nil {
-		group.UserSpeedConfigAllowed = *input.UserSpeedConfigAllowed
-	}
-	if input.DefaultFastQuotaRatio != nil {
-		group.DefaultFastQuotaRatio = *input.DefaultFastQuotaRatio
-	}
-	if input.MinFastQuotaRatio != nil {
-		group.MinFastQuotaRatio = *input.MinFastQuotaRatio
-	}
-	if input.MaxFastQuotaRatio != nil {
-		group.MaxFastQuotaRatio = *input.MaxFastQuotaRatio
-	}
-	if input.DefaultSlowDelayMinSeconds != nil {
-		group.DefaultSlowDelayMinSeconds = *input.DefaultSlowDelayMinSeconds
-	}
-	if input.DefaultSlowDelayMaxSeconds != nil {
-		group.DefaultSlowDelayMaxSeconds = *input.DefaultSlowDelayMaxSeconds
-	}
-	if input.MaxSlowDelaySeconds != nil {
-		group.MaxSlowDelaySeconds = *input.MaxSlowDelaySeconds
-	}
-	if input.DefaultSlowRejectRate != nil {
-		group.DefaultSlowRejectRate = *input.DefaultSlowRejectRate
-	}
-	if input.MaxSlowRejectRate != nil {
-		group.MaxSlowRejectRate = *input.MaxSlowRejectRate
-	}
-	if input.SpeedSlowRejectMessage != nil {
-		group.SpeedSlowRejectMessage = *input.SpeedSlowRejectMessage
-	}
-	normalizeGroupSpeedConfig(group)
-	if input.SuisuEnabled != nil {
-		group.SuisuEnabled = *input.SuisuEnabled
-	}
-	if input.SuisuFallbackGroupID != nil {
-		if *input.SuisuFallbackGroupID > 0 {
-			group.SuisuFallbackGroupID = input.SuisuFallbackGroupID
-		} else {
-			group.SuisuFallbackGroupID = nil
-		}
-	}
-	if input.SuisuSlowRouteRatio != nil {
-		group.SuisuSlowRouteRatio = *input.SuisuSlowRouteRatio
-	}
-	if input.SuisuBusyRouteRatio != nil {
-		group.SuisuBusyRouteRatio = *input.SuisuBusyRouteRatio
-	}
-	if err := s.normalizeAndValidateSuisuGroup(ctx, id, group); err != nil {
-		return nil, err
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 
@@ -2825,32 +2567,6 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 	return result, nil
 }
 
-func (s *adminServiceImpl) AdminUpdateAPIKeyRuntimeLimits(ctx context.Context, keyID int64, input AdminUpdateAPIKeyRuntimeLimitsInput) (*APIKey, error) {
-	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
-	if err != nil {
-		return nil, err
-	}
-	if input.MaxActiveIPs != nil {
-		apiKey.MaxActiveIPs = *input.MaxActiveIPs
-	}
-	if input.IPIdleTimeoutSeconds != nil {
-		apiKey.IPIdleTimeoutSeconds = *input.IPIdleTimeoutSeconds
-	}
-	if input.MaxConcurrency != nil {
-		apiKey.MaxConcurrency = *input.MaxConcurrency
-	}
-	if err := validateAPIKeyRuntimeLimits(apiKey.MaxActiveIPs, apiKey.IPIdleTimeoutSeconds, apiKey.MaxConcurrency); err != nil {
-		return nil, err
-	}
-	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
-		return nil, fmt.Errorf("update api key runtime limits: %w", err)
-	}
-	if s.authCacheInvalidator != nil {
-		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
-	}
-	return apiKey, nil
-}
-
 // AdminResetAPIKeyRateLimitUsage resets all API key rate-limit usage windows.
 func (s *adminServiceImpl) AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error) {
 	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
@@ -2950,6 +2666,23 @@ func (s *adminServiceImpl) ListAccounts(ctx context.Context, page, pageSize int,
 	return accounts, result.Total, nil
 }
 
+func (s *adminServiceImpl) ListAccountsForSchedulerScoreFilter(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) ([]Account, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, nil
+	}
+	return s.accountRepo.ListAllWithFilters(ctx, platform, accountType, status, search, groupID, privacyMode)
+}
+
+func (s *adminServiceImpl) ListOpenAISchedulableAccountsForSchedulerScore(ctx context.Context, groupID *int64) ([]Account, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, nil
+	}
+	if groupID != nil {
+		return s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, PlatformOpenAI)
+	}
+	return s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, PlatformOpenAI)
+}
+
 func (s *adminServiceImpl) GetAccount(ctx context.Context, id int64) (*Account, error) {
 	return s.accountRepo.GetByID(ctx, id)
 }
@@ -2998,6 +2731,11 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		if err := s.checkMixedChannelRisk(ctx, 0, input.Platform, groupIDs); err != nil {
 			return nil, err
 		}
+	}
+
+	// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
+	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
+		return nil, err
 	}
 
 	account := &Account{
@@ -3130,6 +2868,10 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		// 敏感子键采用"incoming 没提供就保留"的合并语义：前端响应已脱敏，
 		// 全对象 PUT 编辑时不会再带回 token，避免覆盖时清空已有凭证。
 		account.Credentials = MergePreservingSensitiveCreds(account.Credentials, input.Credentials)
+		// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
+		if err := NormalizeHeaderOverrideCredentials(account.Credentials); err != nil {
+			return nil, err
+		}
 	}
 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
@@ -3346,6 +3088,11 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
 		}
+	}
+
+	// 校验并规范化请求头覆写配置（批量路径为 JSONB 顶层 key 合并，直接校验增量即可）
+	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
+		return nil, err
 	}
 
 	// Prepare bulk updates for columns and JSONB fields.

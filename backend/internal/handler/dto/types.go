@@ -9,19 +9,19 @@ import (
 )
 
 type User struct {
-	ID               int64      `json:"id"`
-	Email            string     `json:"email"`
-	Username         string     `json:"username"`
-	Role             string     `json:"role"`
-	AdminPermissions []string   `json:"admin_permissions"`
-	Balance          float64    `json:"balance"`
-	Concurrency      int        `json:"concurrency"`
-	Status           string     `json:"status"`
-	AllowedGroups    []int64    `json:"allowed_groups"`
-	LastActiveAt     *time.Time `json:"last_active_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	DeletedAt        *time.Time `json:"deleted_at,omitempty"`
+	ID            int64      `json:"id"`
+	Email         string     `json:"email"`
+	Username      string     `json:"username"`
+	Role          string     `json:"role"`
+	Balance       float64    `json:"balance"`
+	FrozenBalance float64    `json:"frozen_balance"`
+	Concurrency   int        `json:"concurrency"`
+	Status        string     `json:"status"`
+	AllowedGroups []int64    `json:"allowed_groups"`
+	LastActiveAt  *time.Time `json:"last_active_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 
 	// 余额不足通知
 	BalanceNotifyEnabled       bool               `json:"balance_notify_enabled"`
@@ -32,10 +32,6 @@ type User struct {
 
 	// RPMLimit 用户级每分钟请求数上限（0 = 不限制），仅在所用分组未设置 rpm_limit 时作为兜底生效。
 	RPMLimit int `json:"rpm_limit"`
-
-	// APIKeyMaxActiveIPs 仅当管理员允许展示时返回给普通用户。
-	APIKeyMaxActiveIPs        *int `json:"api_key_max_active_ips,omitempty"`
-	APIKeyMaxActiveIPsVisible bool `json:"api_key_max_active_ips_visible,omitempty"`
 
 	APIKeys       []APIKey           `json:"api_keys,omitempty"`
 	Subscriptions []UserSubscription `json:"subscriptions,omitempty"`
@@ -48,32 +44,28 @@ type AdminUser struct {
 
 	Notes      string     `json:"notes"`
 	LastUsedAt *time.Time `json:"last_used_at"`
-	// APIKeyMaxActiveIPs 是管理员配置的用户级 API Key 活跃 IP 上限（0 = 不限制）。
-	APIKeyMaxActiveIPs        int  `json:"api_key_max_active_ips"`
-	APIKeyMaxActiveIPsVisible bool `json:"api_key_max_active_ips_visible"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier
 	GroupRates map[int64]float64 `json:"group_rates,omitempty"`
 }
 
 type APIKey struct {
-	ID                   int64      `json:"id"`
-	UserID               int64      `json:"user_id"`
-	Key                  string     `json:"key"`
-	Name                 string     `json:"name"`
-	GroupID              *int64     `json:"group_id"`
-	Status               string     `json:"status"`
-	IPWhitelist          []string   `json:"ip_whitelist"`
-	IPBlacklist          []string   `json:"ip_blacklist"`
-	MaxActiveIPs         int        `json:"max_active_ips"`
-	IPIdleTimeoutSeconds int        `json:"ip_idle_timeout_seconds"`
-	MaxConcurrency       int        `json:"max_concurrency"`
-	LastUsedAt           *time.Time `json:"last_used_at"`
-	Quota                float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
-	QuotaUsed            float64    `json:"quota_used"` // Used quota amount in USD
-	ExpiresAt            *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	ID          int64      `json:"id"`
+	UserID      int64      `json:"user_id"`
+	Key         string     `json:"key"`
+	Name        string     `json:"name"`
+	GroupID     *int64     `json:"group_id"`
+	Status      string     `json:"status"`
+	IPWhitelist []string   `json:"ip_whitelist"`
+	IPBlacklist []string   `json:"ip_blacklist"`
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	Quota       float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
+	QuotaUsed   float64    `json:"quota_used"` // Used quota amount in USD
+	ExpiresAt   *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	// CurrentConcurrency is the real-time active request count for this API key.
+	CurrentConcurrency int `json:"current_concurrency"`
 
 	// Rate limit fields
 	RateLimit5h   float64    `json:"rate_limit_5h"`
@@ -108,9 +100,12 @@ type Group struct {
 	MonthlyLimitUSD  *float64 `json:"monthly_limit_usd"`
 
 	// 图片生成计费配置（仅 antigravity 平台使用）
-	AllowImageGeneration bool    `json:"allow_image_generation"`
-	ImageRateIndependent bool    `json:"image_rate_independent"`
-	ImageRateMultiplier  float64 `json:"image_rate_multiplier"`
+	AllowImageGeneration         bool    `json:"allow_image_generation"`
+	AllowBatchImageGeneration    bool    `json:"allow_batch_image_generation"`
+	ImageRateIndependent         bool    `json:"image_rate_independent"`
+	ImageRateMultiplier          float64 `json:"image_rate_multiplier"`
+	BatchImageDiscountMultiplier float64 `json:"batch_image_discount_multiplier"`
+	BatchImageHoldMultiplier     float64 `json:"batch_image_hold_multiplier"`
 	// 高峰时段倍率配置
 	PeakRateEnabled    bool     `json:"peak_rate_enabled"`
 	PeakStart          string   `json:"peak_start"`
@@ -135,18 +130,6 @@ type Group struct {
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
 	RPMLimit int `json:"rpm_limit"`
-
-	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
-	UserSpeedConfigAllowed     bool    `json:"user_speed_config_allowed"`
-	DefaultFastQuotaRatio      float64 `json:"default_fast_quota_ratio"`
-	MinFastQuotaRatio          float64 `json:"min_fast_quota_ratio"`
-	MaxFastQuotaRatio          float64 `json:"max_fast_quota_ratio"`
-	DefaultSlowDelayMinSeconds int     `json:"default_slow_delay_min_seconds"`
-	DefaultSlowDelayMaxSeconds int     `json:"default_slow_delay_max_seconds"`
-	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
-	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
-	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
-	SpeedSlowRejectMessage     string  `json:"speed_slow_reject_message"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -178,12 +161,6 @@ type AdminGroup struct {
 
 	// 分组排序
 	SortOrder int `json:"sort_order"`
-
-	// 随速通配置（仅管理员可见）
-	SuisuEnabled         bool    `json:"suisu_enabled"`
-	SuisuFallbackGroupID *int64  `json:"suisu_fallback_group_id"`
-	SuisuSlowRouteRatio  float64 `json:"suisu_slow_route_ratio"`
-	SuisuBusyRouteRatio  float64 `json:"suisu_busy_route_ratio"`
 }
 
 type Account struct {
@@ -473,7 +450,7 @@ type UsageLog struct {
 	ID        int64  `json:"id"`
 	UserID    int64  `json:"user_id"`
 	APIKeyID  int64  `json:"api_key_id"`
-	AccountID *int64 `json:"account_id"`
+	AccountID int64  `json:"account_id"`
 	RequestID string `json:"request_id"`
 	Model     string `json:"model"`
 	// ServiceTier records the OpenAI service tier used for billing, e.g. "priority" / "flex".
@@ -485,9 +462,6 @@ type UsageLog struct {
 	InboundEndpoint *string `json:"inbound_endpoint,omitempty"`
 	// UpstreamEndpoint is the normalized upstream endpoint path, e.g. /v1/responses.
 	UpstreamEndpoint *string `json:"upstream_endpoint,omitempty"`
-	SpeedState       *string `json:"speed_state,omitempty"`
-	SpeedWaitMs      int     `json:"speed_wait_ms"`
-	SpeedRoute       *string `json:"speed_route,omitempty"`
 
 	GroupID        *int64 `json:"group_id"`
 	SubscriptionID *int64 `json:"subscription_id"`
@@ -648,36 +622,7 @@ type AdminUserSubscription struct {
 	AssignedAt time.Time `json:"assigned_at"`
 	Notes      string    `json:"notes"`
 
-	AssignedByUser *User                    `json:"assigned_by_user,omitempty"`
-	SpeedStatus    *SubscriptionSpeedStatus `json:"speed_status,omitempty"`
-}
-
-type SubscriptionSpeedWindowStatus struct {
-	LimitUSD        float64    `json:"limit_usd"`
-	FastLimitUSD    float64    `json:"fast_limit_usd"`
-	FastUsedUSD     float64    `json:"fast_used_usd"`
-	SlowLimitUSD    float64    `json:"slow_limit_usd"`
-	SlowUsedUSD     float64    `json:"slow_used_usd"`
-	TotalUsedUSD    float64    `json:"total_used_usd"`
-	RemainingUSD    float64    `json:"remaining_usd"`
-	WindowStart     *time.Time `json:"window_start,omitempty"`
-	ResetsAt        *time.Time `json:"resets_at,omitempty"`
-	ResetsInSeconds int64      `json:"resets_in_seconds"`
-}
-
-type SubscriptionSpeedStatus struct {
-	Enabled          bool                           `json:"enabled"`
-	State            string                         `json:"state"`
-	FastQuotaRatio   float64                        `json:"fast_quota_ratio"`
-	SlowRejectRate   float64                        `json:"slow_reject_rate"`
-	SlowDelayMin     int                            `json:"slow_delay_min_seconds"`
-	SlowDelayMax     int                            `json:"slow_delay_max_seconds"`
-	Daily            *SubscriptionSpeedWindowStatus `json:"daily,omitempty"`
-	Weekly           *SubscriptionSpeedWindowStatus `json:"weekly,omitempty"`
-	Monthly          *SubscriptionSpeedWindowStatus `json:"monthly,omitempty"`
-	SlowRequestCount int64                          `json:"slow_request_count"`
-	SlowRejectCount  int64                          `json:"slow_reject_count"`
-	LastSlowAt       *time.Time                     `json:"last_slow_at,omitempty"`
+	AssignedByUser *User `json:"assigned_by_user,omitempty"`
 }
 
 type BulkAssignResult struct {

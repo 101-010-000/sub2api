@@ -60,6 +60,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 		return
 	}
 	if !gjson.ValidBytes(body) {
+		logRequestBodyParseFailure(reqLog, body, nil)
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 		return
 	}
@@ -96,23 +97,6 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 		h.errorResponse(c, status, code, message)
 		return
 	}
-	speedDecision := h.applySpeedDecision(c, apiKey, subscription, &streamStarted, reqLog, false)
-	if !speedDecision.OK {
-		return
-	}
-	effectiveGroupID := apiKey.GroupID
-	var slowSuisuGroupID *int64
-	if speedDecision.Decision != nil && speedDecision.Decision.State == service.SpeedStateSlow {
-		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
-			markSuisuSlowRouted(c)
-			effectiveGroupID = suisuGroupID
-			slowSuisuGroupID = suisuGroupID
-		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, false, &streamStarted, reqLog, false) {
-			return
-		}
-	} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, false, &streamStarted, reqLog, false) {
-		return
-	}
 
 	failedAccountIDs := make(map[int64]struct{})
 	var lastFailoverErr *service.UpstreamFailoverError
@@ -124,40 +108,18 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 	routingStart := time.Now()
 
 	for {
-		previousEffectiveGroupID := effectiveGroupID
-		selection, _, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
-			apiKey.Group,
+		selection, _, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
+			c.Request.Context(),
 			apiKey.GroupID,
-			effectiveGroupID,
-			len(failedAccountIDs) == 0,
-			reqLog,
-			func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error) {
-				return h.gatewayService.SelectAccountWithSchedulerForCapability(
-					c.Request.Context(),
-					groupID,
-					"",
-					"",
-					reqModel,
-					failedAccountIDs,
-					service.OpenAIUpstreamTransportHTTPSSE,
-					service.OpenAIEndpointCapabilityEmbeddings,
-					false,
-				)
-			},
+			"",
+			"",
+			reqModel,
+			failedAccountIDs,
+			service.OpenAIUpstreamTransportHTTPSSE,
+			service.OpenAIEndpointCapabilityEmbeddings,
+			false,
+			false,
 		)
-		markSuisuRoutedIfGroupChanged(c, previousEffectiveGroupID, newEffectiveGroupID)
-		effectiveGroupID = newEffectiveGroupID
-		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
-			if reqLog != nil {
-				reqLog.Info("openai.suisu_route_unavailable", zap.String("reason", "slow"), zap.Int64("suisu_group_id", *slowSuisuGroupID), zap.Error(err))
-			}
-			if !h.finalizeOpenAISpeedDecision(c, speedDecision, false, &streamStarted, reqLog, false) {
-				return
-			}
-			effectiveGroupID = apiKey.GroupID
-			slowSuisuGroupID = nil
-			continue
-		}
 		if err != nil {
 			reqLog.Warn("openai_embeddings.account_select_failed",
 				zap.Error(err),
@@ -186,14 +148,10 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 			h.errorResponse(c, cls.Status, cls.ErrType, cls.Message)
 			return
 		}
-		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) {
-			logSuisuRoute(reqLog, "slow", apiKey.GroupID, effectiveGroupID)
-			slowSuisuGroupID = nil
-		}
 		account := selection.Account
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, accountAcquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, "", selection, false, &streamStarted, reqLog)
+		accountReleaseFunc, accountAcquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, "", selection, false, &streamStarted, reqLog)
 		if !accountAcquired {
 			return
 		}
@@ -277,7 +235,6 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 				UserAgent:          userAgent,
 				IPAddress:          clientIP,
 				APIKeyService:      h.apiKeyService,
-				ScheduledGroupID:   effectiveGroupID,
 				QuotaPlatform:      quotaPlatform,
 				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
 			}); err != nil {

@@ -2,17 +2,11 @@ package handler
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
-	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -31,14 +25,11 @@ type gatewayModelsResponseForTest struct {
 }
 
 type gatewayModelItemForTest struct {
-	ID          string `json:"id"`
-	Object      string `json:"object"`
-	Created     int64  `json:"created"`
-	OwnedBy     string `json:"owned_by"`
-	DisplayName string `json:"display_name"`
-	Source      string `json:"source"`
-	AccentColor string `json:"accent_color"`
-	CreatedAt   string `json:"created_at"`
+	ID        string `json:"id"`
+	Object    string `json:"object"`
+	Created   int64  `json:"created"`
+	OwnedBy   string `json:"owned_by"`
+	CreatedAt string `json:"created_at"`
 }
 
 func (s *gatewayModelsAccountRepoStub) ListSchedulableByGroupID(ctx context.Context, groupID int64) ([]service.Account, error) {
@@ -56,7 +47,7 @@ func newGatewayModelsHandlerForTest(repo service.AccountRepository) *GatewayHand
 		gatewayService: service.NewGatewayService(
 			repo,
 			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		),
 	}
 }
@@ -278,6 +269,149 @@ func TestGatewayModels_CustomModelsListKeepsConcreteModelAllowedByWildcardMappin
 	require.Equal(t, []string{"claude-sonnet-4-6"}, modelIDsForTest(got.Data))
 }
 
+func TestGatewayModels_AnthropicCustomModelsListIncludesOAuthClaudeAndMappedDeepSeek(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(28)
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				groupID: {
+					{
+						ID:       1,
+						Platform: service.PlatformAnthropic,
+						Type:     service.AccountTypeOAuth,
+					},
+					{
+						ID:       2,
+						Platform: service.PlatformAnthropic,
+						Type:     service.AccountTypeAPIKey,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{
+								"deepseek-v4-pro": "deepseek-v4-pro",
+							},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		Group: &service.Group{
+			ID:       groupID,
+			Platform: service.PlatformAnthropic,
+			ModelsListConfig: service.GroupModelsListConfig{
+				Enabled: true,
+				Models:  []string{"claude-fable-5", "claude-opus-4-8", "deepseek-v4-pro"},
+			},
+		},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, []string{"claude-fable-5", "claude-opus-4-8", "deepseek-v4-pro"}, modelIDsForTest(got.Data))
+}
+
+func TestGatewayModels_AnthropicCustomModelsListDisabledKeepsMappedModelList(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(29)
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				groupID: {
+					{
+						ID:       1,
+						Platform: service.PlatformAnthropic,
+						Type:     service.AccountTypeOAuth,
+					},
+					{
+						ID:       2,
+						Platform: service.PlatformAnthropic,
+						Type:     service.AccountTypeAPIKey,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{
+								"deepseek-v4-pro": "deepseek-v4-pro",
+							},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		Group: &service.Group{
+			ID:       groupID,
+			Platform: service.PlatformAnthropic,
+			ModelsListConfig: service.GroupModelsListConfig{
+				Enabled: false,
+				Models:  []string{"claude-fable-5", "deepseek-v4-pro"},
+			},
+		},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, []string{"deepseek-v4-pro"}, modelIDsForTest(got.Data))
+}
+
+func TestGatewayModels_AnthropicCustomModelsListIncludesOAuthClaudeWithoutMappings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(30)
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				groupID: {
+					{
+						ID:       1,
+						Platform: service.PlatformAnthropic,
+						Type:     service.AccountTypeOAuth,
+					},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		Group: &service.Group{
+			ID:       groupID,
+			Platform: service.PlatformAnthropic,
+			ModelsListConfig: service.GroupModelsListConfig{
+				Enabled: true,
+				Models:  []string{"claude-opus-4-6-thinking", "claude-sonnet-4-5"},
+			},
+		},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, []string{"claude-opus-4-6-thinking", "claude-sonnet-4-5"}, modelIDsForTest(got.Data))
+}
+
 func TestGatewayModels_CustomModelsListCanReturnEmptyWhenSelectionsUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -399,58 +533,6 @@ func TestGatewayModels_OpenAICustomModelsListKeepsOpenAIResponseShapeForDefaultF
 	require.NotZero(t, got.Data[0].Created)
 	require.Equal(t, "openai", got.Data[0].OwnedBy)
 	require.Empty(t, got.Data[0].CreatedAt)
-}
-
-func TestGatewayModels_OpenAITouchPieSignedRequestMarksTouchX(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	groupID := int64(28)
-	apiKeyValue := "sk-touchx"
-	h := newGatewayModelsHandlerForTest(
-		&gatewayModelsAccountRepoStub{
-			byGroup: map[int64][]service.Account{
-				groupID: {
-					{ID: 1, Platform: service.PlatformOpenAI},
-				},
-			},
-		},
-	)
-
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	c.Request.Header.Set(service.TouchPieHeaderName, signGatewayModelsTouchPieHeaderForTest(apiKeyValue, time.Now().Unix(), "nonce-1"))
-	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
-		Key: apiKeyValue,
-		Group: &service.Group{
-			ID:       groupID,
-			Platform: service.PlatformOpenAI,
-		},
-	})
-
-	h.Models(c)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, openai.TouchXProviderName, rec.Header().Get("X-Sub2api-Provider"))
-	require.Equal(t, openai.TouchXSource, rec.Header().Get("X-Sub2api-Provider-Source"))
-	require.Equal(t, openai.TouchXAccentColor, rec.Header().Get("X-Sub2api-Provider-Accent-Color"))
-
-	var got gatewayModelsResponseForTest
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
-	require.NotEmpty(t, got.Data)
-	require.Equal(t, "gpt-5.5", got.Data[0].ID)
-	require.Equal(t, openai.TouchXProviderName, got.Data[0].OwnedBy)
-	require.Equal(t, openai.TouchXSource, got.Data[0].Source)
-	require.Equal(t, openai.TouchXAccentColor, got.Data[0].AccentColor)
-	require.Contains(t, got.Data[0].DisplayName, openai.TouchXProviderName)
-}
-
-func signGatewayModelsTouchPieHeaderForTest(key string, ts int64, nonce string) string {
-	tsText := strconv.FormatInt(ts, 10)
-	payload := "touch-pie:v1:" + tsText + ":" + nonce
-	mac := hmac.New(sha256.New, []byte(key))
-	_, _ = mac.Write([]byte(payload))
-	return "v1." + tsText + "." + nonce + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func modelIDsForTest(models []gatewayModelItemForTest) []string {

@@ -13,7 +13,6 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
-import { firstAccessibleAdminPath, resolveAdminRoutePermissions } from '@/utils/adminPermissions'
 
 /**
  * Route definitions with lazy loading
@@ -87,19 +86,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: false,
       title: 'LinuxDo OAuth Callback',
-      titleKey: 'auth.linuxdoCallbackPageTitle',
-      pendingOAuthProvider: 'linuxdo'
-    }
-  },
-  {
-    path: '/auth/feishu/callback',
-    name: 'FeishuOAuthCallback',
-    component: () => import('@/views/auth/LinuxDoCallbackView.vue'),
-    meta: {
-      requiresAuth: false,
-      title: 'Feishu OAuth Callback',
-      titleKey: 'auth.feishuCallbackPageTitle',
-      pendingOAuthProvider: 'feishu'
+      titleKey: 'auth.linuxdoCallbackPageTitle'
     }
   },
   {
@@ -180,16 +167,6 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/touch-pie/authorize',
-    name: 'TouchPieAuthorize',
-    component: () => import('@/views/TouchPieAuthorizeView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'Touch Pie Authorization'
-    }
-  },
-  {
     path: '/legal/:documentId',
     name: 'LegalDocument',
     component: () => import('@/views/public/LegalDocumentView.vue'),
@@ -226,6 +203,19 @@ const routes: RouteRecordRaw[] = [
       title: 'API Keys',
       titleKey: 'keys.title',
       descriptionKey: 'keys.description'
+    }
+  },
+  {
+    path: '/batch-image',
+    name: 'BatchImageGuide',
+    alias: '/docs/batch-image',
+    component: () => import('@/views/user/BatchImageGuideView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Batch Image Guide',
+      titleKey: 'batchImageGuide.title',
+      descriptionKey: 'batchImageGuide.description'
     }
   },
   {
@@ -286,16 +276,6 @@ const routes: RouteRecordRaw[] = [
       title: 'Profile',
       titleKey: 'profile.title',
       descriptionKey: 'profile.description'
-    }
-  },
-  {
-    path: '/feishu/panel',
-    name: 'FeishuPanel',
-    component: () => import('@/views/user/FeishuPanelView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'Feishu Panel'
     }
   },
   {
@@ -723,12 +703,10 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const ADMIN_COMPLIANCE_HOLD_PATH = '/home'
 const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',
-  '/auth/feishu/callback',
   '/auth/dingtalk/callback',
   '/auth/dingtalk/email-completion',
   '/auth/oidc/callback',
@@ -770,20 +748,19 @@ router.beforeEach(async (to, _from, next) => {
   const adminSettingsStore = useAdminSettingsStore()
   const customMenuItems = [
     ...(appStore.cachedPublicSettings?.custom_menu_items ?? []),
-    ...(authStore.canAccessAdmin ? adminSettingsStore.customMenuItems : []),
+    ...(authStore.isAdmin ? adminSettingsStore.customMenuItems : []),
   ]
   document.title = resolveRouteDocumentTitle(to, appStore.siteName, customMenuItems)
 
   // Check if route requires authentication
   const requiresAuth = to.meta.requiresAuth !== false // Default to true
   const requiresAdmin = to.meta.requiresAdmin === true
-  const adminHomePath = () => firstAccessibleAdminPath((permission) => authStore.hasAdminPermission(permission))
 
   if (to.path === '/setup') {
     try {
       const status = await getSetupStatus()
       if (!status.needs_setup) {
-        next(resolveCompletedSetupRedirectPath(authStore.isAuthenticated, authStore.canAccessAdmin))
+        next(resolveCompletedSetupRedirectPath(authStore.isAuthenticated, authStore.isAdmin))
         return
       }
     } catch {
@@ -797,12 +774,12 @@ router.beforeEach(async (to, _from, next) => {
     if (authStore.isAuthenticated && (to.path === '/login' || to.path === '/register')) {
       // In backend mode, non-admin users should NOT be redirected away from login
       // (they are blocked from all protected routes, so redirecting would cause a loop)
-      if (appStore.backendModeEnabled && !authStore.canAccessAdmin) {
+      if (appStore.backendModeEnabled && !authStore.isAdmin) {
         next()
         return
       }
       // Admin users go to admin dashboard, regular users go to user dashboard
-      next(authStore.canAccessAdmin ? adminHomePath() : '/dashboard')
+      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }
     // Backend mode: block public pages for unauthenticated users (except login, key-usage, setup)
@@ -828,49 +805,21 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   // Check admin requirement
-  if (requiresAdmin && !authStore.canAccessAdmin) {
+  if (requiresAdmin && !authStore.isAdmin) {
     // User is authenticated but not admin, redirect to user dashboard
     next('/dashboard')
     return
   }
 
-  if (requiresAdmin) {
-    if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
-      next(adminHomePath())
-      return
-    }
-    const permissions = to.meta.adminPermission ? [to.meta.adminPermission] : resolveAdminRoutePermissions(to.path)
-    if (permissions.length > 0 && !permissions.some((permission) => authStore.hasAdminPermission(permission))) {
-      next(adminHomePath())
-      return
-    }
-
-    if (authStore.canAccessAdmin) {
-      const adminComplianceStore = useAdminComplianceStore()
-      if (!adminComplianceStore.initialized) {
-        try {
-          const status = await adminComplianceStore.fetchStatus()
-          if (status.required) {
-            adminComplianceStore.setPendingRedirectPath(to.fullPath)
-            if (to.path === ADMIN_COMPLIANCE_HOLD_PATH) {
-              next(false)
-            } else {
-              next(ADMIN_COMPLIANCE_HOLD_PATH)
-            }
-            return
-          }
-        } catch (error) {
-          const err = error as { status?: number; code?: string; metadata?: Record<string, string> }
-          if (err.status === 423 && err.code === 'ADMIN_COMPLIANCE_ACK_REQUIRED') {
-            adminComplianceStore.requireAcknowledgement(err.metadata)
-            adminComplianceStore.setPendingRedirectPath(to.fullPath)
-            if (to.path === ADMIN_COMPLIANCE_HOLD_PATH) {
-              next(false)
-            } else {
-              next(ADMIN_COMPLIANCE_HOLD_PATH)
-            }
-            return
-          }
+  if (requiresAdmin && authStore.isAdmin) {
+    const adminComplianceStore = useAdminComplianceStore()
+    if (!adminComplianceStore.initialized) {
+      try {
+        await adminComplianceStore.fetchStatus()
+      } catch (error) {
+        const err = error as { status?: number; code?: string; metadata?: Record<string, string> }
+        if (err.status === 423 && err.code === 'ADMIN_COMPLIANCE_ACK_REQUIRED') {
+          adminComplianceStore.requireAcknowledgement(err.metadata)
         }
       }
     }
@@ -881,7 +830,7 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresPayment) {
     const paymentEnabled = appStore.cachedPublicSettings?.payment_enabled
     if (!paymentEnabled) {
-      next(authStore.canAccessAdmin ? adminHomePath() : '/dashboard')
+      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }
   }
@@ -889,7 +838,7 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresRiskControl) {
     const riskControlEnabled = appStore.cachedPublicSettings?.risk_control_enabled === true
     if (!riskControlEnabled) {
-      next(authStore.canAccessAdmin ? adminHomePath() : '/dashboard')
+      next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
       return
     }
   }
@@ -906,14 +855,14 @@ router.beforeEach(async (to, _from, next) => {
 
     if (restrictedPaths.some((path) => to.path.startsWith(path))) {
       // 简易模式下访问受限页面,重定向到仪表板
-      next(authStore.canAccessAdmin ? adminHomePath() : '/dashboard')
+      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
       return
     }
   }
 
-  // Backend mode: delegated admin users can access the admin surface allowed by permissions.
+  // Backend mode: admin gets full access, non-admin blocked
   if (appStore.backendModeEnabled) {
-    if (authStore.isAuthenticated && authStore.canAccessAdmin) {
+    if (authStore.isAuthenticated && authStore.isAdmin) {
       next()
       return
     }

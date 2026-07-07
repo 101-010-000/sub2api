@@ -36,12 +36,15 @@ type Group struct {
 	DefaultValidityDays int
 
 	// 图片生成计费配置（antigravity 和 gemini 平台使用）
-	AllowImageGeneration bool
-	ImageRateIndependent bool
-	ImageRateMultiplier  float64
-	ImagePrice1K         *float64
-	ImagePrice2K         *float64
-	ImagePrice4K         *float64
+	AllowImageGeneration         bool
+	AllowBatchImageGeneration    bool
+	ImageRateIndependent         bool
+	ImageRateMultiplier          float64
+	ImagePrice1K                 *float64
+	ImagePrice2K                 *float64
+	ImagePrice4K                 *float64
+	BatchImageDiscountMultiplier float64
+	BatchImageHoldMultiplier     float64
 
 	// Claude Code 客户端限制
 	ClaudeCodeOnly  bool
@@ -76,25 +79,6 @@ type Group struct {
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）。
 	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
 	RPMLimit int
-
-	// 优速通配置：fast 额度正常转发，slow 额度在真实请求前延迟/抽样拒绝。
-	SpeedConfigEnabled         bool
-	UserSpeedConfigAllowed     bool
-	DefaultFastQuotaRatio      float64
-	MinFastQuotaRatio          float64
-	MaxFastQuotaRatio          float64
-	DefaultSlowDelayMinSeconds int
-	DefaultSlowDelayMaxSeconds int
-	MaxSlowDelaySeconds        int
-	DefaultSlowRejectRate      float64
-	MaxSlowRejectRate          float64
-	SpeedSlowRejectMessage     string
-
-	// 随速通配置：后台隐藏备用 OpenAI 分组路由，用户侧不可见。
-	SuisuEnabled         bool
-	SuisuFallbackGroupID *int64
-	SuisuSlowRouteRatio  float64
-	SuisuBusyRouteRatio  float64
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

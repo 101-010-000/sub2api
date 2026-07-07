@@ -19,8 +19,6 @@ import type {
   PlatformQuotasResponse,
   UserNotificationSettings,
   UpdateUserNotificationSettingsRequest,
-  UserSpeedListResponse,
-  UserSpeedStatus,
 } from '@/types'
 
 /**
@@ -268,10 +266,6 @@ export async function getMyPlatformQuotas(): Promise<PlatformQuotasResponse> {
   return data
 }
 
-export async function getSpeedStatuses(): Promise<UserSpeedStatus[]> {
-  const { data } = await apiClient.get<UserSpeedListResponse>('/user/speed')
-  return data.speed || []
-}
 
 export async function getRiskControlBanStatus(): Promise<UserRiskControlBanStatus> {
   const { data } = await apiClient.get<UserRiskControlBanStatus>('/user/risk-control/ban-status')
@@ -305,7 +299,6 @@ export const userAPI = {
   getAffiliateDetail,
   transferAffiliateQuota,
   getMyPlatformQuotas,
-  getSpeedStatuses,
   getRiskControlBanStatus,
   selfUnbanRiskControl,
 }

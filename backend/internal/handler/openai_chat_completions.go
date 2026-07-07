@@ -64,6 +64,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	}
 
 	if !gjson.ValidBytes(body) {
+		logRequestBodyParseFailure(reqLog, body, nil)
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 		return
 	}
@@ -123,23 +124,6 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
-	speedDecision := h.applySpeedDecision(c, apiKey, subscription, &streamStarted, reqLog, false)
-	if !speedDecision.OK {
-		return
-	}
-	effectiveGroupID := apiKey.GroupID
-	var slowSuisuGroupID *int64
-	if speedDecision.Decision != nil && speedDecision.Decision.State == service.SpeedStateSlow {
-		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
-			markSuisuSlowRouted(c)
-			effectiveGroupID = suisuGroupID
-			slowSuisuGroupID = suisuGroupID
-		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, false) {
-			return
-		}
-	} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, false) {
-		return
-	}
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
@@ -152,41 +136,19 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 
 	for {
 		reqLog.Debug("openai_chat_completions.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		previousEffectiveGroupID := effectiveGroupID
-		selection, scheduleDecision, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
-			apiKey.Group,
+		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
+			c.Request.Context(),
 			apiKey.GroupID,
-			effectiveGroupID,
-			len(failedAccountIDs) == 0,
-			reqLog,
-			func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error) {
-				return h.gatewayService.SelectAccountWithSchedulerForCapability(
-					c.Request.Context(),
-					groupID,
-					"",
-					sessionHash,
-					reqModel,
-					failedAccountIDs,
-					service.OpenAIUpstreamTransportAny,
-					service.OpenAIEndpointCapabilityChatCompletions,
-					false,
-					requestPlatform,
-				)
-			},
+			"",
+			sessionHash,
+			reqModel,
+			failedAccountIDs,
+			service.OpenAIUpstreamTransportAny,
+			service.OpenAIEndpointCapabilityChatCompletions,
+			false,
+			false,
+			requestPlatform,
 		)
-		markSuisuRoutedIfGroupChanged(c, previousEffectiveGroupID, newEffectiveGroupID)
-		effectiveGroupID = newEffectiveGroupID
-		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
-			if reqLog != nil {
-				reqLog.Info("openai.suisu_route_unavailable", zap.String("reason", "slow"), zap.Int64("suisu_group_id", *slowSuisuGroupID), zap.Error(err))
-			}
-			if !h.finalizeOpenAISpeedDecision(c, speedDecision, reqStream, &streamStarted, reqLog, false) {
-				return
-			}
-			effectiveGroupID = apiKey.GroupID
-			slowSuisuGroupID = nil
-			continue
-		}
 		if err != nil {
 			reqLog.Warn("openai_chat_completions.account_select_failed",
 				zap.Error(err),
@@ -216,17 +178,13 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			h.handleStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
 			return
 		}
-		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) {
-			logSuisuRoute(reqLog, "slow", apiKey.GroupID, effectiveGroupID)
-			slowSuisuGroupID = nil
-		}
 		account := selection.Account
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
 		reqLog.Debug("openai_chat_completions.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		_ = scheduleDecision
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
 		if !acquired {
 			return
 		}
@@ -357,7 +315,6 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				UserAgent:          userAgent,
 				IPAddress:          clientIP,
 				APIKeyService:      h.apiKeyService,
-				ScheduledGroupID:   effectiveGroupID,
 				QuotaPlatform:      quotaPlatform,
 				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
 				CyberBlocked:       cyberBlocked,

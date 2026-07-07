@@ -31,12 +31,8 @@ func ProvidePricingService(cfg *config.Config, remoteClient PricingRemoteClient)
 }
 
 // ProvideUpdateService creates UpdateService with BuildInfo
-func ProvideUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, buildInfo BuildInfo, cfg *config.Config) *UpdateService {
-	repo := ""
-	if cfg != nil {
-		repo = cfg.Update.Repo
-	}
-	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType, repo)
+func ProvideUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, buildInfo BuildInfo) *UpdateService {
+	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType)
 }
 
 // ProvideEmailQueueService creates EmailQueueService with default worker count
@@ -44,29 +40,19 @@ func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
 	return NewEmailQueueService(emailService, 3)
 }
 
-func ProvideContentModerationService(
-	settingRepo SettingRepository,
-	repo ContentModerationRepository,
-	hashCache ContentModerationHashCache,
-	groupRepo GroupRepository,
-	userRepo UserRepository,
-	apiKeyRepo APIKeyRepository,
-	authCacheInvalidator APIKeyAuthCacheInvalidator,
-	emailService *EmailService,
-	feishuNotificationService *FeishuNotificationService,
-	encryptor SecretEncryptor,
-	cfg *config.Config,
-) *ContentModerationService {
-	svc := NewContentModerationService(settingRepo, repo, hashCache, groupRepo, userRepo, authCacheInvalidator, emailService, encryptor)
-	svc.SetAPIKeyRepository(apiKeyRepo)
-	svc.SetConfig(cfg)
-	svc.SetFeishuNotificationService(feishuNotificationService)
-	return svc
-}
-
 // ProvideOAuthRefreshAPI creates OAuthRefreshAPI with the default lock TTL.
 func ProvideOAuthRefreshAPI(accountRepo AccountRepository, tokenCache GeminiTokenCache) *OAuthRefreshAPI {
 	return NewOAuthRefreshAPI(accountRepo, tokenCache)
+}
+
+func ProvideBatchImageModelPricingResolver(resolver *ModelPricingResolver) *BatchImageModelPricingResolver {
+	return &BatchImageModelPricingResolver{Resolver: resolver}
+}
+
+func ProvideBatchImageCleanupService(repo BatchImageRepository, accountRepo AccountRepository, cfg *config.Config) *BatchImageCleanupService {
+	svc := NewBatchImageCleanupService(repo, accountRepo, cfg)
+	svc.Start()
+	return svc
 }
 
 // ProvideOpenAIOAuthService creates OpenAIOAuthService with privacy/account enrichment support.
@@ -234,11 +220,10 @@ func ProvideProxyExpiryService(proxyRepo ProxyRepository) *ProxyExpiryService {
 }
 
 // ProvideSubscriptionExpiryService creates and starts SubscriptionExpiryService.
-func ProvideSubscriptionExpiryService(userSubRepo UserSubscriptionRepository, settingRepo SettingRepository, notificationEmailService *NotificationEmailService, feishuNotificationService *FeishuNotificationService, lockCache LeaderLockCache, db *sql.DB) *SubscriptionExpiryService {
+func ProvideSubscriptionExpiryService(userSubRepo UserSubscriptionRepository, settingRepo SettingRepository, notificationEmailService *NotificationEmailService, lockCache LeaderLockCache, db *sql.DB) *SubscriptionExpiryService {
 	svc := NewSubscriptionExpiryService(userSubRepo, time.Minute)
 	svc.SetSettingRepository(settingRepo)
 	svc.SetNotificationEmailService(notificationEmailService)
-	svc.SetFeishuNotificationService(feishuNotificationService)
 	svc.SetLeaderLock(lockCache, db)
 	svc.Start()
 	return svc
@@ -562,9 +547,11 @@ func ProvideAPIKeyService(
 	cache APIKeyCache,
 	cfg *config.Config,
 	billingCacheService *BillingCacheService,
+	concurrencyService *ConcurrencyService,
 ) *APIKeyService {
 	svc := NewAPIKeyService(apiKeyRepo, userRepo, groupRepo, userSubRepo, userGroupRateRepo, cache, cfg)
 	svc.SetRateLimitCacheInvalidator(billingCacheService)
+	svc.SetConcurrencyService(concurrencyService)
 	return svc
 }
 
@@ -574,7 +561,6 @@ var ProviderSet = wire.NewSet(
 	NewAuthService,
 	NewUserService,
 	ProvideAPIKeyService,
-	NewAPIKeyRuntimeService,
 	ProvideAPIKeyAuthCacheInvalidator,
 	NewGroupService,
 	NewAccountService,
@@ -590,6 +576,11 @@ var ProviderSet = wire.NewSet(
 	NewAdminService,
 	NewGatewayService,
 	NewOpenAIGatewayService,
+	ProvideBatchImageModelPricingResolver,
+	NewBatchImagePublicService,
+	NewBatchImageDownloadService,
+	ProvideBatchImageCleanupService,
+	ProvideBatchImageWorkerRuntime,
 	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
 	NewOAuthService,
 	ProvideOpenAIOAuthService,
@@ -624,7 +615,6 @@ var ProviderSet = wire.NewSet(
 	ProvideOpsScheduledReportService,
 	NewEmailService,
 	NewNotificationEmailService,
-	NewFeishuNotificationService,
 	ProvideEmailQueueService,
 	NewTurnstileService,
 	NewSubscriptionService,
@@ -632,7 +622,6 @@ var ProviderSet = wire.NewSet(
 	ProvideConcurrencyService,
 	ProvideUserMessageQueueService,
 	NewUsageRecordWorkerPool,
-	NewTouchPieDeviceService,
 	ProvideSchedulerSnapshotService,
 	NewIdentityService,
 	NewCRSSyncService,
@@ -661,7 +650,7 @@ var ProviderSet = wire.NewSet(
 	NewGroupCapacityService,
 	NewChannelService,
 	NewModelPricingResolver,
-	ProvideContentModerationService,
+	NewContentModerationService,
 	NewAffiliateService,
 	ProvidePaymentConfigService,
 	ProvidePaymentService,
@@ -687,10 +676,9 @@ func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRep
 }
 
 // ProvideBalanceNotifyService creates BalanceNotifyService
-func ProvideBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountRepository, notificationEmailService *NotificationEmailService, feishuNotificationService *FeishuNotificationService) *BalanceNotifyService {
+func ProvideBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountRepository, notificationEmailService *NotificationEmailService) *BalanceNotifyService {
 	svc := NewBalanceNotifyService(emailService, settingRepo, accountRepo)
 	svc.SetNotificationEmailService(notificationEmailService)
-	svc.SetFeishuNotificationService(feishuNotificationService)
 	return svc
 }
 

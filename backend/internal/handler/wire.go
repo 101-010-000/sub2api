@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -91,56 +90,9 @@ func ProvideSettingHandler(settingService *service.SettingService, buildInfo Bui
 	return h
 }
 
-// ProvideAuthHandler creates AuthHandler and attaches optional notification integrations.
-func ProvideAuthHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService, promoService *service.PromoService, redeemService *service.RedeemService, totpService *service.TotpService, userAttributeService *service.UserAttributeService, feishuNotificationService *service.FeishuNotificationService) *AuthHandler {
-	h := NewAuthHandler(cfg, authService, userService, settingService, promoService, redeemService, totpService, userAttributeService)
-	h.SetFeishuNotificationService(feishuNotificationService)
-	return h
-}
-
-// ProvideUserHandler creates UserHandler and attaches optional notification integrations.
-func ProvideUserHandler(userService *service.UserService, authService *service.AuthService, emailService *service.EmailService, emailCache service.EmailCache, affiliateService *service.AffiliateService, userPlatformQuotaRepo service.UserPlatformQuotaRepository, contentModerationService *service.ContentModerationService, feishuNotificationService *service.FeishuNotificationService, speedService *service.SpeedService) *UserHandler {
-	h := NewUserHandler(userService, authService, emailService, emailCache, affiliateService, userPlatformQuotaRepo, contentModerationService)
-	h.SetFeishuNotificationService(feishuNotificationService)
-	h.SetSpeedService(speedService)
-	return h
-}
-
-func ProvideAdminUserHandler(adminService service.AdminService, concurrencyService *service.ConcurrencyService, userPlatformQuotaRepo service.UserPlatformQuotaRepository, billingCache service.BillingCache, speedService *service.SpeedService) *admin.UserHandler {
-	h := admin.NewUserHandler(adminService, concurrencyService, userPlatformQuotaRepo, billingCache)
-	h.SetSpeedService(speedService)
-	return h
-}
-
-func ProvideAdminSubscriptionHandler(subscriptionService *service.SubscriptionService, speedService *service.SpeedService) *admin.SubscriptionHandler {
-	h := admin.NewSubscriptionHandler(subscriptionService)
-	h.SetSpeedService(speedService)
-	return h
-}
-
-func ProvideGatewayHandler(gatewayService *service.GatewayService, geminiCompatService *service.GeminiMessagesCompatService, antigravityGatewayService *service.AntigravityGatewayService, userService *service.UserService, concurrencyService *service.ConcurrencyService, billingCacheService *service.BillingCacheService, usageService *service.UsageService, apiKeyService *service.APIKeyService, usageRecordWorkerPool *service.UsageRecordWorkerPool, errorPassthroughService *service.ErrorPassthroughService, contentModerationService *service.ContentModerationService, userMsgQueueService *service.UserMessageQueueService, cfg *config.Config, settingService *service.SettingService, speedService *service.SpeedService) *GatewayHandler {
-	h := NewGatewayHandler(gatewayService, geminiCompatService, antigravityGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
-	h.SetSpeedService(speedService)
-	return h
-}
-
-func ProvideOpenAIGatewayHandler(gatewayService *service.OpenAIGatewayService, concurrencyService *service.ConcurrencyService, billingCacheService *service.BillingCacheService, apiKeyService *service.APIKeyService, usageRecordWorkerPool *service.UsageRecordWorkerPool, errorPassthroughService *service.ErrorPassthroughService, contentModerationService *service.ContentModerationService, opsService *service.OpsService, cfg *config.Config, speedService *service.SpeedService) *OpenAIGatewayHandler {
-	h := NewOpenAIGatewayHandler(gatewayService, concurrencyService, billingCacheService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, opsService, cfg)
-	h.SetSpeedService(speedService)
-	return h
-}
-
 // ProvideAdminSettingHandler creates admin.SettingHandler with notification template APIs.
-func ProvideAdminSettingHandler(settingService *service.SettingService, emailService *service.EmailService, turnstileService *service.TurnstileService, opsService *service.OpsService, paymentConfigService *service.PaymentConfigService, paymentService *service.PaymentService, userAttributeService *service.UserAttributeService, notificationEmailService *service.NotificationEmailService, feishuNotificationService *service.FeishuNotificationService) *admin.SettingHandler {
+func ProvideAdminSettingHandler(settingService *service.SettingService, emailService *service.EmailService, turnstileService *service.TurnstileService, opsService *service.OpsService, paymentConfigService *service.PaymentConfigService, paymentService *service.PaymentService, userAttributeService *service.UserAttributeService, notificationEmailService *service.NotificationEmailService) *admin.SettingHandler {
 	h := admin.NewSettingHandler(settingService, emailService, turnstileService, opsService, paymentConfigService, paymentService, userAttributeService)
-	h.SetNotificationEmailService(notificationEmailService)
-	h.SetFeishuNotificationService(feishuNotificationService)
-	return h
-}
-
-func ProvideAdminOpsHandler(opsService *service.OpsService, userService *service.UserService, notificationEmailService *service.NotificationEmailService) *admin.OpsHandler {
-	h := admin.NewOpsHandler(opsService)
-	h.SetUserService(userService)
 	h.SetNotificationEmailService(notificationEmailService)
 	return h
 }
@@ -163,7 +115,7 @@ func ProvideHandlers(
 	paymentHandler *PaymentHandler,
 	paymentWebhookHandler *PaymentWebhookHandler,
 	availableChannelHandler *AvailableChannelHandler,
-	touchPieHandler *TouchPieHandler,
+	batchImageHandler *BatchImageHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 ) *Handlers {
@@ -184,34 +136,33 @@ func ProvideHandlers(
 		Payment:          paymentHandler,
 		PaymentWebhook:   paymentWebhookHandler,
 		AvailableChannel: availableChannelHandler,
-		TouchPie:         touchPieHandler,
+		BatchImage:       batchImageHandler,
 	}
 }
 
 // ProviderSet is the Wire provider set for all handlers
 var ProviderSet = wire.NewSet(
 	// Top-level handlers
-	ProvideAuthHandler,
-	ProvideUserHandler,
-	ProvideAPIKeyHandler,
+	NewAuthHandler,
+	NewUserHandler,
+	NewAPIKeyHandler,
 	NewUsageHandler,
 	NewRedeemHandler,
 	NewSubscriptionHandler,
 	NewAnnouncementHandler,
 	NewChannelMonitorUserHandler,
-	ProvideGatewayHandler,
-	ProvideOpenAIGatewayHandler,
+	NewGatewayHandler,
+	NewOpenAIGatewayHandler,
 	NewTotpHandler,
 	ProvideSettingHandler,
 	NewPaymentHandler,
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
-	NewTouchPieHandler,
-	wire.Bind(new(touchPieAPIKeyManager), new(*service.APIKeyService)),
+	NewBatchImageHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,
-	ProvideAdminUserHandler,
+	admin.NewUserHandler,
 	admin.NewGroupHandler,
 	admin.NewAccountHandler,
 	admin.NewAnnouncementHandler,
@@ -226,14 +177,14 @@ var ProviderSet = wire.NewSet(
 	admin.NewRedeemHandler,
 	admin.NewPromoHandler,
 	ProvideAdminSettingHandler,
-	ProvideAdminOpsHandler,
+	admin.NewOpsHandler,
 	ProvideSystemHandler,
-	ProvideAdminSubscriptionHandler,
+	admin.NewSubscriptionHandler,
 	admin.NewUsageHandler,
 	admin.NewUserAttributeHandler,
 	admin.NewErrorPassthroughHandler,
 	admin.NewTLSFingerprintProfileHandler,
-	admin.ProvideAdminAPIKeyHandler,
+	admin.NewAdminAPIKeyHandler,
 	admin.NewScheduledTestHandler,
 	admin.NewChannelHandler,
 	admin.NewChannelMonitorHandler,

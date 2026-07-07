@@ -167,13 +167,20 @@
                   />
                 </svg>
               </button>
-              <SpeedStatusSummary
-                v-if="row.group && speedStatusesByGroup[row.group.id]"
-                :status="speedStatusesByGroup[row.group.id]"
-                compact
-                class="mt-2 w-[280px]"
-              />
             </div>
+          </template>
+
+          <template #cell-current_concurrency="{ value }">
+            <span
+              :class="[
+                'inline-flex min-w-8 items-center justify-center rounded px-2 py-1 text-sm font-semibold tabular-nums',
+                (value ?? 0) > 0
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800'
+                  : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-dark-400'
+              ]"
+            >
+              {{ value ?? 0 }}
+            </span>
           </template>
 
           <template #cell-usage="{ row }">
@@ -1295,12 +1302,6 @@
                 (!selectedKeyForGroup?.group_id && option.value === null)
               "
             />
-            <SpeedStatusSummary
-              v-if="speedStatusesByGroup[option.value]"
-              :status="speedStatusesByGroup[option.value]"
-              compact
-              class="mt-2"
-            />
           </button>
           <!-- Empty state when search has no results -->
           <div v-if="filteredGroupOptions.length === 0" class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
@@ -1321,7 +1322,7 @@
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
-import { keysAPI, authAPI, usageAPI, userGroupsAPI, userAPI } from '@/api'
+import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -1337,8 +1338,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import SpeedStatusSummary from '@/components/common/SpeedStatusSummary.vue'
-	import type { ApiKey, ApiKeyRuntimeStatus, Group, PublicSettings, SubscriptionType, GroupPlatform, UserSpeedStatus, UpdateApiKeyRequest } from '@/types'
+import type { ApiKey, ApiKeyRuntimeStatus, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1378,6 +1378,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'name', label: t('common.name'), sortable: true },
   { key: 'key', label: t('keys.apiKey'), sortable: false },
   { key: 'group', label: t('keys.group'), sortable: false },
+  { key: 'current_concurrency', label: t('keys.currentConcurrency'), sortable: false },
   { key: 'usage', label: t('keys.usage'), sortable: false },
   { key: 'rate_limit', label: t('keys.rateLimitColumn'), sortable: false },
   { key: 'runtime_limits', label: t('keys.runtimeLimitsColumn'), sortable: false },
@@ -1457,7 +1458,6 @@ const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const userGroupRates = ref<Record<number, number>>({})
-const speedStatusesByGroup = ref<Record<number, UserSpeedStatus>>({})
 
 const pagination = ref({
   page: 1,
@@ -1765,14 +1765,6 @@ const loadUserGroupRates = async () => {
   }
 }
 
-const loadSpeedStatuses = async () => {
-  try {
-    const statuses = await userAPI.getSpeedStatuses()
-    speedStatusesByGroup.value = Object.fromEntries(statuses.map((status) => [status.group_id, status]))
-  } catch (error) {
-    console.error('Failed to load speed statuses:', error)
-  }
-}
 
 const loadPublicSettings = async () => {
   try {
@@ -2296,7 +2288,6 @@ onMounted(() => {
   loadApiKeys()
   loadGroups()
   loadUserGroupRates()
-  loadSpeedStatuses()
   loadPublicSettings()
   document.addEventListener('click', closeGroupSelector)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)

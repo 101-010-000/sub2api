@@ -58,7 +58,7 @@ type Handlers struct {
 	Payment          *PaymentHandler
 	PaymentWebhook   *PaymentWebhookHandler
 	AvailableChannel *AvailableChannelHandler
-	TouchPie         *TouchPieHandler
+	BatchImage       *BatchImageHandler
 }
 
 // BuildInfo contains build-time information

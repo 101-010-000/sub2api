@@ -14,20 +14,13 @@ type Model struct {
 	OwnedBy     string `json:"owned_by"`
 	Type        string `json:"type"`
 	DisplayName string `json:"display_name"`
-	Source      string `json:"source,omitempty"`
-	AccentColor string `json:"accent_color,omitempty"`
 }
-
-const (
-	DefaultLatestModel = "gpt-5.5"
-
-	TouchXProviderName = "TouchX"
-	TouchXSource       = "touchx"
-	TouchXAccentColor  = "#22d3ee"
-)
 
 // DefaultModels OpenAI models list
 var DefaultModels = []Model{
+	{ID: "gpt-5.6-sol", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Sol"},
+	{ID: "gpt-5.6-terra", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Terra"},
+	{ID: "gpt-5.6-luna", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Luna"},
 	{ID: "gpt-5.5", Object: "model", Created: 1776873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.5"},
 	{ID: "gpt-5.4", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4"},
 	{ID: "gpt-5.4-mini", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Mini"},
@@ -49,21 +42,7 @@ func DefaultModelIDs() []string {
 }
 
 // DefaultTestModel default model for testing OpenAI accounts
-const DefaultTestModel = DefaultLatestModel
-
-func WithTouchXModelMetadata(models []Model) []Model {
-	out := make([]Model, len(models))
-	for i, model := range models {
-		model.OwnedBy = TouchXProviderName
-		model.Source = TouchXSource
-		model.AccentColor = TouchXAccentColor
-		if model.DisplayName != "" && !strings.Contains(model.DisplayName, TouchXProviderName) {
-			model.DisplayName += " · " + TouchXProviderName
-		}
-		out[i] = model
-	}
-	return out
-}
+const DefaultTestModel = "gpt-5.4"
 
 // DefaultInstructions default instructions for non-Codex CLI requests.
 // 内容为真实 Codex CLI 的 GPT-5-Codex base prompt（codex 系模型默认）。

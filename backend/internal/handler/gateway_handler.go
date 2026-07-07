@@ -55,7 +55,6 @@ type GatewayHandler struct {
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
 	settingService            *service.SettingService
-	speedService              *service.SpeedService
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -114,10 +113,6 @@ func NewGatewayHandler(
 	}
 }
 
-func (h *GatewayHandler) SetSpeedService(speedService *service.SpeedService) {
-	h.speedService = speedService
-}
-
 // Messages handles Claude API compatible messages endpoint
 // POST /v1/messages
 func (h *GatewayHandler) Messages(c *gin.Context) {
@@ -163,6 +158,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	bodyRef := service.NewRequestBodyRef(body)
 	parsedReq, err := service.ParseGatewayRequest(bodyRef, domain.PlatformAnthropic)
 	if err != nil {
+		logRequestBodyParseFailure(reqLog, body, err)
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 		return
 	}
@@ -238,9 +234,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
-		return
-	}
-	if !h.applySpeedDecision(c, apiKey, subscription, reqStream, &streamStarted, reqLog) {
 		return
 	}
 
@@ -1014,31 +1007,22 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	// Get available models from account configurations for the selected group platform.
 	availableModels := h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, platform)
 	if apiKey != nil && apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
-		availableModels = filterModelsByCustomList(availableModels, defaultModelIDsForPlatform(platform), apiKey.Group.ModelsListConfig.Models)
-		writeCustomModelsList(c, platform, availableModels, touchXModelListRequested(c, apiKey))
+		fallbackModels := defaultModelIDsForPlatform(platform)
+		availableModels = filterModelsByCustomList(customModelsListSource(platform, availableModels, fallbackModels), fallbackModels, apiKey.Group.ModelsListConfig.Models)
+		writeCustomModelsList(c, platform, availableModels)
 		return
 	}
 
 	if len(availableModels) > 0 {
-		touchX := touchXModelListRequested(c, apiKey)
-		if platform == service.PlatformOpenAI {
-			writeOpenAIModelsList(c, availableModels, touchX)
-			return
-		}
-		writeModelsList(c, availableModels, touchX)
+		writeModelsList(c, availableModels)
 		return
 	}
 
 	// Fallback to default models
 	if platform == service.PlatformOpenAI {
-		models := openai.DefaultModels
-		if touchXModelListRequested(c, apiKey) {
-			models = openai.WithTouchXModelMetadata(models)
-			markTouchXProviderHeaders(c)
-		}
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
-			"data":   models,
+			"data":   openai.DefaultModels,
 		})
 		return
 	}
@@ -1057,38 +1041,15 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	})
 }
 
-func touchXModelListRequested(c *gin.Context, apiKey *service.APIKey) bool {
-	if c == nil || apiKey == nil {
-		return false
-	}
-	return service.VerifyTouchPieSignature(c.GetHeader(service.TouchPieHeaderName), apiKey.Key, time.Now())
-}
-
-func markTouchXProviderHeaders(c *gin.Context) {
-	if c == nil {
-		return
-	}
-	c.Header("X-Sub2api-Provider", openai.TouchXProviderName)
-	c.Header("X-Sub2api-Provider-Source", openai.TouchXSource)
-	c.Header("X-Sub2api-Provider-Accent-Color", openai.TouchXAccentColor)
-}
-
-func writeModelsList(c *gin.Context, modelIDs []string, touchX bool) {
+func writeModelsList(c *gin.Context, modelIDs []string) {
 	models := make([]claude.Model, 0, len(modelIDs))
 	for _, modelID := range modelIDs {
-		displayName := modelID
-		if touchX {
-			displayName += " · " + openai.TouchXProviderName
-		}
 		models = append(models, claude.Model{
 			ID:          modelID,
 			Type:        "model",
-			DisplayName: displayName,
+			DisplayName: modelID,
 			CreatedAt:   "2024-01-01T00:00:00Z",
 		})
-	}
-	if touchX {
-		markTouchXProviderHeaders(c)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
@@ -1096,15 +1057,15 @@ func writeModelsList(c *gin.Context, modelIDs []string, touchX bool) {
 	})
 }
 
-func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string, touchX bool) {
+func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string) {
 	if platform == service.PlatformOpenAI {
-		writeOpenAIModelsList(c, modelIDs, touchX)
+		writeOpenAIModelsList(c, modelIDs)
 		return
 	}
-	writeModelsList(c, modelIDs, touchX)
+	writeModelsList(c, modelIDs)
 }
 
-func writeOpenAIModelsList(c *gin.Context, modelIDs []string, touchX bool) {
+func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
 	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels))
 	for _, model := range openai.DefaultModels {
 		defaultsByID[model.ID] = model
@@ -1125,14 +1086,17 @@ func writeOpenAIModelsList(c *gin.Context, modelIDs []string, touchX bool) {
 			DisplayName: modelID,
 		})
 	}
-	if touchX {
-		models = openai.WithTouchXModelMetadata(models)
-		markTouchXProviderHeaders(c)
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
 		"data":   models,
 	})
+}
+
+func customModelsListSource(platform string, availableModels, fallbackModels []string) []string {
+	if platform == service.PlatformAnthropic && len(availableModels) > 0 {
+		return mergeModelIDs(availableModels, fallbackModels)
+	}
+	return availableModels
 }
 
 func filterModelsByCustomList(availableModels, fallbackModels, selectedModels []string) []string {
@@ -1203,6 +1167,15 @@ func defaultModelIDsForPlatform(platform string) []string {
 			ids = append(ids, model.ID)
 		}
 		return ids
+	case service.PlatformAnthropic:
+		ids := make([]string, 0, len(claude.DefaultModels)+len(antigravity.DefaultModels()))
+		for _, model := range claude.DefaultModels {
+			ids = append(ids, model.ID)
+		}
+		for _, model := range antigravity.DefaultModels() {
+			ids = append(ids, model.ID)
+		}
+		return mergeModelIDs(ids, nil)
 	case service.PlatformGrok:
 		return xai.DefaultModelIDs()
 	default:
@@ -1212,6 +1185,25 @@ func defaultModelIDsForPlatform(platform string) []string {
 		}
 		return ids
 	}
+}
+
+func mergeModelIDs(primary, secondary []string) []string {
+	seen := make(map[string]struct{}, len(primary)+len(secondary))
+	merged := make([]string, 0, len(primary)+len(secondary))
+	for _, models := range [][]string{primary, secondary} {
+		for _, model := range models {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			if _, ok := seen[model]; ok {
+				continue
+			}
+			seen[model] = struct{}{}
+			merged = append(merged, model)
+		}
+	}
+	return merged
 }
 
 // AntigravityModels 返回 Antigravity 支持的全部模型
@@ -1662,55 +1654,6 @@ func (h *GatewayHandler) handleStreamingAwareError(c *gin.Context, status int, e
 	h.errorResponse(c, status, errType, message)
 }
 
-func (h *GatewayHandler) applySpeedDecision(c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription, isStream bool, streamStarted *bool, reqLog *zap.Logger) bool {
-	if h.speedService == nil || apiKey == nil {
-		return true
-	}
-	decision, err := h.speedService.Decide(c.Request.Context(), apiKey.User, apiKey.Group, subscription)
-	if err != nil {
-		started := streamStarted != nil && *streamStarted
-		if errors.Is(err, service.ErrSpeedSlowRejected) {
-			setSpeedUsageMetadata(c, service.SpeedStateRefused, openAISpeedWaitMs(decision), speedDecisionRoute(decision))
-			if h.gatewayService != nil {
-				h.gatewayService.RecordSpeedRefusedUsage(c.Request.Context(), &service.SpeedRefusedUsageInput{
-					APIKey:          apiKey,
-					User:            apiKey.User,
-					Subscription:    subscription,
-					Model:           speedUsageModel(c),
-					RequestType:     requestTypeFromContext(c, isStream),
-					InboundEndpoint: GetInboundEndpoint(c),
-					SpeedWaitMs:     openAISpeedWaitMs(decision),
-				})
-			}
-			h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", speedRejectMessage(decision), started)
-			return false
-		}
-		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
-		}
-		h.handleStreamingAwareError(c, status, code, message, started)
-		return false
-	}
-	if decision == nil || decision.Delay <= 0 {
-		if state := speedDecisionUsageState(decision); state != "" {
-			setSpeedUsageMetadata(c, state, openAISpeedWaitMs(decision), speedDecisionRoute(decision))
-		}
-		return true
-	}
-	if reqLog != nil {
-		reqLog.Info("gateway.speed_slow_delay", zap.Duration("delay", decision.Delay), zap.String("state", decision.State))
-	}
-	startedAt := time.Now()
-	if err := waitWithOptionalPing(c, decision.Delay, isStream, streamStarted, SSEPingFormatClaude, h.concurrencyHelper.pingInterval); err != nil {
-		h.handleStreamingAwareError(c, http.StatusRequestTimeout, "request_timeout", "request cancelled during speed delay", streamStarted != nil && *streamStarted)
-		return false
-	}
-	decision.WaitMs = int(time.Since(startedAt).Milliseconds())
-	setSpeedUsageMetadata(c, service.SpeedStateSlow, decision.WaitMs, speedDecisionRoute(decision))
-	return true
-}
-
 // ensureForwardErrorResponse 在 Forward 返回错误但尚未写响应时补写统一错误响应。
 // Writer 已被写过时（ping 已 flush）走 streamStarted 分支，
 // 让 handleStreamingAwareError 通过 SSE 发协议合规的终止事件，
@@ -1803,7 +1746,6 @@ func (h *GatewayHandler) errorResponse(c *gin.Context, status int, errType, mess
 	c.JSON(status, gin.H{
 		"type": "error",
 		"error": gin.H{
-			"code":    errType,
 			"type":    errType,
 			"message": message,
 		},
@@ -1855,6 +1797,7 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 	bodyRef := service.NewRequestBodyRef(body)
 	parsedReq, err := service.ParseGatewayRequest(bodyRef, domain.PlatformAnthropic)
 	if err != nil {
+		logRequestBodyParseFailure(reqLog, body, err)
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 		return
 	}

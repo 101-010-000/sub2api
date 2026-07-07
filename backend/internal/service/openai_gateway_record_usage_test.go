@@ -226,7 +226,6 @@ func newOpenAIRecordUsageServiceForTest(usageRepo UsageLogRepository, userRepo U
 		nil,
 		nil,
 		nil, // userPlatformQuotaRepo
-		nil, // speedService
 	)
 	svc.userGroupRateResolver = newUserGroupRateResolver(
 		rateRepo,
@@ -1189,51 +1188,6 @@ func TestOpenAIGatewayServiceRecordUsage_UsesRequestedModelAndUpstreamModelMetad
 	require.Equal(t, 1, userRepo.deductCalls)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_ScheduledGroupOnlyAffectsAccountStatsCost(t *testing.T) {
-	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
-	userRepo := &openAIRecordUsageUserRepoStub{}
-	subRepo := &openAIRecordUsageSubRepoStub{}
-	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
-
-	originalGroupID := int64(11)
-	scheduledGroupID := int64(22)
-	inputPrice := 0.5
-	channel := &Channel{
-		ID:     900,
-		Status: StatusActive,
-		AccountStatsPricingRules: []AccountStatsPricingRule{{
-			GroupIDs: []int64{scheduledGroupID},
-			Pricing: []ChannelModelPricing{{
-				Models:     []string{"gpt-5.1"},
-				InputPrice: &inputPrice,
-			}},
-		}},
-	}
-	svc.channelService = newTestOpenAIChannelServiceForStats(t, channel, scheduledGroupID, PlatformOpenAI)
-
-	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
-		Result: &OpenAIForwardResult{
-			RequestID: "resp_suisu_scheduled_group",
-			Model:     "gpt-5.1",
-			Usage: OpenAIUsage{
-				InputTokens: 20,
-			},
-			Duration: time.Second,
-		},
-		APIKey:           &APIKey{ID: 10, GroupID: &originalGroupID, Group: &Group{ID: originalGroupID, RateMultiplier: 1}},
-		User:             &User{ID: 20},
-		Account:          &Account{ID: 30},
-		ScheduledGroupID: &scheduledGroupID,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, usageRepo.lastLog)
-	require.NotNil(t, usageRepo.lastLog.GroupID)
-	require.Equal(t, originalGroupID, *usageRepo.lastLog.GroupID)
-	require.NotNil(t, usageRepo.lastLog.AccountStatsCost)
-	require.InDelta(t, 10.0, *usageRepo.lastLog.AccountStatsCost, 1e-12)
-}
-
 func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingRequestedModel(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}
@@ -1268,17 +1222,6 @@ func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingRequestedModel(
 	require.Equal(t, expectedCost.ActualCost, usageRepo.lastLog.ActualCost)
 	require.Equal(t, expectedCost.TotalCost, usageRepo.lastLog.TotalCost)
 	require.Equal(t, expectedCost.ActualCost, userRepo.lastAmount)
-}
-
-func newTestOpenAIChannelServiceForStats(t *testing.T, channel *Channel, groupID int64, platform string) *ChannelService {
-	t.Helper()
-	cache := newEmptyChannelCache()
-	cache.channelByGroupID[groupID] = channel
-	cache.groupPlatform[groupID] = platform
-	cache.loadedAt = time.Now()
-	cs := &ChannelService{}
-	cs.cache.Store(cache)
-	return cs
 }
 
 func TestOpenAIGatewayServiceRecordUsage_ChannelMappedDoesNotOverrideBillingModelWhenUnmapped(t *testing.T) {
@@ -1856,6 +1799,52 @@ func TestOpenAIGatewayServiceRecordUsage_ImageIndependentMultiplierUsesImageRate
 	require.InDelta(t, 0.2, usageRepo.lastLog.TotalCost, 1e-12)
 	require.InDelta(t, 0.2, usageRepo.lastLog.ActualCost, 1e-12)
 	require.InDelta(t, 1.0, usageRepo.lastLog.RateMultiplier, 1e-12)
+	require.NotNil(t, usageRepo.lastLog.BillingMode)
+	require.Equal(t, string(BillingModeImage), *usageRepo.lastLog.BillingMode)
+}
+
+func TestGrokVideoMediaBillingUsesImageRateMultiplier(t *testing.T) {
+	mediaPrice2K := 0.4
+	groupID := int64(126)
+
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:    "video-request-123",
+			ResponseID:   "video-request-123",
+			Model:        "grok-imagine-video-1.5",
+			BillingModel: "grok-imagine-video-1.5",
+			// The usage schema has no separate video count; video generation is billed as one media unit.
+			ImageCount: 1,
+			ImageSize:  ImageBillingSize2K,
+			Duration:   time.Second,
+		},
+		APIKey: &APIKey{
+			ID:      10126,
+			GroupID: i64p(groupID),
+			Group: &Group{
+				ID:                   groupID,
+				Platform:             PlatformGrok,
+				RateMultiplier:       0.15,
+				ImageRateIndependent: true,
+				ImageRateMultiplier:  0.5,
+				ImagePrice2K:         &mediaPrice2K,
+			},
+		},
+		User:    &User{ID: 20126},
+		Account: &Account{ID: 30126, Platform: PlatformGrok},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, "grok-imagine-video-1.5", usageRepo.lastLog.Model)
+	require.Equal(t, 1, usageRepo.lastLog.ImageCount)
+	require.Equal(t, ImageBillingSize2K, *usageRepo.lastLog.ImageSize)
+	require.InDelta(t, 0.4, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, 0.2, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, 0.5, usageRepo.lastLog.RateMultiplier, 1e-12)
 	require.NotNil(t, usageRepo.lastLog.BillingMode)
 	require.Equal(t, string(BillingModeImage), *usageRepo.lastLog.BillingMode)
 }

@@ -4,19 +4,16 @@ import "time"
 
 // APIKeyAuthSnapshot API Key 认证缓存快照（仅包含认证所需字段）
 type APIKeyAuthSnapshot struct {
-	Version              int                      `json:"version"`
-	APIKeyID             int64                    `json:"api_key_id"`
-	UserID               int64                    `json:"user_id"`
-	GroupID              *int64                   `json:"group_id,omitempty"`
-	Name                 string                   `json:"name"`
-	Status               string                   `json:"status"`
-	IPWhitelist          []string                 `json:"ip_whitelist,omitempty"`
-	IPBlacklist          []string                 `json:"ip_blacklist,omitempty"`
-	MaxActiveIPs         int                      `json:"max_active_ips"`
-	IPIdleTimeoutSeconds int                      `json:"ip_idle_timeout_seconds"`
-	MaxConcurrency       int                      `json:"max_concurrency"`
-	User                 APIKeyAuthUserSnapshot   `json:"user"`
-	Group                *APIKeyAuthGroupSnapshot `json:"group,omitempty"`
+	Version     int                      `json:"version"`
+	APIKeyID    int64                    `json:"api_key_id"`
+	UserID      int64                    `json:"user_id"`
+	GroupID     *int64                   `json:"group_id,omitempty"`
+	Name        string                   `json:"name"`
+	Status      string                   `json:"status"`
+	IPWhitelist []string                 `json:"ip_whitelist,omitempty"`
+	IPBlacklist []string                 `json:"ip_blacklist,omitempty"`
+	User        APIKeyAuthUserSnapshot   `json:"user"`
+	Group       *APIKeyAuthGroupSnapshot `json:"group,omitempty"`
 
 	// Quota fields for API Key independent quota feature
 	Quota     float64 `json:"quota"`      // Quota limit in USD (0 = unlimited)
@@ -52,10 +49,6 @@ type APIKeyAuthUserSnapshot struct {
 	// RPMLimit 用户级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 兜底判断。
 	RPMLimit int `json:"rpm_limit"`
 
-	// APIKeyMaxActiveIPs 用户级 API Key 活跃 IP 上限；热路径用于计算有效动态 IP 上限。
-	APIKeyMaxActiveIPs        int  `json:"api_key_max_active_ips"`
-	APIKeyMaxActiveIPsVisible bool `json:"api_key_max_active_ips_visible"`
-
 	// UserGroupRPMOverride 该 API Key 对应的 (user, group) 专属 RPM 覆盖值。
 	// nil = 无 override（回退到 group/user 级）；0 = 不限流；>0 = 专属上限。
 	UserGroupRPMOverride *int `json:"user_group_rpm_override,omitempty"`
@@ -74,6 +67,7 @@ type APIKeyAuthGroupSnapshot struct {
 	WeeklyLimitUSD                  *float64 `json:"weekly_limit_usd,omitempty"`
 	MonthlyLimitUSD                 *float64 `json:"monthly_limit_usd,omitempty"`
 	AllowImageGeneration            bool     `json:"allow_image_generation"`
+	AllowBatchImageGeneration       bool     `json:"allow_batch_image_generation"`
 	ImageRateIndependent            bool     `json:"image_rate_independent"`
 	ImageRateMultiplier             float64  `json:"image_rate_multiplier"`
 	ImagePrice1K                    *float64 `json:"image_price_1k,omitempty"`
@@ -100,23 +94,6 @@ type APIKeyAuthGroupSnapshot struct {
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 级联判断。
 	RPMLimit int `json:"rpm_limit"`
-
-	// 优速通/随速通策略用于 OpenAI 请求热路径决策，必须随认证缓存保存。
-	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
-	UserSpeedConfigAllowed     bool    `json:"user_speed_config_allowed"`
-	DefaultFastQuotaRatio      float64 `json:"default_fast_quota_ratio"`
-	MinFastQuotaRatio          float64 `json:"min_fast_quota_ratio"`
-	MaxFastQuotaRatio          float64 `json:"max_fast_quota_ratio"`
-	DefaultSlowDelayMinSeconds int     `json:"default_slow_delay_min_seconds"`
-	DefaultSlowDelayMaxSeconds int     `json:"default_slow_delay_max_seconds"`
-	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
-	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
-	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
-	SpeedSlowRejectMessage     string  `json:"speed_slow_reject_message,omitempty"`
-	SuisuEnabled               bool    `json:"suisu_enabled"`
-	SuisuFallbackGroupID       *int64  `json:"suisu_fallback_group_id,omitempty"`
-	SuisuSlowRouteRatio        float64 `json:"suisu_slow_route_ratio"`
-	SuisuBusyRouteRatio        float64 `json:"suisu_busy_route_ratio"`
 
 	// 高峰时段倍率：PeakRateEnabled 为 true 且请求时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier（详见 Group.PeakMultiplierAt）。

@@ -234,7 +234,6 @@ func TestAPIKeyService_GetByKey_UsesL2Cache(t *testing.T) {
 func TestAPIKeyService_SnapshotRoundTrip_PreservesMessagesDispatchModelConfig(t *testing.T) {
 	svc := NewAPIKeyService(nil, nil, nil, nil, nil, nil, &config.Config{})
 	groupID := int64(9)
-	suisuFallbackGroupID := int64(17)
 	apiKey := &APIKey{
 		ID:      1,
 		UserID:  2,
@@ -266,21 +265,6 @@ func TestAPIKeyService_SnapshotRoundTrip_PreservesMessagesDispatchModelConfig(t 
 					"claude-sonnet-4.5": "gpt-5.4-nano",
 				},
 			},
-			SpeedConfigEnabled:         true,
-			UserSpeedConfigAllowed:     true,
-			DefaultFastQuotaRatio:      0.25,
-			MinFastQuotaRatio:          0.1,
-			MaxFastQuotaRatio:          0.8,
-			DefaultSlowDelayMinSeconds: 2,
-			DefaultSlowDelayMaxSeconds: 5,
-			MaxSlowDelaySeconds:        8,
-			DefaultSlowRejectRate:      0.2,
-			MaxSlowRejectRate:          0.6,
-			SpeedSlowRejectMessage:     "custom slow reject",
-			SuisuEnabled:               true,
-			SuisuFallbackGroupID:       &suisuFallbackGroupID,
-			SuisuSlowRouteRatio:        0.3,
-			SuisuBusyRouteRatio:        0.4,
 		},
 	}
 
@@ -291,22 +275,6 @@ func TestAPIKeyService_SnapshotRoundTrip_PreservesMessagesDispatchModelConfig(t 
 	require.Equal(t, apiKey.Name, roundTrip.Name)
 	require.NotNil(t, roundTrip.Group)
 	require.Equal(t, apiKey.Group.MessagesDispatchModelConfig, roundTrip.Group.MessagesDispatchModelConfig)
-	require.True(t, roundTrip.Group.SpeedConfigEnabled)
-	require.True(t, roundTrip.Group.UserSpeedConfigAllowed)
-	require.InDelta(t, 0.25, roundTrip.Group.DefaultFastQuotaRatio, 0.0001)
-	require.InDelta(t, 0.1, roundTrip.Group.MinFastQuotaRatio, 0.0001)
-	require.InDelta(t, 0.8, roundTrip.Group.MaxFastQuotaRatio, 0.0001)
-	require.Equal(t, 2, roundTrip.Group.DefaultSlowDelayMinSeconds)
-	require.Equal(t, 5, roundTrip.Group.DefaultSlowDelayMaxSeconds)
-	require.Equal(t, 8, roundTrip.Group.MaxSlowDelaySeconds)
-	require.InDelta(t, 0.2, roundTrip.Group.DefaultSlowRejectRate, 0.0001)
-	require.InDelta(t, 0.6, roundTrip.Group.MaxSlowRejectRate, 0.0001)
-	require.Equal(t, "custom slow reject", roundTrip.Group.SpeedSlowRejectMessage)
-	require.True(t, roundTrip.Group.SuisuEnabled)
-	require.NotNil(t, roundTrip.Group.SuisuFallbackGroupID)
-	require.Equal(t, suisuFallbackGroupID, *roundTrip.Group.SuisuFallbackGroupID)
-	require.InDelta(t, 0.3, roundTrip.Group.SuisuSlowRouteRatio, 0.0001)
-	require.InDelta(t, 0.4, roundTrip.Group.SuisuBusyRouteRatio, 0.0001)
 }
 
 func TestAPIKeyService_GetByKey_IgnoresLegacyAuthCacheSnapshotWithoutMessagesDispatchConfig(t *testing.T) {

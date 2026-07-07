@@ -133,23 +133,6 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		h.handleStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
-	speedDecision := h.applySpeedDecision(c, apiKey, subscription, &streamStarted, reqLog, false)
-	if !speedDecision.OK {
-		return
-	}
-	effectiveGroupID := apiKey.GroupID
-	var slowSuisuGroupID *int64
-	if speedDecision.Decision != nil && speedDecision.Decision.State == service.SpeedStateSlow {
-		if suisuGroupID := resolveSuisuGroupID(apiKey.Group, "slow"); suisuGroupID != nil {
-			markSuisuSlowRouted(c)
-			effectiveGroupID = suisuGroupID
-			slowSuisuGroupID = suisuGroupID
-		} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, parsed.Stream, &streamStarted, reqLog, false) {
-			return
-		}
-	} else if !h.finalizeOpenAISpeedDecision(c, speedDecision, parsed.Stream, &streamStarted, reqLog, false) {
-		return
-	}
 
 	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, body)
 	requestCtx := service.WithOpenAIImageGenerationIntent(c.Request.Context())
@@ -162,38 +145,14 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 
 	for {
 		reqLog.Debug("openai.images.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		previousEffectiveGroupID := effectiveGroupID
-		selection, scheduleDecision, newEffectiveGroupID, err := selectOpenAIAccountWithSuisuBusyFallback(
-			apiKey.Group,
+		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForImages(
+			requestCtx,
 			apiKey.GroupID,
-			effectiveGroupID,
-			len(failedAccountIDs) == 0,
-			reqLog,
-			func(groupID *int64) (*service.AccountSelectionResult, service.OpenAIAccountScheduleDecision, error) {
-				return h.gatewayService.SelectAccountWithSchedulerForImages(
-					requestCtx,
-					groupID,
-					sessionHash,
-					requestModel,
-					failedAccountIDs,
-					parsed.RequiredCapability,
-				)
-			},
+			sessionHash,
+			requestModel,
+			failedAccountIDs,
+			parsed.RequiredCapability,
 		)
-		markSuisuRoutedIfGroupChanged(c, previousEffectiveGroupID, newEffectiveGroupID)
-		requestCtx = service.WithOpenAIImageGenerationIntent(c.Request.Context())
-		effectiveGroupID = newEffectiveGroupID
-		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) && openAISelectionNeedsImmediateFallback(selection, err) {
-			if reqLog != nil {
-				reqLog.Info("openai.suisu_route_unavailable", zap.String("reason", "slow"), zap.Int64("suisu_group_id", *slowSuisuGroupID), zap.Error(err))
-			}
-			if !h.finalizeOpenAISpeedDecision(c, speedDecision, parsed.Stream, &streamStarted, reqLog, false) {
-				return
-			}
-			effectiveGroupID = apiKey.GroupID
-			slowSuisuGroupID = nil
-			continue
-		}
 		if err != nil {
 			reqLog.Warn("openai.images.account_select_failed",
 				zap.Error(err),
@@ -230,10 +189,6 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 			h.handleStreamingAwareError(c, cls.Status, cls.ErrType, message, streamStarted)
 			return
 		}
-		if slowSuisuGroupID != nil && sameGroupID(effectiveGroupID, slowSuisuGroupID) {
-			logSuisuRoute(reqLog, "slow", apiKey.GroupID, effectiveGroupID)
-			slowSuisuGroupID = nil
-		}
 
 		reqLog.Debug("openai.images.account_schedule_decision",
 			zap.String("layer", scheduleDecision.Layer),
@@ -249,7 +204,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		reqLog.Debug("openai.images.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, effectiveGroupID, sessionHash, selection, parsed.Stream, &streamStarted, reqLog)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, parsed.Stream, &streamStarted, reqLog)
 		if !acquired {
 			return
 		}
@@ -406,7 +361,6 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				IPAddress:          clientIP,
 				RequestPayloadHash: requestPayloadHash,
 				APIKeyService:      h.apiKeyService,
-				ScheduledGroupID:   effectiveGroupID,
 				QuotaPlatform:      quotaPlatform,
 				ChannelUsageFields: channelMapping.ToUsageFields(requestModel, upstreamModel),
 			}); err != nil {

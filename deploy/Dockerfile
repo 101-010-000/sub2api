@@ -18,8 +18,10 @@ ARG GOSUMDB=sum.golang.google.cn
 FROM ${NODE_IMAGE} AS frontend-builder
 
 WORKDIR /app/frontend
+ENV NODE_OPTIONS=--max-old-space-size=1536
 
-# Install pnpm. Keep v9 for lockfile compatibility with package.json pnpm.overrides.
+# Install pnpm. Keep this pinned to the lockfile-compatible major version so
+# Docker builds remain reproducible when pnpm changes config validation rules.
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Install dependencies first (better caching)
@@ -70,8 +72,7 @@ COPY --from=frontend-builder /app/backend/internal/web/dist ./internal/web/dist
 RUN VERSION_VALUE="${VERSION}" && \
     if [ -z "${VERSION_VALUE}" ]; then VERSION_VALUE="$(./scripts/resolve-version.sh)"; fi && \
     DATE_VALUE="${DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && \
-    GOMAXPROCS=2 GOMEMLIMIT=1536MiB CGO_ENABLED=0 GOOS=linux go build \
-    -p=2 \
+    CGO_ENABLED=0 GOOS=linux go build \
     -tags embed \
     -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT} -X main.Date=${DATE_VALUE} -X main.BuildType=release" \
     -o /app/sub2api \
@@ -83,9 +84,9 @@ RUN VERSION_VALUE="${VERSION}" && \
 FROM ${ALPINE_IMAGE}
 
 # Labels
-LABEL maintainer="TalexDreamSoul <github.com/TalexDreamSoul>"
+LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
 LABEL description="Sub2API - AI API Gateway Platform"
-LABEL org.opencontainers.image.source="https://github.com/TalexDreamSoul/sub2api"
+LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/sub2api"
 
 # Install runtime dependencies
 RUN apk add --no-cache \

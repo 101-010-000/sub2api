@@ -110,6 +110,7 @@ export interface User {
   role: 'admin' | 'user' // User role for authorization
   admin_permissions?: string[] // Delegated admin permissions for non-admin users
   balance: number // User balance for API usage
+  frozen_balance?: number // Balance currently held by async batch jobs
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
   api_key_max_active_ips?: number // User-level API key active IP cap; only present when visible to the user
@@ -546,8 +547,11 @@ export interface Group {
   monthly_limit_usd: number | null
   // 图片生成计费配置
   allow_image_generation: boolean
+  allow_batch_image_generation: boolean
   image_rate_independent: boolean
   image_rate_multiplier: number
+  batch_image_discount_multiplier: number
+  batch_image_hold_multiplier: number
   image_price_1k: number | null
   image_price_2k: number | null
   image_price_4k: number | null
@@ -566,17 +570,6 @@ export interface Group {
   messages_dispatch_model_config?: OpenAIMessagesDispatchModelConfig
   require_oauth_only: boolean
   require_privacy_set: boolean
-  speed_config_enabled?: boolean
-  user_speed_config_allowed?: boolean
-  default_fast_quota_ratio?: number
-  min_fast_quota_ratio?: number
-  max_fast_quota_ratio?: number
-  default_slow_delay_min_seconds?: number
-  default_slow_delay_max_seconds?: number
-  max_slow_delay_seconds?: number
-  default_slow_reject_rate?: number
-  max_slow_reject_rate?: number
-  speed_slow_reject_message?: string
   created_at: string
   updated_at: string
 }
@@ -604,12 +597,6 @@ export interface AdminGroup extends Group {
 
   // 分组排序
   sort_order: number
-
-  // 随速通配置（仅管理员可见）
-  suisu_enabled?: boolean
-  suisu_fallback_group_id?: number | null
-  suisu_slow_route_ratio?: number
-  suisu_busy_route_ratio?: number
 }
 
 export interface ModelsListConfig {
@@ -635,6 +622,7 @@ export interface ApiKey {
   expires_at: string | null // Expiration time (null = never expires)
   created_at: string
   updated_at: string
+  current_concurrency: number
   group?: Group
   rate_limit_5h: number
   rate_limit_1d: number
@@ -711,8 +699,11 @@ export interface CreateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   allow_image_generation?: boolean
+  allow_batch_image_generation?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number
+  batch_image_discount_multiplier?: number
+  batch_image_hold_multiplier?: number
   image_price_1k?: number | null
   image_price_2k?: number | null
   image_price_4k?: number | null
@@ -734,21 +725,6 @@ export interface CreateGroupRequest {
   rpm_limit?: number
   require_oauth_only?: boolean
   require_privacy_set?: boolean
-  speed_config_enabled?: boolean
-  user_speed_config_allowed?: boolean
-  default_fast_quota_ratio?: number
-  min_fast_quota_ratio?: number
-  max_fast_quota_ratio?: number
-  default_slow_delay_min_seconds?: number
-  default_slow_delay_max_seconds?: number
-  max_slow_delay_seconds?: number
-  default_slow_reject_rate?: number
-  max_slow_reject_rate?: number
-  speed_slow_reject_message?: string
-  suisu_enabled?: boolean
-  suisu_fallback_group_id?: number | null
-  suisu_slow_route_ratio?: number
-  suisu_busy_route_ratio?: number
   // 从指定分组复制账号
   copy_accounts_from_group_ids?: number[]
 }
@@ -765,8 +741,11 @@ export interface UpdateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   allow_image_generation?: boolean
+  allow_batch_image_generation?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number
+  batch_image_discount_multiplier?: number
+  batch_image_hold_multiplier?: number
   image_price_1k?: number | null
   image_price_2k?: number | null
   image_price_4k?: number | null
@@ -788,21 +767,6 @@ export interface UpdateGroupRequest {
   rpm_limit?: number
   require_oauth_only?: boolean
   require_privacy_set?: boolean
-  speed_config_enabled?: boolean
-  user_speed_config_allowed?: boolean
-  default_fast_quota_ratio?: number
-  min_fast_quota_ratio?: number
-  max_fast_quota_ratio?: number
-  default_slow_delay_min_seconds?: number
-  default_slow_delay_max_seconds?: number
-  max_slow_delay_seconds?: number
-  default_slow_reject_rate?: number
-  max_slow_reject_rate?: number
-  speed_slow_reject_message?: string
-  suisu_enabled?: boolean
-  suisu_fallback_group_id?: number | null
-  suisu_slow_route_ratio?: number
-  suisu_busy_route_ratio?: number
   copy_accounts_from_group_ids?: number[]
 }
 
@@ -958,6 +922,13 @@ export interface Account {
   concurrency: number
   load_factor?: number | null
   current_concurrency?: number // Real-time concurrency count from Redis
+  scheduler_score?: {
+    base_score: number
+    sticky_score?: number
+    sticky_score_infinity?: boolean
+    sticky_weighted_enabled: boolean
+  } | null
+  scheduler_scores?: AccountSchedulerGroupScore[] | null
   priority: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   status: 'active' | 'inactive' | 'error'
@@ -1046,6 +1017,16 @@ export interface Account {
   parent_privacy_mode?: string
   parent_subscription_expires_at?: string
   parent_chatgpt_account_id?: string
+}
+
+export interface AccountSchedulerGroupScore {
+  group_id?: number | null
+  group_name?: string
+  group_priority?: number | null
+  base_score: number
+  sticky_score?: number
+  sticky_score_infinity?: boolean
+  sticky_weighted_enabled: boolean
 }
 
 // Account Usage types
@@ -1383,9 +1364,6 @@ export interface UsageLog {
   reasoning_effort?: string | null
   inbound_endpoint?: string | null
   upstream_endpoint?: string | null
-  speed_state?: 'fast' | 'slow' | 'refused' | 'touchpie_fast' | string | null
-  speed_wait_ms?: number
-  speed_route?: 'direct' | 'suisu_slow' | 'suisu_busy' | string | null
 
   group_id: number | null
   subscription_id: number | null
@@ -1742,67 +1720,6 @@ export interface UserSubscription {
   expires_at: string | null
   user?: User
   group?: Group
-  speed_status?: SubscriptionSpeedStatus | null
-}
-
-export interface SubscriptionSpeedWindowStatus {
-  limit_usd: number
-  fast_limit_usd: number
-  fast_used_usd: number
-  slow_limit_usd: number
-  slow_used_usd: number
-  total_used_usd: number
-  remaining_usd: number
-  window_start?: string | null
-  resets_at?: string | null
-  resets_in_seconds: number
-}
-
-export interface SubscriptionSpeedStatus {
-  enabled: boolean
-  state: 'fast' | 'slow' | 'exhausted' | 'disabled' | string
-  fast_quota_ratio: number
-  slow_reject_rate: number
-  slow_delay_min_seconds: number
-  slow_delay_max_seconds: number
-  daily?: SubscriptionSpeedWindowStatus | null
-  weekly?: SubscriptionSpeedWindowStatus | null
-  monthly?: SubscriptionSpeedWindowStatus | null
-  slow_request_count: number
-  slow_reject_count: number
-  last_slow_at?: string | null
-}
-
-export interface UserSpeedStatus {
-  user_id: number
-  group_id: number
-  group_name: string
-  visible_to_user: boolean
-  enabled: boolean
-  billing_mode: 'subscription' | 'balance' | string
-  state: 'fast' | 'slow' | 'exhausted' | 'disabled' | string
-  config: {
-    fast_quota_ratio: number
-    slow_delay_min_seconds: number
-    slow_delay_max_seconds: number
-    slow_reject_rate: number
-  }
-  limits: {
-    min_fast_quota_ratio: number
-    max_fast_quota_ratio: number
-    max_slow_delay_seconds: number
-    max_slow_reject_rate: number
-  }
-  daily?: SubscriptionSpeedWindowStatus | null
-  weekly?: SubscriptionSpeedWindowStatus | null
-  monthly?: SubscriptionSpeedWindowStatus | null
-  slow_request_count: number
-  slow_reject_count: number
-  last_slow_at?: string | null
-}
-
-export interface UserSpeedListResponse {
-  speed: UserSpeedStatus[]
 }
 
 export interface SubscriptionProgress {

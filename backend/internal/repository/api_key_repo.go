@@ -49,9 +49,6 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetQuota(key.Quota).
 		SetQuotaUsed(key.QuotaUsed).
 		SetNillableExpiresAt(key.ExpiresAt).
-		SetMaxActiveIps(key.MaxActiveIPs).
-		SetIPIdleTimeoutSeconds(key.IPIdleTimeoutSeconds).
-		SetMaxConcurrency(key.MaxConcurrency).
 		SetRateLimit5h(key.RateLimit5h).
 		SetRateLimit1d(key.RateLimit1d).
 		SetRateLimit7d(key.RateLimit7d)
@@ -85,11 +82,7 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 		}
 		return nil, err
 	}
-	out := apiKeyEntityToService(m)
-	if err := r.hydrateAPIKeyUserIPPolicy(ctx, out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return apiKeyEntityToService(m), nil
 }
 
 // GetKeyAndOwnerID 根据 API Key ID 获取其 key 与所有者（用户）ID。
@@ -127,11 +120,7 @@ func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.A
 		}
 		return nil, err
 	}
-	out := apiKeyEntityToService(m)
-	if err := r.hydrateAPIKeyUserIPPolicy(ctx, out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return apiKeyEntityToService(m), nil
 }
 
 func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*service.APIKey, error) {
@@ -141,14 +130,10 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldID,
 			apikey.FieldUserID,
 			apikey.FieldGroupID,
-			apikey.FieldKey,
 			apikey.FieldName,
 			apikey.FieldStatus,
 			apikey.FieldIPWhitelist,
 			apikey.FieldIPBlacklist,
-			apikey.FieldMaxActiveIps,
-			apikey.FieldIPIdleTimeoutSeconds,
-			apikey.FieldMaxConcurrency,
 			apikey.FieldQuota,
 			apikey.FieldQuotaUsed,
 			apikey.FieldExpiresAt,
@@ -192,6 +177,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldWeeklyLimitUsd,
 				group.FieldMonthlyLimitUsd,
 				group.FieldAllowImageGeneration,
+				group.FieldAllowBatchImageGeneration,
 				group.FieldImageRateIndependent,
 				group.FieldImageRateMultiplier,
 				group.FieldImagePrice1k,
@@ -222,14 +208,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 		}
 		return nil, err
 	}
-	out := apiKeyEntityToService(m)
-	if err := r.hydrateAPIKeyUserIPPolicy(ctx, out); err != nil {
-		return nil, err
-	}
-	if err := r.hydrateAPIKeyAuthGroupSpeedSettings(ctx, out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return apiKeyEntityToService(m), nil
 }
 
 func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) error {
@@ -294,9 +273,6 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 	} else {
 		builder.ClearIPBlacklist()
 	}
-	builder.SetMaxActiveIps(key.MaxActiveIPs)
-	builder.SetIPIdleTimeoutSeconds(key.IPIdleTimeoutSeconds)
-	builder.SetMaxConcurrency(key.MaxConcurrency)
 
 	affected, err := builder.Save(ctx)
 	if err != nil {
@@ -727,32 +703,29 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:                   m.ID,
-		UserID:               m.UserID,
-		Key:                  m.Key,
-		Name:                 m.Name,
-		Status:               m.Status,
-		IPWhitelist:          m.IPWhitelist,
-		IPBlacklist:          m.IPBlacklist,
-		MaxActiveIPs:         m.MaxActiveIps,
-		IPIdleTimeoutSeconds: m.IPIdleTimeoutSeconds,
-		MaxConcurrency:       m.MaxConcurrency,
-		LastUsedAt:           m.LastUsedAt,
-		CreatedAt:            m.CreatedAt,
-		UpdatedAt:            m.UpdatedAt,
-		GroupID:              m.GroupID,
-		Quota:                m.Quota,
-		QuotaUsed:            m.QuotaUsed,
-		ExpiresAt:            m.ExpiresAt,
-		RateLimit5h:          m.RateLimit5h,
-		RateLimit1d:          m.RateLimit1d,
-		RateLimit7d:          m.RateLimit7d,
-		Usage5h:              m.Usage5h,
-		Usage1d:              m.Usage1d,
-		Usage7d:              m.Usage7d,
-		Window5hStart:        m.Window5hStart,
-		Window1dStart:        m.Window1dStart,
-		Window7dStart:        m.Window7dStart,
+		ID:            m.ID,
+		UserID:        m.UserID,
+		Key:           m.Key,
+		Name:          m.Name,
+		Status:        m.Status,
+		IPWhitelist:   m.IPWhitelist,
+		IPBlacklist:   m.IPBlacklist,
+		LastUsedAt:    m.LastUsedAt,
+		CreatedAt:     m.CreatedAt,
+		UpdatedAt:     m.UpdatedAt,
+		GroupID:       m.GroupID,
+		Quota:         m.Quota,
+		QuotaUsed:     m.QuotaUsed,
+		ExpiresAt:     m.ExpiresAt,
+		RateLimit5h:   m.RateLimit5h,
+		RateLimit1d:   m.RateLimit1d,
+		RateLimit7d:   m.RateLimit7d,
+		Usage5h:       m.Usage5h,
+		Usage1d:       m.Usage1d,
+		Usage7d:       m.Usage7d,
+		Window5hStart: m.Window5hStart,
+		Window1dStart: m.Window1dStart,
+		Window7dStart: m.Window7dStart,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)
@@ -771,124 +744,6 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 	return out
 }
 
-func (r *apiKeyRepository) hydrateAPIKeyUserIPPolicy(ctx context.Context, apiKey *service.APIKey) error {
-	if apiKey == nil || apiKey.User == nil || apiKey.User.ID <= 0 {
-		return nil
-	}
-	if r.sql == nil {
-		return nil
-	}
-	rows, err := r.sql.QueryContext(ctx,
-		"SELECT api_key_max_active_ips, api_key_max_active_ips_visible FROM users WHERE id = $1",
-		apiKey.User.ID,
-	)
-	if err != nil {
-		if isMissingUserAPIKeyIPPolicyColumn(err) {
-			return nil
-		}
-		return err
-	}
-	defer func() { _ = rows.Close() }()
-	if !rows.Next() {
-		return rows.Err()
-	}
-	var maxActiveIPs int
-	var visible bool
-	if err := rows.Scan(&maxActiveIPs, &visible); err != nil {
-		return err
-	}
-	apiKey.User.APIKeyMaxActiveIPs = maxActiveIPs
-	apiKey.User.APIKeyMaxActiveIPsVisible = visible
-	return nil
-}
-
-func (r *apiKeyRepository) hydrateAPIKeyAuthGroupSpeedSettings(ctx context.Context, apiKey *service.APIKey) error {
-	if apiKey == nil || apiKey.Group == nil || apiKey.Group.ID <= 0 || r.sql == nil {
-		return nil
-	}
-	var (
-		speedConfigEnabled         bool
-		userSpeedConfigAllowed     bool
-		defaultFastQuotaRatio      float64
-		minFastQuotaRatio          float64
-		maxFastQuotaRatio          float64
-		defaultSlowDelayMinSeconds int
-		defaultSlowDelayMaxSeconds int
-		maxSlowDelaySeconds        int
-		defaultSlowRejectRate      float64
-		maxSlowRejectRate          float64
-		speedSlowRejectMessage     string
-		suisuEnabled               bool
-		suisuFallbackGroupID       sql.NullInt64
-		suisuSlowRouteRatio        float64
-		suisuBusyRouteRatio        float64
-	)
-	err := scanSingleRow(ctx, r.sql, `
-		SELECT
-			speed_config_enabled,
-			user_speed_config_allowed,
-			default_fast_quota_ratio,
-			min_fast_quota_ratio,
-			max_fast_quota_ratio,
-			default_slow_delay_min_seconds,
-			default_slow_delay_max_seconds,
-			max_slow_delay_seconds,
-			default_slow_reject_rate,
-			max_slow_reject_rate,
-			speed_slow_reject_message,
-			suisu_enabled,
-			suisu_fallback_group_id,
-			suisu_slow_route_ratio,
-			suisu_busy_route_ratio
-		FROM groups
-		WHERE id = $1
-	`, []any{apiKey.Group.ID},
-		&speedConfigEnabled,
-		&userSpeedConfigAllowed,
-		&defaultFastQuotaRatio,
-		&minFastQuotaRatio,
-		&maxFastQuotaRatio,
-		&defaultSlowDelayMinSeconds,
-		&defaultSlowDelayMaxSeconds,
-		&maxSlowDelaySeconds,
-		&defaultSlowRejectRate,
-		&maxSlowRejectRate,
-		&speedSlowRejectMessage,
-		&suisuEnabled,
-		&suisuFallbackGroupID,
-		&suisuSlowRouteRatio,
-		&suisuBusyRouteRatio,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return err
-	}
-
-	apiKey.Group.SpeedConfigEnabled = speedConfigEnabled
-	apiKey.Group.UserSpeedConfigAllowed = userSpeedConfigAllowed
-	apiKey.Group.DefaultFastQuotaRatio = defaultFastQuotaRatio
-	apiKey.Group.MinFastQuotaRatio = minFastQuotaRatio
-	apiKey.Group.MaxFastQuotaRatio = maxFastQuotaRatio
-	apiKey.Group.DefaultSlowDelayMinSeconds = defaultSlowDelayMinSeconds
-	apiKey.Group.DefaultSlowDelayMaxSeconds = defaultSlowDelayMaxSeconds
-	apiKey.Group.MaxSlowDelaySeconds = maxSlowDelaySeconds
-	apiKey.Group.DefaultSlowRejectRate = defaultSlowRejectRate
-	apiKey.Group.MaxSlowRejectRate = maxSlowRejectRate
-	apiKey.Group.SpeedSlowRejectMessage = speedSlowRejectMessage
-	apiKey.Group.SuisuEnabled = suisuEnabled
-	if suisuFallbackGroupID.Valid {
-		value := suisuFallbackGroupID.Int64
-		apiKey.Group.SuisuFallbackGroupID = &value
-	} else {
-		apiKey.Group.SuisuFallbackGroupID = nil
-	}
-	apiKey.Group.SuisuSlowRouteRatio = suisuSlowRouteRatio
-	apiKey.Group.SuisuBusyRouteRatio = suisuBusyRouteRatio
-	return nil
-}
-
 func userEntityToService(u *dbent.User) *service.User {
 	if u == nil {
 		return nil
@@ -901,6 +756,7 @@ func userEntityToService(u *dbent.User) *service.User {
 		PasswordHash:               u.PasswordHash,
 		Role:                       u.Role,
 		Balance:                    u.Balance,
+		FrozenBalance:              u.FrozenBalance,
 		Concurrency:                u.Concurrency,
 		Status:                     u.Status,
 		SignupSource:               u.SignupSource,
@@ -943,11 +799,14 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		WeeklyLimitUSD:                  g.WeeklyLimitUsd,
 		MonthlyLimitUSD:                 g.MonthlyLimitUsd,
 		AllowImageGeneration:            g.AllowImageGeneration,
+		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
 		ImageRateIndependent:            g.ImageRateIndependent,
 		ImageRateMultiplier:             g.ImageRateMultiplier,
 		ImagePrice1K:                    g.ImagePrice1k,
 		ImagePrice2K:                    g.ImagePrice2k,
 		ImagePrice4K:                    g.ImagePrice4k,
+		BatchImageDiscountMultiplier:    g.BatchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:        g.BatchImageHoldMultiplier,
 		DefaultValidityDays:             g.DefaultValidityDays,
 		ClaudeCodeOnly:                  g.ClaudeCodeOnly,
 		FallbackGroupID:                 g.FallbackGroupID,
