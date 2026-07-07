@@ -402,6 +402,7 @@ func (h *AuthHandler) FeishuOAuthCallback(c *gin.Context) {
 		upstreamClaims,
 		strings.TrimSpace(profile.Email),
 		nil,
+		false,
 		h.isForceEmailOnThirdPartySignup(c.Request.Context()),
 	); err != nil {
 		redirectOAuthError(c, frontendCallback, "session_error", "failed to continue oauth login", "")

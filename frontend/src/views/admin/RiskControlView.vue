@@ -298,6 +298,95 @@
           </div>
         </div>
 
+        <div class="card" data-test="request-risk-card">
+          <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">地区/客户端信号风控</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">请求级拒绝、会话 ban 与 7 天事件留存</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="requestRiskLoading" @click="loadRequestRiskEvents">
+                <Icon name="refresh" size="sm" :class="requestRiskLoading ? 'animate-spin' : ''" />
+                {{ t('common.refresh') }}
+              </button>
+              <button type="button" class="btn btn-primary" :disabled="requestRiskSaving" @click="saveRequestRiskConfig">
+                {{ requestRiskSaving ? t('common.saving') : t('common.save') }}
+              </button>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 gap-5 p-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">启用请求风控</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">observe 只记录，enforce 拒绝请求</p>
+                </div>
+                <Toggle v-model="requestRiskForm.enabled" />
+              </div>
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="input-label">模式</label>
+                  <Select v-model="requestRiskForm.mode" :options="requestRiskModeOptions" />
+                </div>
+                <div>
+                  <label class="input-label">中文强度阈值</label>
+                  <input v-model.number="requestRiskForm.chinese_high_threshold" type="number" min="0.01" max="1" step="0.01" class="input" />
+                </div>
+                <div>
+                  <label class="input-label">事件保留天数</label>
+                  <input v-model.number="requestRiskForm.event_retention_days" type="number" min="1" max="30" class="input" />
+                </div>
+                <div>
+                  <label class="input-label">Session ban TTL</label>
+                  <input v-model.number="requestRiskForm.session_ban_ttl_seconds" type="number" min="1" class="input" />
+                </div>
+                <div>
+                  <label class="input-label">UA ban TTL</label>
+                  <input v-model.number="requestRiskForm.ua_ban_ttl_seconds" type="number" min="1" class="input" />
+                </div>
+                <div class="flex items-end">
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input v-model="requestRiskForm.windows_enhanced" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+                    <span>Windows 增强检测</span>
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label class="input-label">拒绝时区</label>
+                <textarea v-model="requestRiskForm.denied_timezones_text" rows="3" class="input font-mono text-xs"></textarea>
+              </div>
+              <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input v-model="requestRiskForm.capture_raw_headers" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+                <span>保存完整原始 headers</span>
+              </label>
+            </div>
+            <div class="min-w-0">
+              <div v-if="requestRiskEvents.length === 0" class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500 dark:bg-dark-700/50 dark:text-gray-400">
+                暂无请求级风控事件
+              </div>
+              <div v-else class="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                <div v-for="event in requestRiskEvents" :key="event.id" class="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-dark-700 dark:bg-dark-700/50">
+                  <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0">
+                      <div class="flex min-w-0 flex-wrap items-center gap-2">
+                        <span class="rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-700 dark:bg-dark-800 dark:text-gray-200">{{ event.action }}</span>
+                        <span class="font-mono text-xs text-gray-500 dark:text-gray-400">{{ event.request_id || `#${event.id}` }}</span>
+                      </div>
+                      <p class="mt-2 truncate text-sm text-gray-700 dark:text-gray-300">{{ event.platform || '-' }} · {{ event.inference_geo || '-' }} · {{ event.timezone || '-' }} · {{ event.model || '-' }}</p>
+                      <p class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{{ event.user_agent || '-' }}</p>
+                    </div>
+                    <span class="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ formatDateTime(event.created_at) }}</span>
+                  </div>
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    <span v-for="rule in event.matched_rules" :key="rule" class="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">{{ rule }}</span>
+                  </div>
+                  <pre class="mt-2 max-h-28 overflow-auto rounded-md bg-white p-2 text-xs text-gray-600 dark:bg-dark-900 dark:text-gray-300">{{ event.raw_headers_json || JSON.stringify(event.raw_headers || {}, null, 2) }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1631,6 +1720,8 @@ import type {
   ContentModerationTestAuditResult,
   KeywordBlockingMode,
   ModerationMode,
+  RequestRiskControlConfig,
+  RequestRiskEvent,
   UpdateContentModerationConfig,
 } from '@/api/admin/riskControl'
 import type { AdminGroup, SelectOption } from '@/types'
@@ -1699,6 +1790,8 @@ const appStore = useAppStore()
 const loading = ref(true)
 const saving = ref(false)
 const logsLoading = ref(false)
+const requestRiskLoading = ref(false)
+const requestRiskSaving = ref(false)
 const statusLoading = ref(false)
 const apiKeyTesting = ref(false)
 const hashActionLoading = ref(false)
@@ -1710,6 +1803,7 @@ const flaggedHashInput = ref('')
 const groups = ref<AdminGroup[]>([])
 const auditModelCandidatesCache = reactive<Record<number, string[]>>({})
 const logs = ref<ContentModerationLog[]>([])
+const requestRiskEvents = ref<RequestRiskEvent[]>([])
 const status = ref<ContentModerationRuntimeStatus | null>(null)
 const testedApiKeyStatuses = ref<ContentModerationAPIKeyStatus[]>([])
 const pendingDeleteApiKeyHashes = ref<string[]>([])
@@ -1804,6 +1898,19 @@ const configForm = reactive({
   } as ContentModerationDecisionRule,
 })
 
+const requestRiskForm = reactive({
+  enabled: false,
+  mode: 'off' as RequestRiskControlConfig['mode'],
+  windows_enhanced: true,
+  denied_timezones_text: 'Asia/Shanghai\nAsia/Urumqi',
+  chinese_high_threshold: 0.45,
+  event_retention_days: 7,
+  capture_raw_headers: true,
+  ua_ban_scope: 'api_key',
+  session_ban_ttl_seconds: 3600,
+  ua_ban_ttl_seconds: 3600,
+})
+
 const pagination = reactive({
   page: 1,
   page_size: 20,
@@ -1836,6 +1943,12 @@ const modeOptions = computed<SelectOption[]>(() => [
   { value: 'pre_block', label: t('admin.riskControl.modePreBlock') },
   { value: 'observe', label: t('admin.riskControl.modeObserve') },
   { value: 'off', label: t('admin.riskControl.modeOff') },
+])
+
+const requestRiskModeOptions = computed<SelectOption[]>(() => [
+  { value: 'off', label: 'off' },
+  { value: 'observe', label: 'observe' },
+  { value: 'enforce', label: 'enforce' },
 ])
 
 const cyberuseUserScopeOptions = computed<SelectOption[]>(() => [
@@ -2394,16 +2507,33 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.decision_rule = normalizeDecisionRule(config.decision_rule)
 }
 
+function applyRequestRiskConfig(config: RequestRiskControlConfig) {
+  requestRiskForm.enabled = config.enabled
+  requestRiskForm.mode = config.mode
+  requestRiskForm.windows_enhanced = config.windows_enhanced
+  requestRiskForm.denied_timezones_text = Array.isArray(config.denied_timezones) ? config.denied_timezones.join('\n') : ''
+  requestRiskForm.chinese_high_threshold = config.chinese_high_threshold
+  requestRiskForm.event_retention_days = config.event_retention_days
+  requestRiskForm.capture_raw_headers = config.capture_raw_headers
+  requestRiskForm.ua_ban_scope = config.ua_ban_scope || 'api_key'
+  requestRiskForm.session_ban_ttl_seconds = config.session_ban_ttl_seconds || 3600
+  requestRiskForm.ua_ban_ttl_seconds = config.ua_ban_ttl_seconds || 3600
+}
+
 async function loadAll() {
   loading.value = true
   try {
-    const [config, groupItems, runtimeStatus] = await Promise.all([
+    const [config, groupItems, runtimeStatus, requestRiskCfg, requestRiskList] = await Promise.all([
       adminAPI.riskControl.getConfig(),
       adminAPI.groups.getAll(),
       adminAPI.riskControl.getStatus(),
+      adminAPI.riskControl.getRequestRiskConfig(),
+      adminAPI.riskControl.listRequestRiskEvents({ page: 1, page_size: 10 }),
     ])
     groups.value = groupItems
     applyConfig(config)
+    applyRequestRiskConfig(requestRiskCfg)
+    requestRiskEvents.value = requestRiskList.items || []
     status.value = runtimeStatus
     if (Array.isArray(runtimeStatus.api_key_statuses)) {
       configForm.api_key_statuses = [...runtimeStatus.api_key_statuses]
@@ -2415,6 +2545,47 @@ async function loadAll() {
     appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.loadFailed')))
   } finally {
     loading.value = false
+  }
+}
+
+async function loadRequestRiskEvents() {
+  requestRiskLoading.value = true
+  try {
+    const result = await adminAPI.riskControl.listRequestRiskEvents({ page: 1, page_size: 10 })
+    requestRiskEvents.value = result.items || []
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, 'Failed to load request risk events'))
+  } finally {
+    requestRiskLoading.value = false
+  }
+}
+
+async function saveRequestRiskConfig() {
+  requestRiskSaving.value = true
+  try {
+    const denied = requestRiskForm.denied_timezones_text
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const updated = await adminAPI.riskControl.updateRequestRiskConfig({
+      enabled: requestRiskForm.enabled,
+      mode: requestRiskForm.mode,
+      windows_enhanced: requestRiskForm.windows_enhanced,
+      denied_timezones: denied,
+      chinese_high_threshold: Number(requestRiskForm.chinese_high_threshold) || 0.45,
+      event_retention_days: Number(requestRiskForm.event_retention_days) || 7,
+      capture_raw_headers: requestRiskForm.capture_raw_headers,
+      ua_ban_scope: requestRiskForm.ua_ban_scope || 'api_key',
+      session_ban_ttl_seconds: Number(requestRiskForm.session_ban_ttl_seconds) || 3600,
+      ua_ban_ttl_seconds: Number(requestRiskForm.ua_ban_ttl_seconds) || 3600,
+    })
+    applyRequestRiskConfig(updated)
+    appStore.showSuccess(t('admin.riskControl.saved'))
+    await loadRequestRiskEvents()
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.saveFailed')))
+  } finally {
+    requestRiskSaving.value = false
   }
 }
 

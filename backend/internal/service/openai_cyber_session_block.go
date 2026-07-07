@@ -76,6 +76,44 @@ func (s *OpenAIGatewayService) MarkCyberSessionBlocked(ctx context.Context, key 
 	}
 }
 
+// MarkCyberSessionBlockedWithTTL writes to the same cyber session block store
+// with an explicit TTL. Request-level risk control uses this path because it has
+// its own enable/mode switches and TTL settings.
+func (s *OpenAIGatewayService) MarkCyberSessionBlockedWithTTL(ctx context.Context, key string, ttl time.Duration) {
+	if key == "" {
+		return
+	}
+	if ttl <= 0 {
+		ttl = time.Hour
+	}
+	store := s.cyberSessionBlockStore()
+	if store == nil {
+		return
+	}
+	if err := store.SetCyberSessionBlocked(ctx, key, ttl); err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "request risk session block write failed: err=%v", err)
+	}
+}
+
+// IsCyberSessionBlockedRaw checks the cyber session block store without the
+// legacy global cyber_session_block_enabled switch. It is only used by features
+// that already performed their own runtime gating.
+func (s *OpenAIGatewayService) IsCyberSessionBlockedRaw(ctx context.Context, key string) bool {
+	if key == "" {
+		return false
+	}
+	store := s.cyberSessionBlockStore()
+	if store == nil {
+		return false
+	}
+	blocked, err := store.IsCyberSessionBlocked(ctx, key)
+	if err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "request risk session block read failed: err=%v", err)
+		return false
+	}
+	return blocked
+}
+
 // IsCyberSessionBlocked 查询会话是否被屏蔽（拦截点）。开关关闭、key 为空、
 // 存储不可用或查询出错时返回 false（fail-open：屏蔽是增强防护，不阻断主链路）。
 func (s *OpenAIGatewayService) IsCyberSessionBlocked(ctx context.Context, key string) bool {

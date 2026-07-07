@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -61,19 +62,19 @@ func (r *contentModerationRepository) CreateLog(ctx context.Context, log *servic
 INSERT INTO content_moderation_logs (
     request_id, user_id, user_email, api_key_id, api_key_name, group_id, group_name,
     endpoint, provider, model, mode, action, flagged, highest_category, highest_score,
-    category_scores, threshold_snapshot, input_excerpt, keyword_hits, audit_context, upstream_latency_ms, error,
+    category_scores, threshold_snapshot, input_excerpt, keyword_hits, audit_context, upstream_latency_ms, error, matched_keyword,
     violation_count, auto_banned, email_sent, queue_delay_ms, context_id, risk_weight_snapshot,
     effective_sample_rate, effective_ban_threshold, risk_event_source, review_stage
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7,
     $8, $9, $10, $11, $12, $13, $14, $15,
-    $16::jsonb, $17::jsonb, $18, $19::jsonb, $20::jsonb, $21, $22,
-    $23, $24, $25, $26, $27, $28, $29, $30, $31, $32
+    $16::jsonb, $17::jsonb, $18, $19::jsonb, $20::jsonb, $21, $22, $23,
+    $24, $25, $26, $27, $28, $29, $30, $31, $32, $33
 ) RETURNING id, created_at`,
 		log.RequestID, userID, log.UserEmail, apiKeyID, log.APIKeyName, groupID, log.GroupName,
 		log.Endpoint, log.Provider, log.Model, log.Mode, log.Action, log.Flagged, log.HighestCategory, log.HighestScore,
 		string(categoryScores), string(thresholdSnapshot), log.InputExcerpt, string(keywordHits), string(auditContext), latency, log.Error,
-		log.ViolationCount, log.AutoBanned, log.EmailSent, nullableIntPtr(log.QueueDelayMS), nullableInt64Ptr(log.ContextID),
+		log.MatchedKeyword, log.ViolationCount, log.AutoBanned, log.EmailSent, nullableIntPtr(log.QueueDelayMS), nullableInt64Ptr(log.ContextID),
 		log.RiskWeightSnapshot, log.EffectiveSampleRate, log.EffectiveBanThreshold, log.RiskEventSource, log.ReviewStage,
 	).Scan(&log.ID, &log.CreatedAt)
 	if err != nil {
@@ -109,7 +110,7 @@ SELECT
     l.endpoint, l.provider, l.model, l.mode, l.action, l.flagged, l.highest_category, l.highest_score,
     l.category_scores, l.threshold_snapshot, l.input_excerpt, COALESCE(l.keyword_hits, '[]'::jsonb), l.audit_context, l.upstream_latency_ms, l.error,
     l.violation_count, l.auto_banned, l.email_sent, l.context_id, l.risk_weight_snapshot, l.effective_sample_rate,
-    l.effective_ban_threshold, l.risk_event_source, l.review_stage, COALESCE(u.status, ''), l.queue_delay_ms, l.created_at
+    l.effective_ban_threshold, l.risk_event_source, l.review_stage, COALESCE(u.status, ''), l.queue_delay_ms, l.matched_keyword, l.created_at
 FROM content_moderation_logs l
 LEFT JOIN users u ON u.id = l.user_id `+whereSQL+`
 ORDER BY l.created_at DESC, l.id DESC
@@ -162,6 +163,7 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 			&item.ReviewStage,
 			&item.UserStatus,
 			&queueDelay,
+			&item.MatchedKeyword,
 			&item.CreatedAt,
 		); err != nil {
 			return nil, nil, fmt.Errorf("scan content moderation log: %w", err)
@@ -877,6 +879,292 @@ func buildContentModerationLogWhere(filter service.ContentModerationLogFilter) (
 	}
 	if filter.To != nil && !filter.To.IsZero() {
 		add("l.created_at <= $%d", *filter.To)
+	}
+	return where, args
+}
+
+func (r *contentModerationRepository) CreateRequestRiskEvent(ctx context.Context, event *service.RequestRiskEvent) error {
+	if event == nil {
+		return nil
+	}
+	matchedRules, err := json.Marshal(event.MatchedRules)
+	if err != nil {
+		return fmt.Errorf("marshal request risk matched rules: %w", err)
+	}
+	languageSignals, err := json.Marshal(event.LanguageSignals)
+	if err != nil {
+		return fmt.Errorf("marshal request risk language signals: %w", err)
+	}
+	rawHeadersJSON := strings.TrimSpace(event.RawHeadersJSON)
+	if rawHeadersJSON == "" && event.RawHeaders != nil {
+		raw, err := json.Marshal(event.RawHeaders)
+		if err != nil {
+			return fmt.Errorf("marshal request risk raw headers: %w", err)
+		}
+		rawHeadersJSON = string(raw)
+	}
+	err = r.db.QueryRowContext(ctx, `
+INSERT INTO request_risk_events (
+    created_at, expires_at, user_id, api_key_id, account_id, request_id,
+    session_id, session_id_hash, user_agent, user_agent_hash,
+    inference_geo, timezone, platform, language_signals_json, chinese_intensity,
+    matched_rules_json, action, reason_code, raw_headers_json, x_foo_raw,
+    request_path, model
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10,
+    $11, $12, $13, $14, $15,
+    $16, $17, $18, $19, $20,
+    $21, $22
+) RETURNING id, created_at`,
+		event.CreatedAt, event.ExpiresAt, nullableInt64Ptr(event.UserID), nullableInt64Ptr(event.APIKeyID), nullableInt64Ptr(event.AccountID), event.RequestID,
+		event.SessionID, event.SessionIDHash, event.UserAgent, event.UserAgentHash,
+		event.InferenceGeo, event.Timezone, event.Platform, string(languageSignals), event.ChineseIntensity,
+		string(matchedRules), event.Action, event.ReasonCode, rawHeadersJSON, event.XFooRaw,
+		event.RequestPath, event.Model,
+	).Scan(&event.ID, &event.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert request risk event: %w", err)
+	}
+	event.RawHeadersJSON = rawHeadersJSON
+	return nil
+}
+
+func (r *contentModerationRepository) ListRequestRiskEvents(ctx context.Context, filter service.RequestRiskEventFilter) ([]service.RequestRiskEvent, *pagination.PaginationResult, error) {
+	where, args := buildRequestRiskEventWhere(filter)
+	whereSQL := "WHERE " + strings.Join(where, " AND ")
+	var total int64
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM request_risk_events "+whereSQL, args...).Scan(&total); err != nil {
+		return nil, nil, fmt.Errorf("count request risk events: %w", err)
+	}
+	params := filter.PaginationParams
+	if params.Page <= 0 {
+		params.Page = 1
+	}
+	if params.PageSize <= 0 {
+		params.PageSize = 20
+	}
+	if params.PageSize > 100 {
+		params.PageSize = 100
+	}
+	queryArgs := append([]any{}, args...)
+	queryArgs = append(queryArgs, params.Limit(), params.Offset())
+	rows, err := r.db.QueryContext(ctx, `
+SELECT id, created_at, expires_at, user_id, api_key_id, account_id, request_id,
+       session_id, session_id_hash, user_agent, user_agent_hash,
+       inference_geo, timezone, platform, language_signals_json, chinese_intensity,
+       matched_rules_json, action, reason_code, raw_headers_json, x_foo_raw,
+       request_path, model
+FROM request_risk_events `+whereSQL+`
+ORDER BY created_at DESC, id DESC
+LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
+		queryArgs...,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list request risk events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	items := make([]service.RequestRiskEvent, 0)
+	for rows.Next() {
+		item, err := scanRequestRiskEvent(rows)
+		if err != nil {
+			return nil, nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("iterate request risk events: %w", err)
+	}
+	return items, paginationResultFromTotal(total, params), nil
+}
+
+func (r *contentModerationRepository) GetRequestRiskEvent(ctx context.Context, id int64) (*service.RequestRiskEvent, error) {
+	if id <= 0 {
+		return nil, sql.ErrNoRows
+	}
+	row := r.db.QueryRowContext(ctx, `
+SELECT id, created_at, expires_at, user_id, api_key_id, account_id, request_id,
+       session_id, session_id_hash, user_agent, user_agent_hash,
+       inference_geo, timezone, platform, language_signals_json, chinese_intensity,
+       matched_rules_json, action, reason_code, raw_headers_json, x_foo_raw,
+       request_path, model
+FROM request_risk_events
+WHERE id = $1`, id)
+	item, err := scanRequestRiskEvent(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, infraerrors.NotFound("REQUEST_RISK_EVENT_NOT_FOUND", "request risk event not found")
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *contentModerationRepository) CleanupExpiredRequestRiskEvents(ctx context.Context, now time.Time) (int64, error) {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	events, err := r.db.ExecContext(ctx, `DELETE FROM request_risk_events WHERE expires_at <= $1`, now)
+	if err != nil {
+		return 0, fmt.Errorf("delete expired request risk events: %w", err)
+	}
+	_, _ = r.db.ExecContext(ctx, `DELETE FROM request_risk_ua_bans WHERE banned_until <= $1`, now)
+	deleted, _ := events.RowsAffected()
+	return deleted, nil
+}
+
+func (r *contentModerationRepository) UpsertRequestRiskUABan(ctx context.Context, ban *service.RequestRiskUserAgentBan) error {
+	if ban == nil || ban.APIKeyID <= 0 || strings.TrimSpace(ban.UserAgentHash) == "" {
+		return nil
+	}
+	triggeredAt := ban.TriggeredAt
+	if triggeredAt.IsZero() {
+		triggeredAt = time.Now()
+	}
+	bannedUntil := ban.BannedUntil
+	if bannedUntil.IsZero() {
+		bannedUntil = triggeredAt.Add(time.Hour)
+	}
+	_, err := r.db.ExecContext(ctx, `
+INSERT INTO request_risk_ua_bans (
+    api_key_id, user_id, user_agent_hash, user_agent, reason,
+    triggered_at, banned_until, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, NOW(), NOW()
+)
+ON CONFLICT (api_key_id, user_agent_hash) DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    user_agent = EXCLUDED.user_agent,
+    reason = EXCLUDED.reason,
+    triggered_at = EXCLUDED.triggered_at,
+    banned_until = EXCLUDED.banned_until,
+    updated_at = NOW()`,
+		ban.APIKeyID, ban.UserID, ban.UserAgentHash, ban.UserAgent, ban.Reason,
+		triggeredAt, bannedUntil,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert request risk ua ban: %w", err)
+	}
+	return nil
+}
+
+func (r *contentModerationRepository) GetActiveRequestRiskUABan(ctx context.Context, apiKeyID int64, userAgentHash string, now time.Time) (*service.RequestRiskUserAgentBan, error) {
+	if apiKeyID <= 0 || strings.TrimSpace(userAgentHash) == "" {
+		return nil, nil
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	var ban service.RequestRiskUserAgentBan
+	err := r.db.QueryRowContext(ctx, `
+SELECT api_key_id, user_id, user_agent_hash, user_agent, reason, triggered_at, banned_until, created_at, updated_at
+FROM request_risk_ua_bans
+WHERE api_key_id = $1 AND user_agent_hash = $2 AND banned_until > $3`,
+		apiKeyID, userAgentHash, now,
+	).Scan(&ban.APIKeyID, &ban.UserID, &ban.UserAgentHash, &ban.UserAgent, &ban.Reason, &ban.TriggeredAt, &ban.BannedUntil, &ban.CreatedAt, &ban.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get active request risk ua ban: %w", err)
+	}
+	return &ban, nil
+}
+
+type requestRiskEventScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanRequestRiskEvent(scanner requestRiskEventScanner) (service.RequestRiskEvent, error) {
+	var item service.RequestRiskEvent
+	var userID, apiKeyID, accountID sql.NullInt64
+	var languageRaw, matchedRulesRaw, rawHeadersRaw sql.NullString
+	if err := scanner.Scan(
+		&item.ID,
+		&item.CreatedAt,
+		&item.ExpiresAt,
+		&userID,
+		&apiKeyID,
+		&accountID,
+		&item.RequestID,
+		&item.SessionID,
+		&item.SessionIDHash,
+		&item.UserAgent,
+		&item.UserAgentHash,
+		&item.InferenceGeo,
+		&item.Timezone,
+		&item.Platform,
+		&languageRaw,
+		&item.ChineseIntensity,
+		&matchedRulesRaw,
+		&item.Action,
+		&item.ReasonCode,
+		&rawHeadersRaw,
+		&item.XFooRaw,
+		&item.RequestPath,
+		&item.Model,
+	); err != nil {
+		return item, fmt.Errorf("scan request risk event: %w", err)
+	}
+	if userID.Valid {
+		v := userID.Int64
+		item.UserID = &v
+	}
+	if apiKeyID.Valid {
+		v := apiKeyID.Int64
+		item.APIKeyID = &v
+	}
+	if accountID.Valid {
+		v := accountID.Int64
+		item.AccountID = &v
+	}
+	item.LanguageSignals = map[string]any{}
+	if languageRaw.Valid && strings.TrimSpace(languageRaw.String) != "" {
+		_ = json.Unmarshal([]byte(languageRaw.String), &item.LanguageSignals)
+	}
+	item.MatchedRules = []string{}
+	if matchedRulesRaw.Valid && strings.TrimSpace(matchedRulesRaw.String) != "" {
+		_ = json.Unmarshal([]byte(matchedRulesRaw.String), &item.MatchedRules)
+	}
+	if rawHeadersRaw.Valid {
+		item.RawHeadersJSON = rawHeadersRaw.String
+		item.RawHeaders = map[string][]string{}
+		_ = json.Unmarshal([]byte(rawHeadersRaw.String), &item.RawHeaders)
+	}
+	return item, nil
+}
+
+func buildRequestRiskEventWhere(filter service.RequestRiskEventFilter) ([]string, []any) {
+	where := []string{"id IS NOT NULL"}
+	args := make([]any, 0)
+	add := func(expr string, value any) {
+		args = append(args, value)
+		where = append(where, fmt.Sprintf(expr, len(args)))
+	}
+	if action := strings.TrimSpace(filter.Action); action != "" {
+		add("action = $%d", action)
+	}
+	if rule := strings.TrimSpace(filter.Rule); rule != "" {
+		add("matched_rules_json ILIKE $%d", "%"+rule+"%")
+	}
+	if filter.APIKeyID != nil {
+		add("api_key_id = $%d", *filter.APIKeyID)
+	}
+	if filter.UserID != nil {
+		add("user_id = $%d", *filter.UserID)
+	}
+	if filter.From != nil && !filter.From.IsZero() {
+		add("created_at >= $%d", *filter.From)
+	}
+	if filter.To != nil && !filter.To.IsZero() {
+		add("created_at <= $%d", *filter.To)
+	}
+	if q := strings.TrimSpace(filter.Query); q != "" {
+		like := "%" + q + "%"
+		args = append(args, like, like, like, like, like, like)
+		idx := len(args) - 5
+		where = append(where, fmt.Sprintf("(request_id ILIKE $%d OR session_id ILIKE $%d OR user_agent ILIKE $%d OR inference_geo ILIKE $%d OR timezone ILIKE $%d OR model ILIKE $%d)", idx, idx+1, idx+2, idx+3, idx+4, idx+5))
 	}
 	return where, args
 }

@@ -15,6 +15,7 @@ const config = ref<EmailNotificationConfig | null>(null)
 
 const showEditor = ref(false)
 const saving = ref(false)
+const testing = ref(false)
 const draft = ref<EmailNotificationConfig | null>(null)
 const alertRecipientInput = ref('')
 const reportRecipientInput = ref('')
@@ -57,6 +58,20 @@ async function saveConfig() {
     appStore.showError(err?.response?.data?.detail || t('admin.ops.email.saveFailed'))
   } finally {
     saving.value = false
+  }
+}
+
+async function sendTestNotification() {
+  testing.value = true
+  try {
+    const result = await opsAPI.testEmailNotification()
+    const count = result.recipients?.length || 0
+    appStore.showSuccess(`Ops email test sent (${count})`)
+  } catch (err: any) {
+    console.error('[OpsEmailNotificationCard] Failed to send test email notification', err)
+    appStore.showError(err?.response?.data?.detail || err?.response?.data?.message || 'Failed to send ops email test')
+  } finally {
+    testing.value = false
   }
 }
 
@@ -197,6 +212,10 @@ onMounted(() => {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           {{ t('common.refresh') }}
+        </button>
+        <button class="btn btn-sm btn-secondary" :disabled="testing || !config" @click="sendTestNotification">
+          <span v-if="testing">{{ t('common.loading') }}</span>
+          <span v-else>Test</span>
         </button>
         <button class="btn btn-sm btn-secondary" :disabled="!config" @click="openEditor">{{ t('common.edit') }}</button>
       </div>

@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 14 // v14: include group speed/suisu policy for auth hot path
+const apiKeyAuthSnapshotVersion = 15 // v15: include group peak rate and speed/suisu policy fields
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -296,6 +296,10 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			SuisuFallbackGroupID:            apiKey.Group.SuisuFallbackGroupID,
 			SuisuSlowRouteRatio:             apiKey.Group.SuisuSlowRouteRatio,
 			SuisuBusyRouteRatio:             apiKey.Group.SuisuBusyRouteRatio,
+			PeakRateEnabled:                 apiKey.Group.PeakRateEnabled,
+			PeakStart:                       apiKey.Group.PeakStart,
+			PeakEnd:                         apiKey.Group.PeakEnd,
+			PeakRateMultiplier:              apiKey.Group.PeakRateMultiplier,
 		}
 	}
 	return snapshot
@@ -389,6 +393,10 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			SuisuFallbackGroupID:            snapshot.Group.SuisuFallbackGroupID,
 			SuisuSlowRouteRatio:             snapshot.Group.SuisuSlowRouteRatio,
 			SuisuBusyRouteRatio:             snapshot.Group.SuisuBusyRouteRatio,
+			PeakRateEnabled:                 snapshot.Group.PeakRateEnabled,
+			PeakStart:                       snapshot.Group.PeakStart,
+			PeakEnd:                         snapshot.Group.PeakEnd,
+			PeakRateMultiplier:              snapshot.Group.PeakRateMultiplier,
 		}
 	}
 	s.compileAPIKeyIPRules(apiKey)

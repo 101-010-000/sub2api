@@ -311,6 +311,25 @@ func (s *FeishuNotificationService) SendContentModerationBan(ctx context.Context
 	return s.sendInteractiveCard(ctx, input.UserID, card)
 }
 
+func (s *FeishuNotificationService) SendTest(ctx context.Context, userID int64) error {
+	card := map[string]any{
+		"config": map[string]any{"wide_screen_mode": true},
+		"header": map[string]any{
+			"title":    map[string]any{"tag": "plain_text", "content": "飞书通知链路测试"},
+			"template": "blue",
+		},
+		"elements": []any{
+			map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "这是一条管理员发起的飞书通知链路测试消息。"}},
+			map[string]any{"tag": "div", "fields": []any{
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": "**类型**\n测试通知"}},
+				map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": "**时间**\n" + time.Now().Format("2006-01-02 15:04:05")}},
+			}},
+			s.feishuPanelActionElement(ctx, "打开面板", ""),
+		},
+	}
+	return s.sendInteractiveCard(ctx, userID, card)
+}
+
 func (s *FeishuNotificationService) sendInteractiveCard(ctx context.Context, userID int64, card map[string]any) error {
 	cfg, err := s.GetConfig(ctx)
 	if err != nil {

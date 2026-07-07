@@ -92,6 +92,8 @@ type contentModerationSuspicionRequest struct {
 	Reason     string `json:"reason"`
 }
 
+type requestRiskConfigRequest = service.UpdateRequestRiskControlConfigInput
+
 func (h *ContentModerationHandler) GetConfig(c *gin.Context) {
 	cfg, err := h.service.GetConfig(c.Request.Context())
 	if err != nil {
@@ -185,6 +187,97 @@ func (h *ContentModerationHandler) TestAPIKeys(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+func (h *ContentModerationHandler) GetRequestRiskConfig(c *gin.Context) {
+	cfg, err := h.service.GetRequestRiskControlConfig(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *ContentModerationHandler) UpdateRequestRiskConfig(c *gin.Context) {
+	var req requestRiskConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	cfg, err := h.service.UpdateRequestRiskControlConfig(c.Request.Context(), service.UpdateRequestRiskControlConfigInput(req))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *ContentModerationHandler) ListRequestRiskEvents(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	filter := service.RequestRiskEventFilter{
+		PaginationParams: pagination.PaginationParams{Page: page, PageSize: pageSize},
+		Action:           strings.TrimSpace(c.Query("action")),
+		Query:            strings.TrimSpace(c.Query("q")),
+		Rule:             strings.TrimSpace(c.Query("rule")),
+	}
+	if v := strings.TrimSpace(c.Query("api_key_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid api_key_id")
+			return
+		}
+		filter.APIKeyID = &id
+	}
+	if v := strings.TrimSpace(c.Query("user_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid user_id")
+			return
+		}
+		filter.UserID = &id
+	}
+	if v := strings.TrimSpace(c.Query("from")); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			response.BadRequest(c, "Invalid from")
+			return
+		}
+		filter.From = &t
+	}
+	if v := strings.TrimSpace(c.Query("to")); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			response.BadRequest(c, "Invalid to")
+			return
+		}
+		filter.To = &t
+	}
+	items, pageResult, err := h.service.ListRequestRiskEvents(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"items":     items,
+		"total":     pageResult.Total,
+		"page":      pageResult.Page,
+		"page_size": pageResult.PageSize,
+		"pages":     pageResult.Pages,
+	})
+}
+
+func (h *ContentModerationHandler) GetRequestRiskEvent(c *gin.Context) {
+	id, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid request risk event id")
+		return
+	}
+	item, err := h.service.GetRequestRiskEvent(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, item)
 }
 
 func (h *ContentModerationHandler) GetStatus(c *gin.Context) {

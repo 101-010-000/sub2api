@@ -1,7 +1,12 @@
 package admin
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -54,6 +59,82 @@ func (h *OpsHandler) UpdateEmailNotificationConfig(c *gin.Context) {
 		return
 	}
 	response.Success(c, updated)
+}
+
+type opsEmailNotificationTestRequest struct {
+	Recipient string `json:"recipient"`
+}
+
+func (h *OpsHandler) TestEmailNotification(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if h.notificationEmailService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Notification email service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	var req opsEmailNotificationTestRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.BadRequest(c, "Invalid request body")
+		return
+	}
+	recipients := make([]string, 0, 1)
+	if email := strings.TrimSpace(req.Recipient); email != "" {
+		recipients = append(recipients, email)
+	} else {
+		cfg, err := h.opsService.GetEmailNotificationConfig(c.Request.Context())
+		if err != nil {
+			response.Error(c, http.StatusInternalServerError, "Failed to get email notification config")
+			return
+		}
+		for _, email := range cfg.Alert.Recipients {
+			if trimmed := strings.TrimSpace(email); trimmed != "" {
+				recipients = append(recipients, trimmed)
+				break
+			}
+		}
+		if len(recipients) == 0 && h.userService != nil {
+			admin, err := h.userService.GetFirstAdmin(c.Request.Context())
+			if err == nil && admin != nil && strings.TrimSpace(admin.Email) != "" {
+				recipients = append(recipients, strings.TrimSpace(admin.Email))
+			}
+		}
+	}
+	if len(recipients) == 0 {
+		response.BadRequest(c, "No ops email recipient configured")
+		return
+	}
+	now := time.Now().UTC()
+	for _, recipient := range recipients {
+		if err := h.notificationEmailService.Send(c.Request.Context(), service.NotificationEmailSendInput{
+			Event:          service.NotificationEmailEventOpsAlert,
+			RecipientEmail: recipient,
+			RecipientName:  recipient,
+			SourceType:     "ops_email_test",
+			SourceID:       fmt.Sprintf("%d", now.UnixNano()),
+			Variables: map[string]string{
+				"rule_name":         "Ops notification test",
+				"severity":          "info",
+				"alert_status":      "test",
+				"metric_type":       "notification_delivery",
+				"operator":          ">=",
+				"metric_value":      "1",
+				"threshold_value":   "1",
+				"triggered_at":      now.Format(time.RFC3339),
+				"alert_description": "Administrator-triggered ops notification email test.",
+			},
+		}); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	response.Success(c, gin.H{"sent": true, "recipients": recipients})
 }
 
 // GetAlertRuntimeSettings returns Ops alert evaluator runtime settings (DB-backed).

@@ -2068,6 +2068,33 @@
                     />
                   </div>
                 </div>
+
+                <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ localText("测试已绑定用户", "Test bound user") }}
+                  </label>
+                  <div class="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      v-model.number="feishuNotifyTestUserId"
+                      type="number"
+                      min="1"
+                      class="input"
+                      :placeholder="localText('用户 ID', 'User ID')"
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-secondary whitespace-nowrap"
+                      :disabled="testingFeishuNotification || !feishuNotifyTestUserId"
+                      @click="testFeishuNotification"
+                    >
+                      {{
+                        testingFeishuNotification
+                          ? localText("发送中...", "Sending...")
+                          : localText("发送测试", "Send test")
+                      }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -7455,6 +7482,8 @@ const siteLogoUrlInput = ref("");
 const siteLogoDownloading = ref(false);
 const testingSmtp = ref(false);
 const sendingTestEmail = ref(false);
+const testingFeishuNotification = ref(false);
+const feishuNotifyTestUserId = ref<number | null>(null);
 const smtpPasswordManuallyEdited = ref(false);
 const testEmailAddress = ref("");
 const registrationEmailSuffixWhitelistTags = ref<string[]>([]);
@@ -8202,9 +8231,16 @@ const form = reactive<SettingsForm>({
   claude_oauth_system_prompt_blocks: defaultClaudeOAuthSystemPromptBlocks,
   enable_anthropic_cache_ttl_1h_injection: false,
   rewrite_message_cache_control: false,
+  enable_client_dateline_normalization: false,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
   openai_allow_claude_code_codex_plugin: false,
+  min_codex_version: "",
+  max_codex_version: "",
+  codex_cli_only_blacklist: "",
+  codex_cli_only_whitelist: "",
+  codex_cli_only_allow_app_server_clients: false,
+  codex_cli_only_engine_fingerprint_signals: "",
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
@@ -9628,6 +9664,26 @@ async function sendTestEmail() {
     );
   } finally {
     sendingTestEmail.value = false;
+  }
+}
+
+async function testFeishuNotification() {
+  const userId = Number(feishuNotifyTestUserId.value);
+  if (!Number.isFinite(userId) || userId <= 0) {
+    appStore.showError(localText("请输入已绑定飞书通知的用户 ID。", "Enter a user ID with Feishu notifications bound."));
+    return;
+  }
+
+  testingFeishuNotification.value = true;
+  try {
+    await adminAPI.settings.testFeishuNotification({ user_id: userId });
+    appStore.showSuccess(localText("飞书测试通知已发送。", "Feishu test notification sent."));
+  } catch (error: unknown) {
+    appStore.showError(
+      extractApiErrorMessage(error, localText("飞书测试通知发送失败。", "Failed to send Feishu test notification.")),
+    );
+  } finally {
+    testingFeishuNotification.value = false;
   }
 }
 

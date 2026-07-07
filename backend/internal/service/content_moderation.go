@@ -719,6 +719,7 @@ type ContentModerationLog struct {
 	Flagged               bool                           `json:"flagged"`
 	HighestCategory       string                         `json:"highest_category"`
 	HighestScore          float64                        `json:"highest_score"`
+	MatchedKeyword        string                         `json:"matched_keyword"`
 	CategoryScores        map[string]float64             `json:"category_scores"`
 	ThresholdSnapshot     map[string]float64             `json:"threshold_snapshot"`
 	InputExcerpt          string                         `json:"input_excerpt"`
@@ -1531,6 +1532,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 				"keyword_hits", len(keywordHits))
 			scores := map[string]float64{contentModerationKeywordCategory: 1.0}
 			log := s.buildLog(input, cfg, ContentModerationActionKeywordBlock, true, contentModerationKeywordCategory, 1.0, scores, content.ExcerptText(), nil, nil, "", keywordHits, nil)
+			log.MatchedKeyword = firstContentModerationMatchedKeyword(keywordHits)
 			s.decorateModerationLog(log, riskSnapshot, contextID, ContentModerationRiskEventSourceSync, ContentModerationReviewStageRealtime)
 			s.enqueueRecord(input, cfg, log, hashText, false, true)
 			return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
@@ -2466,6 +2468,7 @@ func (s *ContentModerationService) runCleanupOnce() {
 	if result == nil {
 		return
 	}
+	s.cleanupRequestRiskEvents(ctx, now)
 	s.lastCleanupUnix.Store(result.FinishedAt.Unix())
 	s.lastCleanupDeletedHit.Store(result.DeletedHit)
 	s.lastCleanupDeletedNonHit.Store(result.DeletedNonHit)
@@ -4066,6 +4069,18 @@ func renderContentModerationAuditPrompt(template string, input string, check Con
 
 func buildContentModerationRequestContext(input ContentModerationCheckInput, text string) ContentModerationRequestContext {
 	return ContentModerationRequestContext{RequestID: input.RequestID, UserID: input.UserID, UserEmail: input.UserEmail, APIKeyID: input.APIKeyID, APIKeyName: input.APIKeyName, GroupID: cloneInt64Ptr(input.GroupID), GroupName: input.GroupName, Endpoint: input.Endpoint, Provider: input.Provider, Model: input.Model, Protocol: input.Protocol, Input: trimRunes(redactContentModerationSecrets(text), maxModerationExcerptRunes)}
+}
+
+func firstContentModerationMatchedKeyword(hits []ContentModerationKeywordHit) string {
+	for _, hit := range hits {
+		if keyword := strings.TrimSpace(hit.Keyword); keyword != "" {
+			return keyword
+		}
+		if matched := strings.TrimSpace(hit.MatchedText); matched != "" {
+			return matched
+		}
+	}
+	return ""
 }
 
 func parseContentModerationModelTextResult(text string) ContentModerationModelResult {

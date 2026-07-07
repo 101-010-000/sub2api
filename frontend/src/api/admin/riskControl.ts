@@ -355,6 +355,7 @@ export interface ContentModerationLog {
   flagged: boolean
   highest_category: string
   highest_score: number
+  matched_keyword: string
   category_scores: Record<string, number>
   threshold_snapshot: Record<string, number>
   input_excerpt: string
@@ -478,6 +479,70 @@ export interface ContentModerationUserRiskDetail {
   effective_ban_threshold: number
 }
 
+export type RequestRiskControlMode = 'off' | 'observe' | 'enforce'
+
+export interface RequestRiskControlConfig {
+  enabled: boolean
+  mode: RequestRiskControlMode
+  windows_enhanced: boolean
+  denied_timezones: string[]
+  chinese_high_threshold: number
+  event_retention_days: number
+  capture_raw_headers: boolean
+  ua_ban_scope: string
+  session_ban_ttl_seconds: number
+  ua_ban_ttl_seconds: number
+}
+
+export type UpdateRequestRiskControlConfig = Partial<RequestRiskControlConfig>
+
+export interface RequestRiskEvent {
+  id: number
+  created_at: string
+  expires_at: string
+  user_id?: number | null
+  api_key_id?: number | null
+  account_id?: number | null
+  request_id: string
+  session_id: string
+  session_id_hash: string
+  user_agent: string
+  user_agent_hash: string
+  inference_geo: string
+  timezone: string
+  platform: string
+  language_signals: Record<string, unknown>
+  chinese_intensity: number
+  matched_rules: string[]
+  action: string
+  reason_code: string
+  raw_headers?: Record<string, string[]>
+  raw_headers_json?: string
+  x_foo_raw: string
+  request_path: string
+  model: string
+}
+
+export interface ListRequestRiskEventsParams {
+  page?: number
+  page_size?: number
+  action?: string
+  rule?: string
+  q?: string
+  api_key_id?: number
+  user_id?: number
+  from?: string
+  to?: string
+}
+
+export interface RequestRiskEventsResponse {
+  items: RequestRiskEvent[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
 export async function getConfig(): Promise<ContentModerationConfig> {
   const { data } = await apiClient.get<ContentModerationConfig>('/admin/risk-control/config')
   return data
@@ -550,6 +615,32 @@ export async function getContextDetail(contextID: number): Promise<ContentModera
   return data
 }
 
+export async function getRequestRiskConfig(): Promise<RequestRiskControlConfig> {
+  const { data } = await apiClient.get<RequestRiskControlConfig>('/admin/risk-control/request-risk/config')
+  return data
+}
+
+export async function updateRequestRiskConfig(
+  payload: UpdateRequestRiskControlConfig
+): Promise<RequestRiskControlConfig> {
+  const { data } = await apiClient.put<RequestRiskControlConfig>('/admin/risk-control/request-risk/config', payload)
+  return data
+}
+
+export async function listRequestRiskEvents(
+  params: ListRequestRiskEventsParams = {}
+): Promise<RequestRiskEventsResponse> {
+  const { data } = await apiClient.get<RequestRiskEventsResponse>('/admin/risk-control/request-risk/events', {
+    params,
+  })
+  return data
+}
+
+export async function getRequestRiskEvent(id: number): Promise<RequestRiskEvent> {
+  const { data } = await apiClient.get<RequestRiskEvent>(`/admin/risk-control/request-risk/events/${id}`)
+  return data
+}
+
 export async function selfUnbanUser(userID: number): Promise<ContentModerationSelfUnbanResponse> {
   const { data } = await apiClient.post<ContentModerationSelfUnbanResponse>(
     `/admin/risk-control/users/${userID}/self-unban`
@@ -587,6 +678,10 @@ export const riskControlAPI = {
   setUserSuspicion,
   listUserContexts,
   getContextDetail,
+  getRequestRiskConfig,
+  updateRequestRiskConfig,
+  listRequestRiskEvents,
+  getRequestRiskEvent,
   selfUnbanUser,
   unbanUser,
   deleteFlaggedHash,
