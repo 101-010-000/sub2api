@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -15,25 +14,6 @@ func (h *GatewayHandler) checkRequestRisk(c *gin.Context, reqLog *zap.Logger, ap
 		return nil
 	}
 	return runRequestRisk(c, reqLog, h.contentModerationService, nil, apiKey, subject, protocol, model, body)
-}
-
-func (h *OpenAIGatewayHandler) checkRequestRisk(c *gin.Context, reqLog *zap.Logger, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol string, model string, body []byte) *service.RequestRiskDecision {
-	if h == nil || h.contentModerationService == nil {
-		return nil
-	}
-	var cyberKey string
-	if apiKey != nil {
-		cyberKey = service.CyberSessionBlockKey(apiKey.ID, c, body)
-	}
-	decision := runRequestRisk(c, reqLog, h.contentModerationService, h.gatewayService, apiKey, subject, protocol, model, body)
-	if decision != nil && decision.SessionBanKey == "" {
-		decision.SessionBanKey = cyberKey
-	}
-	if decision != nil && decision.Blocked && decision.Action == service.RequestRiskActionBanSession && decision.SessionBanKey != "" && h.gatewayService != nil {
-		ttl := time.Duration(decision.SessionBanTTLSeconds) * time.Second
-		h.gatewayService.MarkCyberSessionBlockedWithTTL(c.Request.Context(), decision.SessionBanKey, ttl)
-	}
-	return decision
 }
 
 func runRequestRisk(c *gin.Context, reqLog *zap.Logger, svc *service.ContentModerationService, openAISvc *service.OpenAIGatewayService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol string, model string, body []byte) *service.RequestRiskDecision {

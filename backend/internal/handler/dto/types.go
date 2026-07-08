@@ -9,19 +9,20 @@ import (
 )
 
 type User struct {
-	ID            int64      `json:"id"`
-	Email         string     `json:"email"`
-	Username      string     `json:"username"`
-	Role          string     `json:"role"`
-	Balance       float64    `json:"balance"`
-	FrozenBalance float64    `json:"frozen_balance"`
-	Concurrency   int        `json:"concurrency"`
-	Status        string     `json:"status"`
-	AllowedGroups []int64    `json:"allowed_groups"`
-	LastActiveAt  *time.Time `json:"last_active_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	ID               int64      `json:"id"`
+	Email            string     `json:"email"`
+	Username         string     `json:"username"`
+	Role             string     `json:"role"`
+	AdminPermissions []string   `json:"admin_permissions"`
+	Balance          float64    `json:"balance"`
+	FrozenBalance    float64    `json:"frozen_balance"`
+	Concurrency      int        `json:"concurrency"`
+	Status           string     `json:"status"`
+	AllowedGroups    []int64    `json:"allowed_groups"`
+	LastActiveAt     *time.Time `json:"last_active_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	DeletedAt        *time.Time `json:"deleted_at,omitempty"`
 
 	// 余额不足通知
 	BalanceNotifyEnabled       bool               `json:"balance_notify_enabled"`
@@ -50,20 +51,23 @@ type AdminUser struct {
 }
 
 type APIKey struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"user_id"`
-	Key         string     `json:"key"`
-	Name        string     `json:"name"`
-	GroupID     *int64     `json:"group_id"`
-	Status      string     `json:"status"`
-	IPWhitelist []string   `json:"ip_whitelist"`
-	IPBlacklist []string   `json:"ip_blacklist"`
-	LastUsedAt  *time.Time `json:"last_used_at"`
-	Quota       float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
-	QuotaUsed   float64    `json:"quota_used"` // Used quota amount in USD
-	ExpiresAt   *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID                   int64      `json:"id"`
+	UserID               int64      `json:"user_id"`
+	Key                  string     `json:"key"`
+	Name                 string     `json:"name"`
+	GroupID              *int64     `json:"group_id"`
+	Status               string     `json:"status"`
+	IPWhitelist          []string   `json:"ip_whitelist"`
+	IPBlacklist          []string   `json:"ip_blacklist"`
+	MaxActiveIPs         int        `json:"max_active_ips"`
+	IPIdleTimeoutSeconds int        `json:"ip_idle_timeout_seconds"`
+	MaxConcurrency       int        `json:"max_concurrency"`
+	LastUsedAt           *time.Time `json:"last_used_at"`
+	Quota                float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
+	QuotaUsed            float64    `json:"quota_used"` // Used quota amount in USD
+	ExpiresAt            *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 	// CurrentConcurrency is the real-time active request count for this API key.
 	CurrentConcurrency int `json:"current_concurrency"`
 
@@ -130,6 +134,19 @@ type Group struct {
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
 	RPMLimit int `json:"rpm_limit"`
+
+	// 优速通配置字段。当前 fork 保留公开契约，兼容实现默认返回关闭/零值。
+	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
+	UserSpeedConfigAllowed     bool    `json:"user_speed_config_allowed"`
+	DefaultFastQuotaRatio      float64 `json:"default_fast_quota_ratio"`
+	MinFastQuotaRatio          float64 `json:"min_fast_quota_ratio"`
+	MaxFastQuotaRatio          float64 `json:"max_fast_quota_ratio"`
+	DefaultSlowDelayMinSeconds int     `json:"default_slow_delay_min_seconds"`
+	DefaultSlowDelayMaxSeconds int     `json:"default_slow_delay_max_seconds"`
+	MaxSlowDelaySeconds        int     `json:"max_slow_delay_seconds"`
+	DefaultSlowRejectRate      float64 `json:"default_slow_reject_rate"`
+	MaxSlowRejectRate          float64 `json:"max_slow_reject_rate"`
+	SpeedSlowRejectMessage     string  `json:"speed_slow_reject_message"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -482,12 +499,15 @@ type UsageLog struct {
 	ActualCost        float64 `json:"actual_cost"`
 	RateMultiplier    float64 `json:"rate_multiplier"`
 
-	BillingType  int8   `json:"billing_type"`
-	RequestType  string `json:"request_type"`
-	Stream       bool   `json:"stream"`
-	OpenAIWSMode bool   `json:"openai_ws_mode"`
-	DurationMs   *int   `json:"duration_ms"`
-	FirstTokenMs *int   `json:"first_token_ms"`
+	BillingType  int8    `json:"billing_type"`
+	RequestType  string  `json:"request_type"`
+	Stream       bool    `json:"stream"`
+	OpenAIWSMode bool    `json:"openai_ws_mode"`
+	DurationMs   *int    `json:"duration_ms"`
+	FirstTokenMs *int    `json:"first_token_ms"`
+	SpeedState   *string `json:"speed_state,omitempty"`
+	SpeedWaitMs  int     `json:"speed_wait_ms"`
+	SpeedRoute   *string `json:"speed_route,omitempty"`
 
 	// 图片生成字段
 	ImageCount         int            `json:"image_count"`

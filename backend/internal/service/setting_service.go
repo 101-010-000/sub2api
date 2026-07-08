@@ -3315,16 +3315,16 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyCyberSessionBlockTTLSeconds: "3600",
 
 		// 请求级地区/客户端信号风控（默认关闭）
-		SettingKeyRequestRiskControlEnabled:             "false",
-		SettingKeyRequestRiskControlMode:                "off",
-		SettingKeyRequestRiskControlWindowsEnhanced:     "true",
-		SettingKeyRequestRiskControlDeniedTimezones:     `["Asia/Shanghai","Asia/Urumqi"]`,
+		SettingKeyRequestRiskControlEnabled:              "false",
+		SettingKeyRequestRiskControlMode:                 "off",
+		SettingKeyRequestRiskControlWindowsEnhanced:      "true",
+		SettingKeyRequestRiskControlDeniedTimezones:      `["Asia/Shanghai","Asia/Urumqi"]`,
 		SettingKeyRequestRiskControlChineseHighThreshold: "0.45",
-		SettingKeyRequestRiskControlEventRetentionDays:  "7",
-		SettingKeyRequestRiskControlCaptureRawHeaders:   "true",
-		SettingKeyRequestRiskControlUABanScope:          "api_key",
+		SettingKeyRequestRiskControlEventRetentionDays:   "7",
+		SettingKeyRequestRiskControlCaptureRawHeaders:    "true",
+		SettingKeyRequestRiskControlUABanScope:           "api_key",
 		SettingKeyRequestRiskControlSessionBanTTLSeconds: "3600",
-		SettingKeyRequestRiskControlUABanTTLSeconds:     "3600",
+		SettingKeyRequestRiskControlUABanTTLSeconds:      "3600",
 
 		// Claude Code version check (default: empty = disabled)
 		SettingKeyMinClaudeCodeVersion: "",

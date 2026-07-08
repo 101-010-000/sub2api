@@ -17,6 +17,7 @@ func UserFromServiceShallow(u *service.User) *User {
 		Email:                      u.Email,
 		Username:                   u.Username,
 		Role:                       u.Role,
+		AdminPermissions:           stringSliceOrEmpty(u.AdminPermissions),
 		Balance:                    u.Balance,
 		FrozenBalance:              u.FrozenBalance,
 		Concurrency:                u.Concurrency,
@@ -33,6 +34,13 @@ func UserFromServiceShallow(u *service.User) *User {
 		RPMLimit:                   u.RPMLimit,
 		DeletedAt:                  u.DeletedAt,
 	}
+}
+
+func stringSliceOrEmpty(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	return append([]string(nil), values...)
 }
 
 func UserFromService(u *service.User) *User {
@@ -80,32 +88,35 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		return nil
 	}
 	out := &APIKey{
-		ID:                 k.ID,
-		UserID:             k.UserID,
-		Key:                k.Key,
-		Name:               k.Name,
-		GroupID:            k.GroupID,
-		Status:             k.Status,
-		IPWhitelist:        k.IPWhitelist,
-		IPBlacklist:        k.IPBlacklist,
-		LastUsedAt:         k.LastUsedAt,
-		Quota:              k.Quota,
-		QuotaUsed:          k.QuotaUsed,
-		ExpiresAt:          k.ExpiresAt,
-		CreatedAt:          k.CreatedAt,
-		UpdatedAt:          k.UpdatedAt,
-		CurrentConcurrency: k.CurrentConcurrency,
-		RateLimit5h:        k.RateLimit5h,
-		RateLimit1d:        k.RateLimit1d,
-		RateLimit7d:        k.RateLimit7d,
-		Usage5h:            k.EffectiveUsage5h(),
-		Usage1d:            k.EffectiveUsage1d(),
-		Usage7d:            k.EffectiveUsage7d(),
-		Window5hStart:      k.Window5hStart,
-		Window1dStart:      k.Window1dStart,
-		Window7dStart:      k.Window7dStart,
-		User:               UserFromServiceShallow(k.User),
-		Group:              GroupFromServiceShallow(k.Group),
+		ID:                   k.ID,
+		UserID:               k.UserID,
+		Key:                  k.Key,
+		Name:                 k.Name,
+		GroupID:              k.GroupID,
+		Status:               k.Status,
+		IPWhitelist:          k.IPWhitelist,
+		IPBlacklist:          k.IPBlacklist,
+		MaxActiveIPs:         k.MaxActiveIPs,
+		IPIdleTimeoutSeconds: k.IPIdleTimeoutSeconds,
+		MaxConcurrency:       k.MaxConcurrency,
+		LastUsedAt:           k.LastUsedAt,
+		Quota:                k.Quota,
+		QuotaUsed:            k.QuotaUsed,
+		ExpiresAt:            k.ExpiresAt,
+		CreatedAt:            k.CreatedAt,
+		UpdatedAt:            k.UpdatedAt,
+		CurrentConcurrency:   k.CurrentConcurrency,
+		RateLimit5h:          k.RateLimit5h,
+		RateLimit1d:          k.RateLimit1d,
+		RateLimit7d:          k.RateLimit7d,
+		Usage5h:              k.EffectiveUsage5h(),
+		Usage1d:              k.EffectiveUsage1d(),
+		Usage7d:              k.EffectiveUsage7d(),
+		Window5hStart:        k.Window5hStart,
+		Window1dStart:        k.Window1dStart,
+		Window7dStart:        k.Window7dStart,
+		User:                 UserFromServiceShallow(k.User),
+		Group:                GroupFromServiceShallow(k.Group),
 	}
 	if k.Window5hStart != nil && !service.IsWindowExpired(k.Window5hStart, service.RateLimitWindow5h) {
 		t := k.Window5hStart.Add(service.RateLimitWindow5h)
@@ -622,6 +633,9 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		OpenAIWSMode:          openAIWSMode,
 		DurationMs:            l.DurationMs,
 		FirstTokenMs:          l.FirstTokenMs,
+		SpeedState:            l.SpeedState,
+		SpeedWaitMs:           l.SpeedWaitMs,
+		SpeedRoute:            l.SpeedRoute,
 		ImageCount:            l.ImageCount,
 		ImageSize:             l.ImageSize,
 		ImageInputSize:        l.ImageInputSize,

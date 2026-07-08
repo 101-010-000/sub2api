@@ -19,30 +19,58 @@ func (r *requestRiskTestRepo) CreateLog(context.Context, *ContentModerationLog) 
 func (r *requestRiskTestRepo) ListLogs(context.Context, ContentModerationLogFilter) ([]ContentModerationLog, *pagination.PaginationResult, error) {
 	return nil, nil, nil
 }
-func (r *requestRiskTestRepo) CountFlaggedByUserSince(context.Context, int64, time.Time, bool) (int, error) { return 0, nil }
+func (r *requestRiskTestRepo) CountFlaggedByUserSince(context.Context, int64, time.Time, bool) (int, error) {
+	return 0, nil
+}
 func (r *requestRiskTestRepo) CleanupExpiredLogs(context.Context, time.Time, time.Time, time.Time) (*ContentModerationCleanupResult, error) {
 	return &ContentModerationCleanupResult{}, nil
 }
-func (r *requestRiskTestRepo) UpsertUserBan(context.Context, *ContentModerationUserBan) error { return nil }
-func (r *requestRiskTestRepo) GetActiveUserBan(context.Context, int64, time.Time) (*ContentModerationUserBan, error) { return nil, nil }
+func (r *requestRiskTestRepo) UpsertUserBan(context.Context, *ContentModerationUserBan) error {
+	return nil
+}
+func (r *requestRiskTestRepo) GetActiveUserBan(context.Context, int64, time.Time) (*ContentModerationUserBan, error) {
+	return nil, nil
+}
 func (r *requestRiskTestRepo) ClearUserBan(context.Context, int64, time.Time) error { return nil }
-func (r *requestRiskTestRepo) CountSelfUnbanAttempts(context.Context, int64, time.Time) (int, error) { return 0, nil }
-func (r *requestRiskTestRepo) CreateSelfUnbanRecord(context.Context, *ContentModerationSelfUnbanRecord) error { return nil }
-func (r *requestRiskTestRepo) GetUserRiskProfile(context.Context, int64) (*ContentModerationUserRiskProfile, error) { return nil, nil }
-func (r *requestRiskTestRepo) UpsertUserRiskProfile(context.Context, *ContentModerationUserRiskProfile) error { return nil }
-func (r *requestRiskTestRepo) CreateUserRiskEvent(context.Context, *ContentModerationUserRiskEvent) error { return nil }
+func (r *requestRiskTestRepo) CountSelfUnbanAttempts(context.Context, int64, time.Time) (int, error) {
+	return 0, nil
+}
+func (r *requestRiskTestRepo) CreateSelfUnbanRecord(context.Context, *ContentModerationSelfUnbanRecord) error {
+	return nil
+}
+func (r *requestRiskTestRepo) GetUserRiskProfile(context.Context, int64) (*ContentModerationUserRiskProfile, error) {
+	return nil, nil
+}
+func (r *requestRiskTestRepo) UpsertUserRiskProfile(context.Context, *ContentModerationUserRiskProfile) error {
+	return nil
+}
+func (r *requestRiskTestRepo) CreateUserRiskEvent(context.Context, *ContentModerationUserRiskEvent) error {
+	return nil
+}
 func (r *requestRiskTestRepo) ListUserRiskEvents(context.Context, int64, int) ([]ContentModerationUserRiskEvent, error) {
 	return nil, nil
 }
-func (r *requestRiskTestRepo) CreateContext(context.Context, *ContentModerationContext) error { return nil }
-func (r *requestRiskTestRepo) ClaimPendingContexts(context.Context, int) ([]ContentModerationContext, error) { return nil, nil }
-func (r *requestRiskTestRepo) UpdateContextReview(context.Context, ContentModerationContextReviewUpdate) error { return nil }
+func (r *requestRiskTestRepo) CreateContext(context.Context, *ContentModerationContext) error {
+	return nil
+}
+func (r *requestRiskTestRepo) ClaimPendingContexts(context.Context, int) ([]ContentModerationContext, error) {
+	return nil, nil
+}
+func (r *requestRiskTestRepo) UpdateContextReview(context.Context, ContentModerationContextReviewUpdate) error {
+	return nil
+}
 func (r *requestRiskTestRepo) CountContextsByStatus(context.Context) (*ContentModerationContextStatusCounts, error) {
 	return &ContentModerationContextStatusCounts{}, nil
 }
-func (r *requestRiskTestRepo) ListUserContexts(context.Context, int64, int) ([]ContentModerationContext, error) { return nil, nil }
-func (r *requestRiskTestRepo) GetContextByID(context.Context, int64) (*ContentModerationContext, error) { return nil, nil }
-func (r *requestRiskTestRepo) CreateContextAccessLog(context.Context, int64, int64, string) error { return nil }
+func (r *requestRiskTestRepo) ListUserContexts(context.Context, int64, int) ([]ContentModerationContext, error) {
+	return nil, nil
+}
+func (r *requestRiskTestRepo) GetContextByID(context.Context, int64) (*ContentModerationContext, error) {
+	return nil, nil
+}
+func (r *requestRiskTestRepo) CreateContextAccessLog(context.Context, int64, int64, string) error {
+	return nil
+}
 func (r *requestRiskTestRepo) UpdateLogEmailSent(context.Context, int64, bool) error { return nil }
 
 func (r *requestRiskTestRepo) CreateRequestRiskEvent(ctx context.Context, event *RequestRiskEvent) error {
@@ -58,7 +86,9 @@ func (r *requestRiskTestRepo) GetRequestRiskEvent(context.Context, int64) (*Requ
 	}
 	return &r.events[0], nil
 }
-func (r *requestRiskTestRepo) CleanupExpiredRequestRiskEvents(context.Context, time.Time) (int64, error) { return 0, nil }
+func (r *requestRiskTestRepo) CleanupExpiredRequestRiskEvents(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
 func (r *requestRiskTestRepo) UpsertRequestRiskUABan(ctx context.Context, ban *RequestRiskUserAgentBan) error {
 	if r.uaBans == nil {
 		r.uaBans = map[string]RequestRiskUserAgentBan{}
@@ -79,16 +109,16 @@ func (r *requestRiskTestRepo) GetActiveRequestRiskUABan(ctx context.Context, api
 
 func requestRiskTestService(repo *requestRiskTestRepo) *ContentModerationService {
 	settings := &contentModerationTestSettingRepo{values: map[string]string{
-		SettingKeyRequestRiskControlEnabled:             "true",
-		SettingKeyRequestRiskControlMode:                RequestRiskControlModeEnforce,
-		SettingKeyRequestRiskControlWindowsEnhanced:     "true",
-		SettingKeyRequestRiskControlDeniedTimezones:     `["Asia/Shanghai","Asia/Urumqi"]`,
+		SettingKeyRequestRiskControlEnabled:              "true",
+		SettingKeyRequestRiskControlMode:                 RequestRiskControlModeEnforce,
+		SettingKeyRequestRiskControlWindowsEnhanced:      "true",
+		SettingKeyRequestRiskControlDeniedTimezones:      `["Asia/Shanghai","Asia/Urumqi"]`,
 		SettingKeyRequestRiskControlChineseHighThreshold: "0.45",
-		SettingKeyRequestRiskControlEventRetentionDays:  "7",
-		SettingKeyRequestRiskControlCaptureRawHeaders:   "true",
-		SettingKeyRequestRiskControlUABanScope:          RequestRiskUABanScopeAPIKey,
+		SettingKeyRequestRiskControlEventRetentionDays:   "7",
+		SettingKeyRequestRiskControlCaptureRawHeaders:    "true",
+		SettingKeyRequestRiskControlUABanScope:           RequestRiskUABanScopeAPIKey,
 		SettingKeyRequestRiskControlSessionBanTTLSeconds: "1800",
-		SettingKeyRequestRiskControlUABanTTLSeconds:     "1800",
+		SettingKeyRequestRiskControlUABanTTLSeconds:      "1800",
 	}}
 	return NewContentModerationService(settings, repo, nil, nil, nil, nil, nil)
 }
