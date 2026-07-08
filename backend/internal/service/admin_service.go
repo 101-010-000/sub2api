@@ -71,6 +71,7 @@ type AdminService interface {
 
 	// API Key management (admin)
 	AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error)
+	AdminUpdateAPIKeyRuntimeLimits(ctx context.Context, keyID int64, input AdminUpdateAPIKeyRuntimeLimitsInput) (*APIKey, error)
 	AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error)
 
 	// ReplaceUserGroup 替换用户的专属分组：授予新分组权限、迁移 Key、移除旧分组权限
@@ -141,26 +142,32 @@ type AdminService interface {
 
 // CreateUserInput represents input for creating a new user via admin operations.
 type CreateUserInput struct {
-	Email         string
-	Password      string
-	Username      string
-	Notes         string
-	Balance       *float64
-	Concurrency   int
-	RPMLimit      int
-	AllowedGroups []int64
+	Email                     string
+	Password                  string
+	Username                  string
+	Notes                     string
+	AdminPermissions          *[]string
+	Balance                   *float64
+	Concurrency               int
+	RPMLimit                  int
+	APIKeyMaxActiveIPs        int
+	APIKeyMaxActiveIPsVisible bool
+	AllowedGroups             []int64
 }
 
 type UpdateUserInput struct {
-	Email         string
-	Password      string
-	Username      *string
-	Notes         *string
-	Balance       *float64 // 使用指针区分"未提供"和"设置为0"
-	Concurrency   *int     // 使用指针区分"未提供"和"设置为0"
-	RPMLimit      *int     // 使用指针区分"未提供"和"设置为0"
-	Status        string
-	AllowedGroups *[]int64 // 使用指针区分"未提供"和"设置为空数组"
+	Email                     string
+	Password                  string
+	Username                  *string
+	Notes                     *string
+	AdminPermissions          *[]string
+	Balance                   *float64 // 使用指针区分"未提供"和"设置为0"
+	Concurrency               *int     // 使用指针区分"未提供"和"设置为0"
+	RPMLimit                  *int     // 使用指针区分"未提供"和"设置为0"
+	APIKeyMaxActiveIPs        *int     // 使用指针区分"未提供"和"设置为0"
+	APIKeyMaxActiveIPsVisible *bool    // 使用指针区分"未提供"和"设置为 false"
+	Status                    string
+	AllowedGroups             *[]int64 // 使用指针区分"未提供"和"设置为空数组"
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64
@@ -392,6 +399,12 @@ type AdminUpdateAPIKeyGroupIDResult struct {
 	AutoGrantedGroupAccess bool   // true if a new exclusive group permission was auto-added
 	GrantedGroupID         *int64 // the group ID that was auto-granted
 	GrantedGroupName       string // the group name that was auto-granted
+}
+
+type AdminUpdateAPIKeyRuntimeLimitsInput struct {
+	MaxActiveIPs         *int
+	IPIdleTimeoutSeconds *int
+	MaxConcurrency       *int
 }
 
 // ReplaceUserGroupResult 分组替换操作的结果
@@ -735,17 +748,31 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	} else if s.settingService != nil {
 		balance = s.settingService.GetDefaultBalance(ctx)
 	}
+	if input.APIKeyMaxActiveIPs < 0 {
+		return nil, ErrInvalidRuntimeLimit
+	}
+	adminPermissions := []string{}
+	if input.AdminPermissions != nil {
+		permissions, err := NormalizeAdminPermissions(*input.AdminPermissions)
+		if err != nil {
+			return nil, infraerrors.BadRequest("INVALID_ADMIN_PERMISSION", err.Error())
+		}
+		adminPermissions = permissions
+	}
 
 	user := &User{
-		Email:         input.Email,
-		Username:      input.Username,
-		Notes:         input.Notes,
-		Role:          RoleUser, // Always create as regular user, never admin
-		Balance:       balance,
-		Concurrency:   input.Concurrency,
-		RPMLimit:      input.RPMLimit,
-		Status:        StatusActive,
-		AllowedGroups: input.AllowedGroups,
+		Email:                     input.Email,
+		Username:                  input.Username,
+		Notes:                     input.Notes,
+		Role:                      RoleUser, // Always create as regular user, never admin
+		AdminPermissions:          adminPermissions,
+		Balance:                   balance,
+		Concurrency:               input.Concurrency,
+		RPMLimit:                  input.RPMLimit,
+		APIKeyMaxActiveIPs:        input.APIKeyMaxActiveIPs,
+		APIKeyMaxActiveIPsVisible: input.APIKeyMaxActiveIPsVisible,
+		Status:                    StatusActive,
+		AllowedGroups:             input.AllowedGroups,
 	}
 	if err := user.SetPassword(input.Password); err != nil {
 		return nil, err
@@ -797,7 +824,10 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	oldConcurrency := user.Concurrency
 	oldStatus := user.Status
 	oldRole := user.Role
+	oldAdminPermissions := append([]string(nil), user.AdminPermissions...)
 	oldRPMLimit := user.RPMLimit
+	oldAPIKeyMaxActiveIPs := user.APIKeyMaxActiveIPs
+	oldAPIKeyMaxActiveIPsVisible := user.APIKeyMaxActiveIPsVisible
 	oldAllowedGroups := append([]int64(nil), user.AllowedGroups...)
 
 	if input.Email != "" {
@@ -816,6 +846,14 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		user.Notes = *input.Notes
 	}
 
+	if input.AdminPermissions != nil {
+		permissions, err := NormalizeAdminPermissions(*input.AdminPermissions)
+		if err != nil {
+			return nil, infraerrors.BadRequest("INVALID_ADMIN_PERMISSION", err.Error())
+		}
+		user.AdminPermissions = permissions
+	}
+
 	if input.Status != "" {
 		user.Status = input.Status
 	}
@@ -826,6 +864,17 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 
 	if input.RPMLimit != nil {
 		user.RPMLimit = *input.RPMLimit
+	}
+
+	if input.APIKeyMaxActiveIPs != nil {
+		if *input.APIKeyMaxActiveIPs < 0 {
+			return nil, ErrInvalidRuntimeLimit
+		}
+		user.APIKeyMaxActiveIPs = *input.APIKeyMaxActiveIPs
+	}
+
+	if input.APIKeyMaxActiveIPsVisible != nil {
+		user.APIKeyMaxActiveIPsVisible = *input.APIKeyMaxActiveIPsVisible
 	}
 
 	if input.AllowedGroups != nil {
@@ -845,8 +894,8 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 
 	if s.authCacheInvalidator != nil {
 		// RPMLimit 直接参与 billing_cache_service.checkRPM 的三级级联，
-		// allowed_groups 参与 API Key 专属分组授权判断；不失效缓存会让修改在一个 L2 TTL 内失去效果。
-		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || user.RPMLimit != oldRPMLimit || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) {
+		// allowed_groups 和用户级 API Key 活跃 IP 策略也参与 API Key 授权热路径。
+		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || !sameStringSet(user.AdminPermissions, oldAdminPermissions) || user.RPMLimit != oldRPMLimit || user.APIKeyMaxActiveIPs != oldAPIKeyMaxActiveIPs || user.APIKeyMaxActiveIPsVisible != oldAPIKeyMaxActiveIPsVisible || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
 		}
 	}
@@ -883,6 +932,26 @@ func sameInt64Set(a, b []int64) bool {
 		return true
 	}
 	counts := make(map[int64]int, len(a))
+	for _, v := range a {
+		counts[v]++
+	}
+	for _, v := range b {
+		if counts[v] == 0 {
+			return false
+		}
+		counts[v]--
+	}
+	return true
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if len(a) == 0 {
+		return true
+	}
+	counts := make(map[string]int, len(a))
 	for _, v := range a {
 		counts[v]++
 	}
@@ -2587,6 +2656,38 @@ func (s *adminServiceImpl) AdminResetAPIKeyRateLimitUsage(ctx context.Context, k
 	}
 	if s.billingCacheService != nil {
 		_ = s.billingCacheService.InvalidateAPIKeyRateLimit(ctx, apiKey.ID)
+	}
+	return apiKey, nil
+}
+
+func (s *adminServiceImpl) AdminUpdateAPIKeyRuntimeLimits(ctx context.Context, keyID int64, input AdminUpdateAPIKeyRuntimeLimitsInput) (*APIKey, error) {
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
+	if err != nil {
+		return nil, err
+	}
+	if input.MaxActiveIPs != nil {
+		if err := validateAPIKeyRuntimeLimits(*input.MaxActiveIPs, apiKey.IPIdleTimeoutSeconds, apiKey.MaxConcurrency); err != nil {
+			return nil, err
+		}
+		apiKey.MaxActiveIPs = *input.MaxActiveIPs
+	}
+	if input.IPIdleTimeoutSeconds != nil {
+		if err := validateAPIKeyRuntimeLimits(apiKey.MaxActiveIPs, *input.IPIdleTimeoutSeconds, apiKey.MaxConcurrency); err != nil {
+			return nil, err
+		}
+		apiKey.IPIdleTimeoutSeconds = *input.IPIdleTimeoutSeconds
+	}
+	if input.MaxConcurrency != nil {
+		if err := validateAPIKeyRuntimeLimits(apiKey.MaxActiveIPs, apiKey.IPIdleTimeoutSeconds, *input.MaxConcurrency); err != nil {
+			return nil, err
+		}
+		apiKey.MaxConcurrency = *input.MaxConcurrency
+	}
+	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
+		return nil, fmt.Errorf("update api key runtime limits: %w", err)
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
 	}
 	return apiKey, nil
 }

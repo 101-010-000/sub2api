@@ -76,17 +76,17 @@ type UpdateRequestRiskControlConfigInput struct {
 }
 
 type RequestRiskEvaluationInput struct {
-	RequestID        string
-	UserID           int64
-	APIKeyID         int64
-	AccountID        *int64
-	RequestPath      string
-	Model            string
-	Headers          http.Header
-	Body             []byte
-	CyberSessionKey  string
-	SessionBlocked   bool
-	Protocol         string
+	RequestID       string
+	UserID          int64
+	APIKeyID        int64
+	AccountID       *int64
+	RequestPath     string
+	Model           string
+	Headers         http.Header
+	Body            []byte
+	CyberSessionKey string
+	SessionBlocked  bool
+	Protocol        string
 }
 
 type RequestRiskDecision struct {
@@ -273,16 +273,16 @@ func (s *ContentModerationService) UpdateRequestRiskControlConfig(ctx context.Co
 		return nil, err
 	}
 	updates := map[string]string{
-		SettingKeyRequestRiskControlEnabled:             strconv.FormatBool(cfg.Enabled),
-		SettingKeyRequestRiskControlMode:                cfg.Mode,
-		SettingKeyRequestRiskControlWindowsEnhanced:     strconv.FormatBool(cfg.WindowsEnhanced),
-		SettingKeyRequestRiskControlDeniedTimezones:     string(deniedZones),
+		SettingKeyRequestRiskControlEnabled:              strconv.FormatBool(cfg.Enabled),
+		SettingKeyRequestRiskControlMode:                 cfg.Mode,
+		SettingKeyRequestRiskControlWindowsEnhanced:      strconv.FormatBool(cfg.WindowsEnhanced),
+		SettingKeyRequestRiskControlDeniedTimezones:      string(deniedZones),
 		SettingKeyRequestRiskControlChineseHighThreshold: strconv.FormatFloat(cfg.ChineseHighThreshold, 'f', -1, 64),
-		SettingKeyRequestRiskControlEventRetentionDays:  strconv.Itoa(cfg.EventRetentionDays),
-		SettingKeyRequestRiskControlCaptureRawHeaders:   strconv.FormatBool(cfg.CaptureRawHeaders),
-		SettingKeyRequestRiskControlUABanScope:          cfg.UABanScope,
+		SettingKeyRequestRiskControlEventRetentionDays:   strconv.Itoa(cfg.EventRetentionDays),
+		SettingKeyRequestRiskControlCaptureRawHeaders:    strconv.FormatBool(cfg.CaptureRawHeaders),
+		SettingKeyRequestRiskControlUABanScope:           cfg.UABanScope,
 		SettingKeyRequestRiskControlSessionBanTTLSeconds: strconv.Itoa(cfg.SessionBanTTLSeconds),
-		SettingKeyRequestRiskControlUABanTTLSeconds:     strconv.Itoa(cfg.UABanTTLSeconds),
+		SettingKeyRequestRiskControlUABanTTLSeconds:      strconv.Itoa(cfg.UABanTTLSeconds),
 	}
 	if err := s.settingRepo.SetMultiple(ctx, updates); err != nil {
 		return nil, err
@@ -566,12 +566,12 @@ func buildRequestRiskSignals(input RequestRiskEvaluationInput, cfg *RequestRiskC
 		ExtractRequestRiskTimezoneFromResponsesBody(input.Body),
 	)
 	text := ExtractRequestRiskTextFromResponsesBody(input.Body)
-	intensity := RequestRiskChineseIntensity(text)
+	intensity := RequestRiskChineseIntensity(requestRiskLanguageText(text))
 	languageSignals := map[string]any{
-		"accept_language":      acceptLanguage,
-		"accept_language_zh":   requestRiskAcceptLanguageHasChinese(acceptLanguage),
+		"accept_language":       acceptLanguage,
+		"accept_language_zh":    requestRiskAcceptLanguageHasChinese(acceptLanguage),
 		"accept_language_zh_cn": requestRiskAcceptLanguageHasMainlandChinese(acceptLanguage),
-		"x_foo":                xFooValues,
+		"x_foo":                 xFooValues,
 	}
 	return requestRiskSignals{
 		SessionID:        ExtractRequestRiskSessionID(headers, input.Body),
@@ -675,11 +675,11 @@ func addRequestRiskMatch(event *RequestRiskEvent, rule string) {
 
 func strongestRequestRiskAction(a, b string) string {
 	rank := map[string]int{
-		"":                             0,
-		RequestRiskActionObserve:       1,
-		RequestRiskActionReject:        2,
-		RequestRiskActionBanUserAgent:  3,
-		RequestRiskActionBanSession:    4,
+		"":                            0,
+		RequestRiskActionObserve:      1,
+		RequestRiskActionReject:       2,
+		RequestRiskActionBanUserAgent: 3,
+		RequestRiskActionBanSession:   4,
 	}
 	if rank[b] > rank[a] {
 		return b
@@ -820,6 +820,10 @@ func RequestRiskChineseIntensity(text string) float64 {
 		return 0
 	}
 	return float64(chinese) / float64(letters)
+}
+
+func requestRiskLanguageText(text string) string {
+	return strings.TrimSpace(requestRiskTimezonePattern.ReplaceAllString(text, "\n"))
 }
 
 func requestRiskAcceptLanguageHasChinese(value string) bool {

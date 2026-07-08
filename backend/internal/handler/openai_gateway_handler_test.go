@@ -873,8 +873,72 @@ func (r *contentModerationHandlerTestRepo) CountFlaggedByUserSince(ctx context.C
 	return 0, nil
 }
 
-func (r *contentModerationHandlerTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*service.ContentModerationCleanupResult, error) {
+func (r *contentModerationHandlerTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time, contextBefore time.Time) (*service.ContentModerationCleanupResult, error) {
 	return &service.ContentModerationCleanupResult{}, nil
+}
+
+func (r *contentModerationHandlerTestRepo) UpsertUserBan(ctx context.Context, ban *service.ContentModerationUserBan) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) GetActiveUserBan(ctx context.Context, userID int64, now time.Time) (*service.ContentModerationUserBan, error) {
+	return nil, nil
+}
+
+func (r *contentModerationHandlerTestRepo) ClearUserBan(ctx context.Context, userID int64, now time.Time) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) CountSelfUnbanAttempts(ctx context.Context, userID int64, since time.Time) (int, error) {
+	return 0, nil
+}
+
+func (r *contentModerationHandlerTestRepo) CreateSelfUnbanRecord(ctx context.Context, record *service.ContentModerationSelfUnbanRecord) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) GetUserRiskProfile(ctx context.Context, userID int64) (*service.ContentModerationUserRiskProfile, error) {
+	return nil, nil
+}
+
+func (r *contentModerationHandlerTestRepo) UpsertUserRiskProfile(ctx context.Context, profile *service.ContentModerationUserRiskProfile) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) CreateUserRiskEvent(ctx context.Context, event *service.ContentModerationUserRiskEvent) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) ListUserRiskEvents(ctx context.Context, userID int64, limit int) ([]service.ContentModerationUserRiskEvent, error) {
+	return nil, nil
+}
+
+func (r *contentModerationHandlerTestRepo) CreateContext(ctx context.Context, item *service.ContentModerationContext) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) ClaimPendingContexts(ctx context.Context, batchSize int) ([]service.ContentModerationContext, error) {
+	return nil, nil
+}
+
+func (r *contentModerationHandlerTestRepo) UpdateContextReview(ctx context.Context, update service.ContentModerationContextReviewUpdate) error {
+	return nil
+}
+
+func (r *contentModerationHandlerTestRepo) CountContextsByStatus(ctx context.Context) (*service.ContentModerationContextStatusCounts, error) {
+	return &service.ContentModerationContextStatusCounts{}, nil
+}
+
+func (r *contentModerationHandlerTestRepo) ListUserContexts(ctx context.Context, userID int64, limit int) ([]service.ContentModerationContext, error) {
+	return nil, nil
+}
+
+func (r *contentModerationHandlerTestRepo) GetContextByID(ctx context.Context, contextID int64) (*service.ContentModerationContext, error) {
+	return nil, nil
+}
+
+func (r *contentModerationHandlerTestRepo) CreateContextAccessLog(ctx context.Context, contextID int64, adminUserID int64, action string) error {
+	return nil
 }
 
 func (r *contentModerationHandlerTestRepo) UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error {

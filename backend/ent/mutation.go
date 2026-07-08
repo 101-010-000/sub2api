@@ -45158,82 +45158,87 @@ func (m *UsageLogMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                            Op
-	typ                           string
-	id                            *int64
-	created_at                    *time.Time
-	updated_at                    *time.Time
-	deleted_at                    *time.Time
-	email                         *string
-	password_hash                 *string
-	role                          *string
-	balance                       *float64
-	addbalance                    *float64
-	frozen_balance                *float64
-	addfrozen_balance             *float64
-	concurrency                   *int
-	addconcurrency                *int
-	status                        *string
-	username                      *string
-	notes                         *string
-	totp_secret_encrypted         *string
-	totp_enabled                  *bool
-	totp_enabled_at               *time.Time
-	signup_source                 *string
-	last_login_at                 *time.Time
-	last_active_at                *time.Time
-	balance_notify_enabled        *bool
-	balance_notify_threshold_type *string
-	balance_notify_threshold      *float64
-	addbalance_notify_threshold   *float64
-	balance_notify_extra_emails   *string
-	total_recharged               *float64
-	addtotal_recharged            *float64
-	rpm_limit                     *int
-	addrpm_limit                  *int
-	clearedFields                 map[string]struct{}
-	api_keys                      map[int64]struct{}
-	removedapi_keys               map[int64]struct{}
-	clearedapi_keys               bool
-	redeem_codes                  map[int64]struct{}
-	removedredeem_codes           map[int64]struct{}
-	clearedredeem_codes           bool
-	subscriptions                 map[int64]struct{}
-	removedsubscriptions          map[int64]struct{}
-	clearedsubscriptions          bool
-	assigned_subscriptions        map[int64]struct{}
-	removedassigned_subscriptions map[int64]struct{}
-	clearedassigned_subscriptions bool
-	announcement_reads            map[int64]struct{}
-	removedannouncement_reads     map[int64]struct{}
-	clearedannouncement_reads     bool
-	allowed_groups                map[int64]struct{}
-	removedallowed_groups         map[int64]struct{}
-	clearedallowed_groups         bool
-	usage_logs                    map[int64]struct{}
-	removedusage_logs             map[int64]struct{}
-	clearedusage_logs             bool
-	attribute_values              map[int64]struct{}
-	removedattribute_values       map[int64]struct{}
-	clearedattribute_values       bool
-	promo_code_usages             map[int64]struct{}
-	removedpromo_code_usages      map[int64]struct{}
-	clearedpromo_code_usages      bool
-	payment_orders                map[int64]struct{}
-	removedpayment_orders         map[int64]struct{}
-	clearedpayment_orders         bool
-	auth_identities               map[int64]struct{}
-	removedauth_identities        map[int64]struct{}
-	clearedauth_identities        bool
-	pending_auth_sessions         map[int64]struct{}
-	removedpending_auth_sessions  map[int64]struct{}
-	clearedpending_auth_sessions  bool
-	platform_quotas               map[int64]struct{}
-	removedplatform_quotas        map[int64]struct{}
-	clearedplatform_quotas        bool
-	done                          bool
-	oldValue                      func(context.Context) (*User, error)
-	predicates                    []predicate.User
+	op                             Op
+	typ                            string
+	id                             *int64
+	created_at                     *time.Time
+	updated_at                     *time.Time
+	deleted_at                     *time.Time
+	email                          *string
+	password_hash                  *string
+	role                           *string
+	admin_permissions              *[]string
+	appendadmin_permissions        []string
+	balance                        *float64
+	addbalance                     *float64
+	frozen_balance                 *float64
+	addfrozen_balance              *float64
+	concurrency                    *int
+	addconcurrency                 *int
+	status                         *string
+	username                       *string
+	notes                          *string
+	totp_secret_encrypted          *string
+	totp_enabled                   *bool
+	totp_enabled_at                *time.Time
+	signup_source                  *string
+	last_login_at                  *time.Time
+	last_active_at                 *time.Time
+	balance_notify_enabled         *bool
+	balance_notify_threshold_type  *string
+	balance_notify_threshold       *float64
+	addbalance_notify_threshold    *float64
+	balance_notify_extra_emails    *string
+	total_recharged                *float64
+	addtotal_recharged             *float64
+	rpm_limit                      *int
+	addrpm_limit                   *int
+	api_key_max_active_ips         *int
+	addapi_key_max_active_ips      *int
+	api_key_max_active_ips_visible *bool
+	clearedFields                  map[string]struct{}
+	api_keys                       map[int64]struct{}
+	removedapi_keys                map[int64]struct{}
+	clearedapi_keys                bool
+	redeem_codes                   map[int64]struct{}
+	removedredeem_codes            map[int64]struct{}
+	clearedredeem_codes            bool
+	subscriptions                  map[int64]struct{}
+	removedsubscriptions           map[int64]struct{}
+	clearedsubscriptions           bool
+	assigned_subscriptions         map[int64]struct{}
+	removedassigned_subscriptions  map[int64]struct{}
+	clearedassigned_subscriptions  bool
+	announcement_reads             map[int64]struct{}
+	removedannouncement_reads      map[int64]struct{}
+	clearedannouncement_reads      bool
+	allowed_groups                 map[int64]struct{}
+	removedallowed_groups          map[int64]struct{}
+	clearedallowed_groups          bool
+	usage_logs                     map[int64]struct{}
+	removedusage_logs              map[int64]struct{}
+	clearedusage_logs              bool
+	attribute_values               map[int64]struct{}
+	removedattribute_values        map[int64]struct{}
+	clearedattribute_values        bool
+	promo_code_usages              map[int64]struct{}
+	removedpromo_code_usages       map[int64]struct{}
+	clearedpromo_code_usages       bool
+	payment_orders                 map[int64]struct{}
+	removedpayment_orders          map[int64]struct{}
+	clearedpayment_orders          bool
+	auth_identities                map[int64]struct{}
+	removedauth_identities         map[int64]struct{}
+	clearedauth_identities         bool
+	pending_auth_sessions          map[int64]struct{}
+	removedpending_auth_sessions   map[int64]struct{}
+	clearedpending_auth_sessions   bool
+	platform_quotas                map[int64]struct{}
+	removedplatform_quotas         map[int64]struct{}
+	clearedplatform_quotas         bool
+	done                           bool
+	oldValue                       func(context.Context) (*User, error)
+	predicates                     []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -45561,6 +45566,57 @@ func (m *UserMutation) OldRole(ctx context.Context) (v string, err error) {
 // ResetRole resets all changes to the "role" field.
 func (m *UserMutation) ResetRole() {
 	m.role = nil
+}
+
+// SetAdminPermissions sets the "admin_permissions" field.
+func (m *UserMutation) SetAdminPermissions(s []string) {
+	m.admin_permissions = &s
+	m.appendadmin_permissions = nil
+}
+
+// AdminPermissions returns the value of the "admin_permissions" field in the mutation.
+func (m *UserMutation) AdminPermissions() (r []string, exists bool) {
+	v := m.admin_permissions
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminPermissions returns the old "admin_permissions" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldAdminPermissions(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminPermissions is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminPermissions requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminPermissions: %w", err)
+	}
+	return oldValue.AdminPermissions, nil
+}
+
+// AppendAdminPermissions adds s to the "admin_permissions" field.
+func (m *UserMutation) AppendAdminPermissions(s []string) {
+	m.appendadmin_permissions = append(m.appendadmin_permissions, s...)
+}
+
+// AppendedAdminPermissions returns the list of values that were appended to the "admin_permissions" field in this mutation.
+func (m *UserMutation) AppendedAdminPermissions() ([]string, bool) {
+	if len(m.appendadmin_permissions) == 0 {
+		return nil, false
+	}
+	return m.appendadmin_permissions, true
+}
+
+// ResetAdminPermissions resets all changes to the "admin_permissions" field.
+func (m *UserMutation) ResetAdminPermissions() {
+	m.admin_permissions = nil
+	m.appendadmin_permissions = nil
 }
 
 // SetBalance sets the "balance" field.
@@ -46397,6 +46453,98 @@ func (m *UserMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field.
+func (m *UserMutation) SetAPIKeyMaxActiveIps(i int) {
+	m.api_key_max_active_ips = &i
+	m.addapi_key_max_active_ips = nil
+}
+
+// APIKeyMaxActiveIps returns the value of the "api_key_max_active_ips" field in the mutation.
+func (m *UserMutation) APIKeyMaxActiveIps() (r int, exists bool) {
+	v := m.api_key_max_active_ips
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyMaxActiveIps returns the old "api_key_max_active_ips" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldAPIKeyMaxActiveIps(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyMaxActiveIps is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyMaxActiveIps requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyMaxActiveIps: %w", err)
+	}
+	return oldValue.APIKeyMaxActiveIps, nil
+}
+
+// AddAPIKeyMaxActiveIps adds i to the "api_key_max_active_ips" field.
+func (m *UserMutation) AddAPIKeyMaxActiveIps(i int) {
+	if m.addapi_key_max_active_ips != nil {
+		*m.addapi_key_max_active_ips += i
+	} else {
+		m.addapi_key_max_active_ips = &i
+	}
+}
+
+// AddedAPIKeyMaxActiveIps returns the value that was added to the "api_key_max_active_ips" field in this mutation.
+func (m *UserMutation) AddedAPIKeyMaxActiveIps() (r int, exists bool) {
+	v := m.addapi_key_max_active_ips
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAPIKeyMaxActiveIps resets all changes to the "api_key_max_active_ips" field.
+func (m *UserMutation) ResetAPIKeyMaxActiveIps() {
+	m.api_key_max_active_ips = nil
+	m.addapi_key_max_active_ips = nil
+}
+
+// SetAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field.
+func (m *UserMutation) SetAPIKeyMaxActiveIpsVisible(b bool) {
+	m.api_key_max_active_ips_visible = &b
+}
+
+// APIKeyMaxActiveIpsVisible returns the value of the "api_key_max_active_ips_visible" field in the mutation.
+func (m *UserMutation) APIKeyMaxActiveIpsVisible() (r bool, exists bool) {
+	v := m.api_key_max_active_ips_visible
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyMaxActiveIpsVisible returns the old "api_key_max_active_ips_visible" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldAPIKeyMaxActiveIpsVisible(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyMaxActiveIpsVisible is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyMaxActiveIpsVisible requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyMaxActiveIpsVisible: %w", err)
+	}
+	return oldValue.APIKeyMaxActiveIpsVisible, nil
+}
+
+// ResetAPIKeyMaxActiveIpsVisible resets all changes to the "api_key_max_active_ips_visible" field.
+func (m *UserMutation) ResetAPIKeyMaxActiveIpsVisible() {
+	m.api_key_max_active_ips_visible = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *UserMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -47133,7 +47281,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 27)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -47151,6 +47299,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.role != nil {
 		fields = append(fields, user.FieldRole)
+	}
+	if m.admin_permissions != nil {
+		fields = append(fields, user.FieldAdminPermissions)
 	}
 	if m.balance != nil {
 		fields = append(fields, user.FieldBalance)
@@ -47206,6 +47357,12 @@ func (m *UserMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.api_key_max_active_ips != nil {
+		fields = append(fields, user.FieldAPIKeyMaxActiveIps)
+	}
+	if m.api_key_max_active_ips_visible != nil {
+		fields = append(fields, user.FieldAPIKeyMaxActiveIpsVisible)
+	}
 	return fields
 }
 
@@ -47226,6 +47383,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.PasswordHash()
 	case user.FieldRole:
 		return m.Role()
+	case user.FieldAdminPermissions:
+		return m.AdminPermissions()
 	case user.FieldBalance:
 		return m.Balance()
 	case user.FieldFrozenBalance:
@@ -47262,6 +47421,10 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalRecharged()
 	case user.FieldRpmLimit:
 		return m.RpmLimit()
+	case user.FieldAPIKeyMaxActiveIps:
+		return m.APIKeyMaxActiveIps()
+	case user.FieldAPIKeyMaxActiveIpsVisible:
+		return m.APIKeyMaxActiveIpsVisible()
 	}
 	return nil, false
 }
@@ -47283,6 +47446,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldPasswordHash(ctx)
 	case user.FieldRole:
 		return m.OldRole(ctx)
+	case user.FieldAdminPermissions:
+		return m.OldAdminPermissions(ctx)
 	case user.FieldBalance:
 		return m.OldBalance(ctx)
 	case user.FieldFrozenBalance:
@@ -47319,6 +47484,10 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTotalRecharged(ctx)
 	case user.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case user.FieldAPIKeyMaxActiveIps:
+		return m.OldAPIKeyMaxActiveIps(ctx)
+	case user.FieldAPIKeyMaxActiveIpsVisible:
+		return m.OldAPIKeyMaxActiveIpsVisible(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -47369,6 +47538,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRole(v)
+		return nil
+	case user.FieldAdminPermissions:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminPermissions(v)
 		return nil
 	case user.FieldBalance:
 		v, ok := value.(float64)
@@ -47496,6 +47672,20 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRpmLimit(v)
 		return nil
+	case user.FieldAPIKeyMaxActiveIps:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyMaxActiveIps(v)
+		return nil
+	case user.FieldAPIKeyMaxActiveIpsVisible:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyMaxActiveIpsVisible(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
 }
@@ -47522,6 +47712,9 @@ func (m *UserMutation) AddedFields() []string {
 	if m.addrpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.addapi_key_max_active_ips != nil {
+		fields = append(fields, user.FieldAPIKeyMaxActiveIps)
+	}
 	return fields
 }
 
@@ -47542,6 +47735,8 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalRecharged()
 	case user.FieldRpmLimit:
 		return m.AddedRpmLimit()
+	case user.FieldAPIKeyMaxActiveIps:
+		return m.AddedAPIKeyMaxActiveIps()
 	}
 	return nil, false
 }
@@ -47592,6 +47787,13 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRpmLimit(v)
+		return nil
+	case user.FieldAPIKeyMaxActiveIps:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyMaxActiveIps(v)
 		return nil
 	}
 	return fmt.Errorf("unknown User numeric field %s", name)
@@ -47677,6 +47879,9 @@ func (m *UserMutation) ResetField(name string) error {
 	case user.FieldRole:
 		m.ResetRole()
 		return nil
+	case user.FieldAdminPermissions:
+		m.ResetAdminPermissions()
+		return nil
 	case user.FieldBalance:
 		m.ResetBalance()
 		return nil
@@ -47730,6 +47935,12 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldRpmLimit:
 		m.ResetRpmLimit()
+		return nil
+	case user.FieldAPIKeyMaxActiveIps:
+		m.ResetAPIKeyMaxActiveIps()
+		return nil
+	case user.FieldAPIKeyMaxActiveIpsVisible:
+		m.ResetAPIKeyMaxActiveIpsVisible()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

@@ -27,6 +27,8 @@ const (
 	FieldPasswordHash = "password_hash"
 	// FieldRole holds the string denoting the role field in the database.
 	FieldRole = "role"
+	// FieldAdminPermissions holds the string denoting the admin_permissions field in the database.
+	FieldAdminPermissions = "admin_permissions"
 	// FieldBalance holds the string denoting the balance field in the database.
 	FieldBalance = "balance"
 	// FieldFrozenBalance holds the string denoting the frozen_balance field in the database.
@@ -63,6 +65,10 @@ const (
 	FieldTotalRecharged = "total_recharged"
 	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
 	FieldRpmLimit = "rpm_limit"
+	// FieldAPIKeyMaxActiveIps holds the string denoting the api_key_max_active_ips field in the database.
+	FieldAPIKeyMaxActiveIps = "api_key_max_active_ips"
+	// FieldAPIKeyMaxActiveIpsVisible holds the string denoting the api_key_max_active_ips_visible field in the database.
+	FieldAPIKeyMaxActiveIpsVisible = "api_key_max_active_ips_visible"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -200,6 +206,7 @@ var Columns = []string{
 	FieldEmail,
 	FieldPasswordHash,
 	FieldRole,
+	FieldAdminPermissions,
 	FieldBalance,
 	FieldFrozenBalance,
 	FieldConcurrency,
@@ -218,6 +225,8 @@ var Columns = []string{
 	FieldBalanceNotifyExtraEmails,
 	FieldTotalRecharged,
 	FieldRpmLimit,
+	FieldAPIKeyMaxActiveIps,
+	FieldAPIKeyMaxActiveIpsVisible,
 }
 
 var (
@@ -258,6 +267,8 @@ var (
 	DefaultRole string
 	// RoleValidator is a validator for the "role" field. It is called by the builders before save.
 	RoleValidator func(string) error
+	// DefaultAdminPermissions holds the default value on creation for the "admin_permissions" field.
+	DefaultAdminPermissions []string
 	// DefaultBalance holds the default value on creation for the "balance" field.
 	DefaultBalance float64
 	// DefaultFrozenBalance holds the default value on creation for the "frozen_balance" field.
@@ -290,6 +301,12 @@ var (
 	DefaultTotalRecharged float64
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
+	// DefaultAPIKeyMaxActiveIps holds the default value on creation for the "api_key_max_active_ips" field.
+	DefaultAPIKeyMaxActiveIps int
+	// APIKeyMaxActiveIpsValidator is a validator for the "api_key_max_active_ips" field. It is called by the builders before save.
+	APIKeyMaxActiveIpsValidator func(int) error
+	// DefaultAPIKeyMaxActiveIpsVisible holds the default value on creation for the "api_key_max_active_ips_visible" field.
+	DefaultAPIKeyMaxActiveIpsVisible bool
 )
 
 // OrderOption defines the ordering options for the User queries.
@@ -418,6 +435,16 @@ func ByTotalRecharged(opts ...sql.OrderTermOption) OrderOption {
 // ByRpmLimit orders the results by the rpm_limit field.
 func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRpmLimit, opts...).ToFunc()
+}
+
+// ByAPIKeyMaxActiveIps orders the results by the api_key_max_active_ips field.
+func ByAPIKeyMaxActiveIps(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAPIKeyMaxActiveIps, opts...).ToFunc()
+}
+
+// ByAPIKeyMaxActiveIpsVisible orders the results by the api_key_max_active_ips_visible field.
+func ByAPIKeyMaxActiveIpsVisible(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAPIKeyMaxActiveIpsVisible, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

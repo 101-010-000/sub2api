@@ -47,6 +47,14 @@ func ProvideSessionLimitCache(rdb *redis.Client, cfg *config.Config) service.Ses
 	return NewSessionLimitCache(rdb, defaultIdleTimeoutMinutes)
 }
 
+// ProvideSecretEncryptors adapts the shared encryptor to variadic service constructors.
+func ProvideSecretEncryptors(encryptor service.SecretEncryptor) []service.SecretEncryptor {
+	if encryptor == nil {
+		return nil
+	}
+	return []service.SecretEncryptor{encryptor}
+}
+
 // ProvideSchedulerCache 创建调度快照缓存，并注入快照分块参数。
 func ProvideSchedulerCache(rdb *redis.Client, cfg *config.Config) service.SchedulerCache {
 	mgetChunkSize := defaultSchedulerSnapshotMGetChunkSize
@@ -93,6 +101,7 @@ var ProviderSet = wire.NewSet(
 	NewChannelMonitorRepository,
 	NewChannelMonitorRequestTemplateRepository,
 	NewContentModerationRepository,
+	NewFeishuUserIdentityRepository,
 	NewAffiliateRepository,
 	NewUserPlatformQuotaRepository,     // T14: user × platform quota
 	NewUserPlatformQuotaServiceAdapter, // T14: adapter → service.UserPlatformQuotaRepository
@@ -101,6 +110,7 @@ var ProviderSet = wire.NewSet(
 	NewGatewayCache,
 	NewBillingCache,
 	NewAPIKeyCache,
+	NewAPIKeyRuntimeCache,
 	NewTempUnschedCache,
 	NewTimeoutCounterCache,
 	NewOpenAI403CounterCache,
@@ -130,6 +140,7 @@ var ProviderSet = wire.NewSet(
 
 	// Encryptors
 	NewAESEncryptor,
+	ProvideSecretEncryptors,
 
 	// Backup infrastructure
 	NewPgDumper,

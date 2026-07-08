@@ -41,6 +41,15 @@ const (
 	// Group 认证后的分组信息，由 API Key 认证中间件设置
 	Group Key = "ctx_group"
 
+	// SpeedState 标识当前请求命中的优速通状态，用于 usage_logs 审计。
+	SpeedState Key = "ctx_speed_state"
+
+	// SpeedWaitMs 标识当前请求优速通实际等待耗时毫秒数。
+	SpeedWaitMs Key = "ctx_speed_wait_ms"
+
+	// SpeedRoute 标识当前请求的优速通/随速通路由。
+	SpeedRoute Key = "ctx_speed_route"
+
 	// IsMaxTokensOneHaikuRequest 标识当前请求是否为 max_tokens=1 + haiku 模型的探测请求
 	// 用于 ClaudeCodeOnly 验证绕过（绕过 system prompt 检查，但仍需验证 User-Agent）
 	IsMaxTokensOneHaikuRequest Key = "ctx_is_max_tokens_one_haiku"

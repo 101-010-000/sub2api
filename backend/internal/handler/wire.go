@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -90,6 +91,33 @@ func ProvideSettingHandler(settingService *service.SettingService, buildInfo Bui
 	return h
 }
 
+// ProvideAuthHandler creates AuthHandler and attaches optional integrations.
+func ProvideAuthHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService, promoService *service.PromoService, redeemService *service.RedeemService, totpService *service.TotpService, userAttributeService *service.UserAttributeService, feishuNotificationService *service.FeishuNotificationService) *AuthHandler {
+	h := NewAuthHandler(cfg, authService, userService, settingService, promoService, redeemService, totpService, userAttributeService)
+	h.SetFeishuNotificationService(feishuNotificationService)
+	return h
+}
+
+// ProvideUserHandler creates UserHandler and attaches optional integrations.
+func ProvideUserHandler(userService *service.UserService, authService *service.AuthService, emailService *service.EmailService, emailCache service.EmailCache, affiliateService *service.AffiliateService, userPlatformQuotaRepo service.UserPlatformQuotaRepository, contentModerationService *service.ContentModerationService, feishuNotificationService *service.FeishuNotificationService, speedService *service.SpeedService) *UserHandler {
+	h := NewUserHandler(userService, authService, emailService, emailCache, affiliateService, userPlatformQuotaRepo, contentModerationService)
+	h.SetFeishuNotificationService(feishuNotificationService)
+	h.SetSpeedService(speedService)
+	return h
+}
+
+func ProvideAdminUserHandler(adminService service.AdminService, concurrencyService *service.ConcurrencyService, userPlatformQuotaRepo service.UserPlatformQuotaRepository, billingCache service.BillingCache, speedService *service.SpeedService) *admin.UserHandler {
+	h := admin.NewUserHandler(adminService, concurrencyService, userPlatformQuotaRepo, billingCache)
+	h.SetSpeedService(speedService)
+	return h
+}
+
+func ProvideAdminSubscriptionHandler(subscriptionService *service.SubscriptionService, speedService *service.SpeedService) *admin.SubscriptionHandler {
+	h := admin.NewSubscriptionHandler(subscriptionService)
+	h.SetSpeedService(speedService)
+	return h
+}
+
 // ProvideAdminSettingHandler creates admin.SettingHandler with notification template APIs.
 func ProvideAdminSettingHandler(settingService *service.SettingService, emailService *service.EmailService, turnstileService *service.TurnstileService, opsService *service.OpsService, paymentConfigService *service.PaymentConfigService, paymentService *service.PaymentService, userAttributeService *service.UserAttributeService, notificationEmailService *service.NotificationEmailService) *admin.SettingHandler {
 	h := admin.NewSettingHandler(settingService, emailService, turnstileService, opsService, paymentConfigService, paymentService, userAttributeService)
@@ -143,9 +171,9 @@ func ProvideHandlers(
 // ProviderSet is the Wire provider set for all handlers
 var ProviderSet = wire.NewSet(
 	// Top-level handlers
-	NewAuthHandler,
-	NewUserHandler,
-	NewAPIKeyHandler,
+	ProvideAuthHandler,
+	ProvideUserHandler,
+	ProvideAPIKeyHandler,
 	NewUsageHandler,
 	NewRedeemHandler,
 	NewSubscriptionHandler,
@@ -162,7 +190,7 @@ var ProviderSet = wire.NewSet(
 
 	// Admin handlers
 	admin.NewDashboardHandler,
-	admin.NewUserHandler,
+	ProvideAdminUserHandler,
 	admin.NewGroupHandler,
 	admin.NewAccountHandler,
 	admin.NewAnnouncementHandler,
@@ -179,7 +207,7 @@ var ProviderSet = wire.NewSet(
 	ProvideAdminSettingHandler,
 	admin.NewOpsHandler,
 	ProvideSystemHandler,
-	admin.NewSubscriptionHandler,
+	ProvideAdminSubscriptionHandler,
 	admin.NewUsageHandler,
 	admin.NewUserAttributeHandler,
 	admin.NewErrorPassthroughHandler,

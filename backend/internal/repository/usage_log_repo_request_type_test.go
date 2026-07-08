@@ -90,6 +90,9 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sqlmock.AnyArg(), // speed_state
+			sqlmock.AnyArg(), // speed_wait_ms
+			sqlmock.AnyArg(), // speed_route
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
@@ -173,6 +176,9 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_tier
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
+			sqlmock.AnyArg(), // speed_state
+			sqlmock.AnyArg(), // speed_wait_ms
+			sqlmock.AnyArg(), // speed_route
 			createdAt,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
@@ -756,7 +762,11 @@ func (s usageLogScannerStub) Scan(dest ...any) error {
 		if dv.Kind() != reflect.Ptr {
 			return fmt.Errorf("dest[%d] is not pointer", i)
 		}
-		dv.Elem().Set(reflect.ValueOf(s.values[i]))
+		value := reflect.ValueOf(s.values[i])
+		if !value.Type().AssignableTo(dv.Elem().Type()) {
+			return fmt.Errorf("dest[%d] type mismatch: got %s want %s", i, value.Type(), dv.Elem().Type())
+		}
+		dv.Elem().Set(value)
 	}
 	return nil
 }
@@ -768,7 +778,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int64(4),
 			int64(13),
 			int64(23),
-			int64(33),
+			sql.NullInt64{Valid: true, Int64: 33},
 			sql.NullString{Valid: true, String: "req-image-metadata"},
 			"gpt-image-2",
 			sql.NullString{Valid: true, String: "gpt-image-2"},
@@ -804,6 +814,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullFloat64{},
+			sql.NullString{},
+			0,
+			sql.NullString{},
 			now,
 		}})
 		require.NoError(t, err)
@@ -822,10 +835,10 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 	t.Run("request_type_ws_v2_overrides_legacy", func(t *testing.T) {
 		now := time.Now().UTC()
 		log, err := scanUsageLog(usageLogScannerStub{values: []any{
-			int64(1),  // id
-			int64(10), // user_id
-			int64(20), // api_key_id
-			int64(30), // account_id
+			int64(1),                              // id
+			int64(10),                             // user_id
+			int64(20),                             // api_key_id
+			sql.NullInt64{Valid: true, Int64: 30}, // account_id
 			sql.NullString{Valid: true, String: "req-1"},
 			"gpt-5", // model
 			sql.NullString{Valid: true, String: "gpt-5"}, // requested_model
@@ -872,6 +885,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // speed_state
+			0,                 // speed_wait_ms
+			sql.NullString{},  // speed_route
 			now,
 		}})
 		require.NoError(t, err)
@@ -888,7 +904,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int64(2),
 			int64(11),
 			int64(21),
-			int64(31),
+			sql.NullInt64{Valid: true, Int64: 31},
 			sql.NullString{Valid: true, String: "req-2"},
 			"gpt-5",
 			sql.NullString{Valid: true, String: "gpt-5"},
@@ -924,6 +940,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // speed_state
+			0,                 // speed_wait_ms
+			sql.NullString{},  // speed_route
 			now,
 		}})
 		require.NoError(t, err)
@@ -940,7 +959,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int64(3),
 			int64(12),
 			int64(22),
-			int64(32),
+			sql.NullInt64{Valid: true, Int64: 32},
 			sql.NullString{Valid: true, String: "req-3"},
 			"gpt-5.4",
 			sql.NullString{Valid: true, String: "gpt-5.4"},
@@ -976,6 +995,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_tier
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
+			sql.NullString{},  // speed_state
+			0,                 // speed_wait_ms
+			sql.NullString{},  // speed_route
 			now,
 		}})
 		require.NoError(t, err)

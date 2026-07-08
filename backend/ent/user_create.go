@@ -102,6 +102,12 @@ func (_c *UserCreate) SetNillableRole(v *string) *UserCreate {
 	return _c
 }
 
+// SetAdminPermissions sets the "admin_permissions" field.
+func (_c *UserCreate) SetAdminPermissions(v []string) *UserCreate {
+	_c.mutation.SetAdminPermissions(v)
+	return _c
+}
+
 // SetBalance sets the "balance" field.
 func (_c *UserCreate) SetBalance(v float64) *UserCreate {
 	_c.mutation.SetBalance(v)
@@ -350,6 +356,34 @@ func (_c *UserCreate) SetRpmLimit(v int) *UserCreate {
 func (_c *UserCreate) SetNillableRpmLimit(v *int) *UserCreate {
 	if v != nil {
 		_c.SetRpmLimit(*v)
+	}
+	return _c
+}
+
+// SetAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field.
+func (_c *UserCreate) SetAPIKeyMaxActiveIps(v int) *UserCreate {
+	_c.mutation.SetAPIKeyMaxActiveIps(v)
+	return _c
+}
+
+// SetNillableAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field if the given value is not nil.
+func (_c *UserCreate) SetNillableAPIKeyMaxActiveIps(v *int) *UserCreate {
+	if v != nil {
+		_c.SetAPIKeyMaxActiveIps(*v)
+	}
+	return _c
+}
+
+// SetAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field.
+func (_c *UserCreate) SetAPIKeyMaxActiveIpsVisible(v bool) *UserCreate {
+	_c.mutation.SetAPIKeyMaxActiveIpsVisible(v)
+	return _c
+}
+
+// SetNillableAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field if the given value is not nil.
+func (_c *UserCreate) SetNillableAPIKeyMaxActiveIpsVisible(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetAPIKeyMaxActiveIpsVisible(*v)
 	}
 	return _c
 }
@@ -604,6 +638,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRole
 		_c.mutation.SetRole(v)
 	}
+	if _, ok := _c.mutation.AdminPermissions(); !ok {
+		v := user.DefaultAdminPermissions
+		_c.mutation.SetAdminPermissions(v)
+	}
 	if _, ok := _c.mutation.Balance(); !ok {
 		v := user.DefaultBalance
 		_c.mutation.SetBalance(v)
@@ -656,6 +694,14 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
 	}
+	if _, ok := _c.mutation.APIKeyMaxActiveIps(); !ok {
+		v := user.DefaultAPIKeyMaxActiveIps
+		_c.mutation.SetAPIKeyMaxActiveIps(v)
+	}
+	if _, ok := _c.mutation.APIKeyMaxActiveIpsVisible(); !ok {
+		v := user.DefaultAPIKeyMaxActiveIpsVisible
+		_c.mutation.SetAPIKeyMaxActiveIpsVisible(v)
+	}
 	return nil
 }
 
@@ -690,6 +736,9 @@ func (_c *UserCreate) check() error {
 		if err := user.RoleValidator(v); err != nil {
 			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "User.role": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.AdminPermissions(); !ok {
+		return &ValidationError{Name: "admin_permissions", err: errors.New(`ent: missing required field "User.admin_permissions"`)}
 	}
 	if _, ok := _c.mutation.Balance(); !ok {
 		return &ValidationError{Name: "balance", err: errors.New(`ent: missing required field "User.balance"`)}
@@ -745,6 +794,17 @@ func (_c *UserCreate) check() error {
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "User.rpm_limit"`)}
 	}
+	if _, ok := _c.mutation.APIKeyMaxActiveIps(); !ok {
+		return &ValidationError{Name: "api_key_max_active_ips", err: errors.New(`ent: missing required field "User.api_key_max_active_ips"`)}
+	}
+	if v, ok := _c.mutation.APIKeyMaxActiveIps(); ok {
+		if err := user.APIKeyMaxActiveIpsValidator(v); err != nil {
+			return &ValidationError{Name: "api_key_max_active_ips", err: fmt.Errorf(`ent: validator failed for field "User.api_key_max_active_ips": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.APIKeyMaxActiveIpsVisible(); !ok {
+		return &ValidationError{Name: "api_key_max_active_ips_visible", err: errors.New(`ent: missing required field "User.api_key_max_active_ips_visible"`)}
+	}
 	return nil
 }
 
@@ -795,6 +855,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeString, value)
 		_node.Role = value
+	}
+	if value, ok := _c.mutation.AdminPermissions(); ok {
+		_spec.SetField(user.FieldAdminPermissions, field.TypeJSON, value)
+		_node.AdminPermissions = value
 	}
 	if value, ok := _c.mutation.Balance(); ok {
 		_spec.SetField(user.FieldBalance, field.TypeFloat64, value)
@@ -867,6 +931,14 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
+	}
+	if value, ok := _c.mutation.APIKeyMaxActiveIps(); ok {
+		_spec.SetField(user.FieldAPIKeyMaxActiveIps, field.TypeInt, value)
+		_node.APIKeyMaxActiveIps = value
+	}
+	if value, ok := _c.mutation.APIKeyMaxActiveIpsVisible(); ok {
+		_spec.SetField(user.FieldAPIKeyMaxActiveIpsVisible, field.TypeBool, value)
+		_node.APIKeyMaxActiveIpsVisible = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1198,6 +1270,18 @@ func (u *UserUpsert) UpdateRole() *UserUpsert {
 	return u
 }
 
+// SetAdminPermissions sets the "admin_permissions" field.
+func (u *UserUpsert) SetAdminPermissions(v []string) *UserUpsert {
+	u.Set(user.FieldAdminPermissions, v)
+	return u
+}
+
+// UpdateAdminPermissions sets the "admin_permissions" field to the value that was provided on create.
+func (u *UserUpsert) UpdateAdminPermissions() *UserUpsert {
+	u.SetExcluded(user.FieldAdminPermissions)
+	return u
+}
+
 // SetBalance sets the "balance" field.
 func (u *UserUpsert) SetBalance(v float64) *UserUpsert {
 	u.Set(user.FieldBalance, v)
@@ -1480,6 +1564,36 @@ func (u *UserUpsert) AddRpmLimit(v int) *UserUpsert {
 	return u
 }
 
+// SetAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field.
+func (u *UserUpsert) SetAPIKeyMaxActiveIps(v int) *UserUpsert {
+	u.Set(user.FieldAPIKeyMaxActiveIps, v)
+	return u
+}
+
+// UpdateAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field to the value that was provided on create.
+func (u *UserUpsert) UpdateAPIKeyMaxActiveIps() *UserUpsert {
+	u.SetExcluded(user.FieldAPIKeyMaxActiveIps)
+	return u
+}
+
+// AddAPIKeyMaxActiveIps adds v to the "api_key_max_active_ips" field.
+func (u *UserUpsert) AddAPIKeyMaxActiveIps(v int) *UserUpsert {
+	u.Add(user.FieldAPIKeyMaxActiveIps, v)
+	return u
+}
+
+// SetAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field.
+func (u *UserUpsert) SetAPIKeyMaxActiveIpsVisible(v bool) *UserUpsert {
+	u.Set(user.FieldAPIKeyMaxActiveIpsVisible, v)
+	return u
+}
+
+// UpdateAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field to the value that was provided on create.
+func (u *UserUpsert) UpdateAPIKeyMaxActiveIpsVisible() *UserUpsert {
+	u.SetExcluded(user.FieldAPIKeyMaxActiveIpsVisible)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -1599,6 +1713,20 @@ func (u *UserUpsertOne) SetRole(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRole() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRole()
+	})
+}
+
+// SetAdminPermissions sets the "admin_permissions" field.
+func (u *UserUpsertOne) SetAdminPermissions(v []string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAdminPermissions(v)
+	})
+}
+
+// UpdateAdminPermissions sets the "admin_permissions" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateAdminPermissions() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAdminPermissions()
 	})
 }
 
@@ -1931,6 +2059,41 @@ func (u *UserUpsertOne) UpdateRpmLimit() *UserUpsertOne {
 	})
 }
 
+// SetAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field.
+func (u *UserUpsertOne) SetAPIKeyMaxActiveIps(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAPIKeyMaxActiveIps(v)
+	})
+}
+
+// AddAPIKeyMaxActiveIps adds v to the "api_key_max_active_ips" field.
+func (u *UserUpsertOne) AddAPIKeyMaxActiveIps(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddAPIKeyMaxActiveIps(v)
+	})
+}
+
+// UpdateAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateAPIKeyMaxActiveIps() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAPIKeyMaxActiveIps()
+	})
+}
+
+// SetAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field.
+func (u *UserUpsertOne) SetAPIKeyMaxActiveIpsVisible(v bool) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAPIKeyMaxActiveIpsVisible(v)
+	})
+}
+
+// UpdateAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateAPIKeyMaxActiveIpsVisible() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAPIKeyMaxActiveIpsVisible()
+	})
+}
+
 // Exec executes the query.
 func (u *UserUpsertOne) Exec(ctx context.Context) error {
 	if len(u.create.conflict) == 0 {
@@ -2216,6 +2379,20 @@ func (u *UserUpsertBulk) SetRole(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRole() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRole()
+	})
+}
+
+// SetAdminPermissions sets the "admin_permissions" field.
+func (u *UserUpsertBulk) SetAdminPermissions(v []string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAdminPermissions(v)
+	})
+}
+
+// UpdateAdminPermissions sets the "admin_permissions" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateAdminPermissions() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAdminPermissions()
 	})
 }
 
@@ -2545,6 +2722,41 @@ func (u *UserUpsertBulk) AddRpmLimit(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRpmLimit() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field.
+func (u *UserUpsertBulk) SetAPIKeyMaxActiveIps(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAPIKeyMaxActiveIps(v)
+	})
+}
+
+// AddAPIKeyMaxActiveIps adds v to the "api_key_max_active_ips" field.
+func (u *UserUpsertBulk) AddAPIKeyMaxActiveIps(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddAPIKeyMaxActiveIps(v)
+	})
+}
+
+// UpdateAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateAPIKeyMaxActiveIps() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAPIKeyMaxActiveIps()
+	})
+}
+
+// SetAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field.
+func (u *UserUpsertBulk) SetAPIKeyMaxActiveIpsVisible(v bool) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAPIKeyMaxActiveIpsVisible(v)
+	})
+}
+
+// UpdateAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateAPIKeyMaxActiveIpsVisible() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAPIKeyMaxActiveIpsVisible()
 	})
 }
 

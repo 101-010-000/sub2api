@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -105,6 +106,18 @@ func (_u *UserUpdate) SetNillableRole(v *string) *UserUpdate {
 	if v != nil {
 		_u.SetRole(*v)
 	}
+	return _u
+}
+
+// SetAdminPermissions sets the "admin_permissions" field.
+func (_u *UserUpdate) SetAdminPermissions(v []string) *UserUpdate {
+	_u.mutation.SetAdminPermissions(v)
+	return _u
+}
+
+// AppendAdminPermissions appends value to the "admin_permissions" field.
+func (_u *UserUpdate) AppendAdminPermissions(v []string) *UserUpdate {
+	_u.mutation.AppendAdminPermissions(v)
 	return _u
 }
 
@@ -429,6 +442,41 @@ func (_u *UserUpdate) SetNillableRpmLimit(v *int) *UserUpdate {
 // AddRpmLimit adds value to the "rpm_limit" field.
 func (_u *UserUpdate) AddRpmLimit(v int) *UserUpdate {
 	_u.mutation.AddRpmLimit(v)
+	return _u
+}
+
+// SetAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field.
+func (_u *UserUpdate) SetAPIKeyMaxActiveIps(v int) *UserUpdate {
+	_u.mutation.ResetAPIKeyMaxActiveIps()
+	_u.mutation.SetAPIKeyMaxActiveIps(v)
+	return _u
+}
+
+// SetNillableAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableAPIKeyMaxActiveIps(v *int) *UserUpdate {
+	if v != nil {
+		_u.SetAPIKeyMaxActiveIps(*v)
+	}
+	return _u
+}
+
+// AddAPIKeyMaxActiveIps adds value to the "api_key_max_active_ips" field.
+func (_u *UserUpdate) AddAPIKeyMaxActiveIps(v int) *UserUpdate {
+	_u.mutation.AddAPIKeyMaxActiveIps(v)
+	return _u
+}
+
+// SetAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field.
+func (_u *UserUpdate) SetAPIKeyMaxActiveIpsVisible(v bool) *UserUpdate {
+	_u.mutation.SetAPIKeyMaxActiveIpsVisible(v)
+	return _u
+}
+
+// SetNillableAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableAPIKeyMaxActiveIpsVisible(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetAPIKeyMaxActiveIpsVisible(*v)
+	}
 	return _u
 }
 
@@ -979,6 +1027,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.APIKeyMaxActiveIps(); ok {
+		if err := user.APIKeyMaxActiveIpsValidator(v); err != nil {
+			return &ValidationError{Name: "api_key_max_active_ips", err: fmt.Errorf(`ent: validator failed for field "User.api_key_max_active_ips": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1011,6 +1064,14 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AdminPermissions(); ok {
+		_spec.SetField(user.FieldAdminPermissions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAdminPermissions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldAdminPermissions, value)
+		})
 	}
 	if value, ok := _u.mutation.Balance(); ok {
 		_spec.SetField(user.FieldBalance, field.TypeFloat64, value)
@@ -1098,6 +1159,15 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.APIKeyMaxActiveIps(); ok {
+		_spec.SetField(user.FieldAPIKeyMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAPIKeyMaxActiveIps(); ok {
+		_spec.AddField(user.FieldAPIKeyMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.APIKeyMaxActiveIpsVisible(); ok {
+		_spec.SetField(user.FieldAPIKeyMaxActiveIpsVisible, field.TypeBool, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1784,6 +1854,18 @@ func (_u *UserUpdateOne) SetNillableRole(v *string) *UserUpdateOne {
 	return _u
 }
 
+// SetAdminPermissions sets the "admin_permissions" field.
+func (_u *UserUpdateOne) SetAdminPermissions(v []string) *UserUpdateOne {
+	_u.mutation.SetAdminPermissions(v)
+	return _u
+}
+
+// AppendAdminPermissions appends value to the "admin_permissions" field.
+func (_u *UserUpdateOne) AppendAdminPermissions(v []string) *UserUpdateOne {
+	_u.mutation.AppendAdminPermissions(v)
+	return _u
+}
+
 // SetBalance sets the "balance" field.
 func (_u *UserUpdateOne) SetBalance(v float64) *UserUpdateOne {
 	_u.mutation.ResetBalance()
@@ -2105,6 +2187,41 @@ func (_u *UserUpdateOne) SetNillableRpmLimit(v *int) *UserUpdateOne {
 // AddRpmLimit adds value to the "rpm_limit" field.
 func (_u *UserUpdateOne) AddRpmLimit(v int) *UserUpdateOne {
 	_u.mutation.AddRpmLimit(v)
+	return _u
+}
+
+// SetAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field.
+func (_u *UserUpdateOne) SetAPIKeyMaxActiveIps(v int) *UserUpdateOne {
+	_u.mutation.ResetAPIKeyMaxActiveIps()
+	_u.mutation.SetAPIKeyMaxActiveIps(v)
+	return _u
+}
+
+// SetNillableAPIKeyMaxActiveIps sets the "api_key_max_active_ips" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableAPIKeyMaxActiveIps(v *int) *UserUpdateOne {
+	if v != nil {
+		_u.SetAPIKeyMaxActiveIps(*v)
+	}
+	return _u
+}
+
+// AddAPIKeyMaxActiveIps adds value to the "api_key_max_active_ips" field.
+func (_u *UserUpdateOne) AddAPIKeyMaxActiveIps(v int) *UserUpdateOne {
+	_u.mutation.AddAPIKeyMaxActiveIps(v)
+	return _u
+}
+
+// SetAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field.
+func (_u *UserUpdateOne) SetAPIKeyMaxActiveIpsVisible(v bool) *UserUpdateOne {
+	_u.mutation.SetAPIKeyMaxActiveIpsVisible(v)
+	return _u
+}
+
+// SetNillableAPIKeyMaxActiveIpsVisible sets the "api_key_max_active_ips_visible" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableAPIKeyMaxActiveIpsVisible(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetAPIKeyMaxActiveIpsVisible(*v)
+	}
 	return _u
 }
 
@@ -2668,6 +2785,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.APIKeyMaxActiveIps(); ok {
+		if err := user.APIKeyMaxActiveIpsValidator(v); err != nil {
+			return &ValidationError{Name: "api_key_max_active_ips", err: fmt.Errorf(`ent: validator failed for field "User.api_key_max_active_ips": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -2717,6 +2839,14 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Role(); ok {
 		_spec.SetField(user.FieldRole, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AdminPermissions(); ok {
+		_spec.SetField(user.FieldAdminPermissions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAdminPermissions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, user.FieldAdminPermissions, value)
+		})
 	}
 	if value, ok := _u.mutation.Balance(); ok {
 		_spec.SetField(user.FieldBalance, field.TypeFloat64, value)
@@ -2804,6 +2934,15 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.APIKeyMaxActiveIps(); ok {
+		_spec.SetField(user.FieldAPIKeyMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAPIKeyMaxActiveIps(); ok {
+		_spec.AddField(user.FieldAPIKeyMaxActiveIps, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.APIKeyMaxActiveIpsVisible(); ok {
+		_spec.SetField(user.FieldAPIKeyMaxActiveIpsVisible, field.TypeBool, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

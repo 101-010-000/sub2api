@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -29,6 +30,8 @@ type User struct {
 	PasswordHash string `json:"password_hash,omitempty"`
 	// Role holds the value of the "role" field.
 	Role string `json:"role,omitempty"`
+	// AdminPermissions holds the value of the "admin_permissions" field.
+	AdminPermissions []string `json:"admin_permissions,omitempty"`
 	// Balance holds the value of the "balance" field.
 	Balance float64 `json:"balance,omitempty"`
 	// FrozenBalance holds the value of the "frozen_balance" field.
@@ -65,6 +68,10 @@ type User struct {
 	TotalRecharged float64 `json:"total_recharged,omitempty"`
 	// RpmLimit holds the value of the "rpm_limit" field.
 	RpmLimit int `json:"rpm_limit,omitempty"`
+	// APIKeyMaxActiveIps holds the value of the "api_key_max_active_ips" field.
+	APIKeyMaxActiveIps int `json:"api_key_max_active_ips,omitempty"`
+	// APIKeyMaxActiveIpsVisible holds the value of the "api_key_max_active_ips_visible" field.
+	APIKeyMaxActiveIpsVisible bool `json:"api_key_max_active_ips_visible,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
 	Edges        UserEdges `json:"edges"`
@@ -237,11 +244,13 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldTotpEnabled, user.FieldBalanceNotifyEnabled:
+		case user.FieldAdminPermissions:
+			values[i] = new([]byte)
+		case user.FieldTotpEnabled, user.FieldBalanceNotifyEnabled, user.FieldAPIKeyMaxActiveIpsVisible:
 			values[i] = new(sql.NullBool)
 		case user.FieldBalance, user.FieldFrozenBalance, user.FieldBalanceNotifyThreshold, user.FieldTotalRecharged:
 			values[i] = new(sql.NullFloat64)
-		case user.FieldID, user.FieldConcurrency, user.FieldRpmLimit:
+		case user.FieldID, user.FieldConcurrency, user.FieldRpmLimit, user.FieldAPIKeyMaxActiveIps:
 			values[i] = new(sql.NullInt64)
 		case user.FieldEmail, user.FieldPasswordHash, user.FieldRole, user.FieldStatus, user.FieldUsername, user.FieldNotes, user.FieldTotpSecretEncrypted, user.FieldSignupSource, user.FieldBalanceNotifyThresholdType, user.FieldBalanceNotifyExtraEmails:
 			values[i] = new(sql.NullString)
@@ -304,6 +313,14 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field role", values[i])
 			} else if value.Valid {
 				_m.Role = value.String
+			}
+		case user.FieldAdminPermissions:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field admin_permissions", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.AdminPermissions); err != nil {
+					return fmt.Errorf("unmarshal field admin_permissions: %w", err)
+				}
 			}
 		case user.FieldBalance:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -417,6 +434,18 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field rpm_limit", values[i])
 			} else if value.Valid {
 				_m.RpmLimit = int(value.Int64)
+			}
+		case user.FieldAPIKeyMaxActiveIps:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field api_key_max_active_ips", values[i])
+			} else if value.Valid {
+				_m.APIKeyMaxActiveIps = int(value.Int64)
+			}
+		case user.FieldAPIKeyMaxActiveIpsVisible:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field api_key_max_active_ips_visible", values[i])
+			} else if value.Valid {
+				_m.APIKeyMaxActiveIpsVisible = value.Bool
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -544,6 +573,9 @@ func (_m *User) String() string {
 	builder.WriteString("role=")
 	builder.WriteString(_m.Role)
 	builder.WriteString(", ")
+	builder.WriteString("admin_permissions=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AdminPermissions))
+	builder.WriteString(", ")
 	builder.WriteString("balance=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Balance))
 	builder.WriteString(", ")
@@ -607,6 +639,12 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("rpm_limit=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RpmLimit))
+	builder.WriteString(", ")
+	builder.WriteString("api_key_max_active_ips=")
+	builder.WriteString(fmt.Sprintf("%v", _m.APIKeyMaxActiveIps))
+	builder.WriteString(", ")
+	builder.WriteString("api_key_max_active_ips_visible=")
+	builder.WriteString(fmt.Sprintf("%v", _m.APIKeyMaxActiveIpsVisible))
 	builder.WriteByte(')')
 	return builder.String()
 }

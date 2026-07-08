@@ -175,6 +175,16 @@ func RpmLimit(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRpmLimit, v))
 }
 
+// APIKeyMaxActiveIps applies equality check predicate on the "api_key_max_active_ips" field. It's identical to APIKeyMaxActiveIpsEQ.
+func APIKeyMaxActiveIps(v int) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAPIKeyMaxActiveIps, v))
+}
+
+// APIKeyMaxActiveIpsVisible applies equality check predicate on the "api_key_max_active_ips_visible" field. It's identical to APIKeyMaxActiveIpsVisibleEQ.
+func APIKeyMaxActiveIpsVisible(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAPIKeyMaxActiveIpsVisible, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -1383,6 +1393,56 @@ func RpmLimitLT(v int) predicate.User {
 // RpmLimitLTE applies the LTE predicate on the "rpm_limit" field.
 func RpmLimitLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldRpmLimit, v))
+}
+
+// APIKeyMaxActiveIpsEQ applies the EQ predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsEQ(v int) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAPIKeyMaxActiveIps, v))
+}
+
+// APIKeyMaxActiveIpsNEQ applies the NEQ predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsNEQ(v int) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldAPIKeyMaxActiveIps, v))
+}
+
+// APIKeyMaxActiveIpsIn applies the In predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsIn(vs ...int) predicate.User {
+	return predicate.User(sql.FieldIn(FieldAPIKeyMaxActiveIps, vs...))
+}
+
+// APIKeyMaxActiveIpsNotIn applies the NotIn predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsNotIn(vs ...int) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldAPIKeyMaxActiveIps, vs...))
+}
+
+// APIKeyMaxActiveIpsGT applies the GT predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsGT(v int) predicate.User {
+	return predicate.User(sql.FieldGT(FieldAPIKeyMaxActiveIps, v))
+}
+
+// APIKeyMaxActiveIpsGTE applies the GTE predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsGTE(v int) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldAPIKeyMaxActiveIps, v))
+}
+
+// APIKeyMaxActiveIpsLT applies the LT predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsLT(v int) predicate.User {
+	return predicate.User(sql.FieldLT(FieldAPIKeyMaxActiveIps, v))
+}
+
+// APIKeyMaxActiveIpsLTE applies the LTE predicate on the "api_key_max_active_ips" field.
+func APIKeyMaxActiveIpsLTE(v int) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldAPIKeyMaxActiveIps, v))
+}
+
+// APIKeyMaxActiveIpsVisibleEQ applies the EQ predicate on the "api_key_max_active_ips_visible" field.
+func APIKeyMaxActiveIpsVisibleEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldAPIKeyMaxActiveIpsVisible, v))
+}
+
+// APIKeyMaxActiveIpsVisibleNEQ applies the NEQ predicate on the "api_key_max_active_ips_visible" field.
+func APIKeyMaxActiveIpsVisibleNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldAPIKeyMaxActiveIpsVisible, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.
