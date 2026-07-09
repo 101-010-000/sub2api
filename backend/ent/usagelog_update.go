@@ -658,6 +658,67 @@ func (_u *UsageLogUpdate) ClearFirstTokenMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetSpeedState sets the "speed_state" field.
+func (_u *UsageLogUpdate) SetSpeedState(v string) *UsageLogUpdate {
+	_u.mutation.SetSpeedState(v)
+	return _u
+}
+
+// SetNillableSpeedState sets the "speed_state" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSpeedState(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSpeedState(*v)
+	}
+	return _u
+}
+
+// ClearSpeedState clears the value of the "speed_state" field.
+func (_u *UsageLogUpdate) ClearSpeedState() *UsageLogUpdate {
+	_u.mutation.ClearSpeedState()
+	return _u
+}
+
+// SetSpeedWaitMs sets the "speed_wait_ms" field.
+func (_u *UsageLogUpdate) SetSpeedWaitMs(v int) *UsageLogUpdate {
+	_u.mutation.ResetSpeedWaitMs()
+	_u.mutation.SetSpeedWaitMs(v)
+	return _u
+}
+
+// SetNillableSpeedWaitMs sets the "speed_wait_ms" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSpeedWaitMs(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSpeedWaitMs(*v)
+	}
+	return _u
+}
+
+// AddSpeedWaitMs adds value to the "speed_wait_ms" field.
+func (_u *UsageLogUpdate) AddSpeedWaitMs(v int) *UsageLogUpdate {
+	_u.mutation.AddSpeedWaitMs(v)
+	return _u
+}
+
+// SetSpeedRoute sets the "speed_route" field.
+func (_u *UsageLogUpdate) SetSpeedRoute(v string) *UsageLogUpdate {
+	_u.mutation.SetSpeedRoute(v)
+	return _u
+}
+
+// SetNillableSpeedRoute sets the "speed_route" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSpeedRoute(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSpeedRoute(*v)
+	}
+	return _u
+}
+
+// ClearSpeedRoute clears the value of the "speed_route" field.
+func (_u *UsageLogUpdate) ClearSpeedRoute() *UsageLogUpdate {
+	_u.mutation.ClearSpeedRoute()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdate) SetUserAgent(v string) *UsageLogUpdate {
 	_u.mutation.SetUserAgent(v)
@@ -1161,6 +1222,24 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.SpeedState(); ok {
+		_spec.SetField(usagelog.FieldSpeedState, field.TypeString, value)
+	}
+	if _u.mutation.SpeedStateCleared() {
+		_spec.ClearField(usagelog.FieldSpeedState, field.TypeString)
+	}
+	if value, ok := _u.mutation.SpeedWaitMs(); ok {
+		_spec.SetField(usagelog.FieldSpeedWaitMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSpeedWaitMs(); ok {
+		_spec.AddField(usagelog.FieldSpeedWaitMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SpeedRoute(); ok {
+		_spec.SetField(usagelog.FieldSpeedRoute, field.TypeString, value)
+	}
+	if _u.mutation.SpeedRouteCleared() {
+		_spec.ClearField(usagelog.FieldSpeedRoute, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -2004,6 +2083,67 @@ func (_u *UsageLogUpdateOne) ClearFirstTokenMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetSpeedState sets the "speed_state" field.
+func (_u *UsageLogUpdateOne) SetSpeedState(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSpeedState(v)
+	return _u
+}
+
+// SetNillableSpeedState sets the "speed_state" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSpeedState(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSpeedState(*v)
+	}
+	return _u
+}
+
+// ClearSpeedState clears the value of the "speed_state" field.
+func (_u *UsageLogUpdateOne) ClearSpeedState() *UsageLogUpdateOne {
+	_u.mutation.ClearSpeedState()
+	return _u
+}
+
+// SetSpeedWaitMs sets the "speed_wait_ms" field.
+func (_u *UsageLogUpdateOne) SetSpeedWaitMs(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetSpeedWaitMs()
+	_u.mutation.SetSpeedWaitMs(v)
+	return _u
+}
+
+// SetNillableSpeedWaitMs sets the "speed_wait_ms" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSpeedWaitMs(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSpeedWaitMs(*v)
+	}
+	return _u
+}
+
+// AddSpeedWaitMs adds value to the "speed_wait_ms" field.
+func (_u *UsageLogUpdateOne) AddSpeedWaitMs(v int) *UsageLogUpdateOne {
+	_u.mutation.AddSpeedWaitMs(v)
+	return _u
+}
+
+// SetSpeedRoute sets the "speed_route" field.
+func (_u *UsageLogUpdateOne) SetSpeedRoute(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSpeedRoute(v)
+	return _u
+}
+
+// SetNillableSpeedRoute sets the "speed_route" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSpeedRoute(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSpeedRoute(*v)
+	}
+	return _u
+}
+
+// ClearSpeedRoute clears the value of the "speed_route" field.
+func (_u *UsageLogUpdateOne) ClearSpeedRoute() *UsageLogUpdateOne {
+	_u.mutation.ClearSpeedRoute()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdateOne) SetUserAgent(v string) *UsageLogUpdateOne {
 	_u.mutation.SetUserAgent(v)
@@ -2537,6 +2677,24 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.SpeedState(); ok {
+		_spec.SetField(usagelog.FieldSpeedState, field.TypeString, value)
+	}
+	if _u.mutation.SpeedStateCleared() {
+		_spec.ClearField(usagelog.FieldSpeedState, field.TypeString)
+	}
+	if value, ok := _u.mutation.SpeedWaitMs(); ok {
+		_spec.SetField(usagelog.FieldSpeedWaitMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSpeedWaitMs(); ok {
+		_spec.AddField(usagelog.FieldSpeedWaitMs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SpeedRoute(); ok {
+		_spec.SetField(usagelog.FieldSpeedRoute, field.TypeString, value)
+	}
+	if _u.mutation.SpeedRouteCleared() {
+		_spec.ClearField(usagelog.FieldSpeedRoute, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)

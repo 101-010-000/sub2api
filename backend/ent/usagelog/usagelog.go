@@ -76,6 +76,12 @@ const (
 	FieldDurationMs = "duration_ms"
 	// FieldFirstTokenMs holds the string denoting the first_token_ms field in the database.
 	FieldFirstTokenMs = "first_token_ms"
+	// FieldSpeedState holds the string denoting the speed_state field in the database.
+	FieldSpeedState = "speed_state"
+	// FieldSpeedWaitMs holds the string denoting the speed_wait_ms field in the database.
+	FieldSpeedWaitMs = "speed_wait_ms"
+	// FieldSpeedRoute holds the string denoting the speed_route field in the database.
+	FieldSpeedRoute = "speed_route"
 	// FieldUserAgent holds the string denoting the user_agent field in the database.
 	FieldUserAgent = "user_agent"
 	// FieldIPAddress holds the string denoting the ip_address field in the database.
@@ -179,6 +185,9 @@ var Columns = []string{
 	FieldStream,
 	FieldDurationMs,
 	FieldFirstTokenMs,
+	FieldSpeedState,
+	FieldSpeedWaitMs,
+	FieldSpeedRoute,
 	FieldUserAgent,
 	FieldIPAddress,
 	FieldImageCount,
@@ -246,6 +255,8 @@ var (
 	DefaultBillingType int8
 	// DefaultStream holds the default value on creation for the "stream" field.
 	DefaultStream bool
+	// DefaultSpeedWaitMs holds the default value on creation for the "speed_wait_ms" field.
+	DefaultSpeedWaitMs int
 	// UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
 	UserAgentValidator func(string) error
 	// IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
@@ -427,6 +438,21 @@ func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
 // ByFirstTokenMs orders the results by the first_token_ms field.
 func ByFirstTokenMs(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFirstTokenMs, opts...).ToFunc()
+}
+
+// BySpeedState orders the results by the speed_state field.
+func BySpeedState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSpeedState, opts...).ToFunc()
+}
+
+// BySpeedWaitMs orders the results by the speed_wait_ms field.
+func BySpeedWaitMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSpeedWaitMs, opts...).ToFunc()
+}
+
+// BySpeedRoute orders the results by the speed_route field.
+func BySpeedRoute(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSpeedRoute, opts...).ToFunc()
 }
 
 // ByUserAgent orders the results by the user_agent field.

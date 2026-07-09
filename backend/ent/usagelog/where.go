@@ -210,6 +210,21 @@ func FirstTokenMs(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))
 }
 
+// SpeedState applies equality check predicate on the "speed_state" field. It's identical to SpeedStateEQ.
+func SpeedState(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldSpeedState, v))
+}
+
+// SpeedWaitMs applies equality check predicate on the "speed_wait_ms" field. It's identical to SpeedWaitMsEQ.
+func SpeedWaitMs(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldSpeedWaitMs, v))
+}
+
+// SpeedRoute applies equality check predicate on the "speed_route" field. It's identical to SpeedRouteEQ.
+func SpeedRoute(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldSpeedRoute, v))
+}
+
 // UserAgent applies equality check predicate on the "user_agent" field. It's identical to UserAgentEQ.
 func UserAgent(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldUserAgent, v))
@@ -1648,6 +1663,196 @@ func FirstTokenMsIsNil() predicate.UsageLog {
 // FirstTokenMsNotNil applies the NotNil predicate on the "first_token_ms" field.
 func FirstTokenMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldFirstTokenMs))
+}
+
+// SpeedStateEQ applies the EQ predicate on the "speed_state" field.
+func SpeedStateEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldSpeedState, v))
+}
+
+// SpeedStateNEQ applies the NEQ predicate on the "speed_state" field.
+func SpeedStateNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldSpeedState, v))
+}
+
+// SpeedStateIn applies the In predicate on the "speed_state" field.
+func SpeedStateIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldSpeedState, vs...))
+}
+
+// SpeedStateNotIn applies the NotIn predicate on the "speed_state" field.
+func SpeedStateNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldSpeedState, vs...))
+}
+
+// SpeedStateGT applies the GT predicate on the "speed_state" field.
+func SpeedStateGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldSpeedState, v))
+}
+
+// SpeedStateGTE applies the GTE predicate on the "speed_state" field.
+func SpeedStateGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldSpeedState, v))
+}
+
+// SpeedStateLT applies the LT predicate on the "speed_state" field.
+func SpeedStateLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldSpeedState, v))
+}
+
+// SpeedStateLTE applies the LTE predicate on the "speed_state" field.
+func SpeedStateLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldSpeedState, v))
+}
+
+// SpeedStateContains applies the Contains predicate on the "speed_state" field.
+func SpeedStateContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldSpeedState, v))
+}
+
+// SpeedStateHasPrefix applies the HasPrefix predicate on the "speed_state" field.
+func SpeedStateHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldSpeedState, v))
+}
+
+// SpeedStateHasSuffix applies the HasSuffix predicate on the "speed_state" field.
+func SpeedStateHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldSpeedState, v))
+}
+
+// SpeedStateIsNil applies the IsNil predicate on the "speed_state" field.
+func SpeedStateIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldSpeedState))
+}
+
+// SpeedStateNotNil applies the NotNil predicate on the "speed_state" field.
+func SpeedStateNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldSpeedState))
+}
+
+// SpeedStateEqualFold applies the EqualFold predicate on the "speed_state" field.
+func SpeedStateEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldSpeedState, v))
+}
+
+// SpeedStateContainsFold applies the ContainsFold predicate on the "speed_state" field.
+func SpeedStateContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldSpeedState, v))
+}
+
+// SpeedWaitMsEQ applies the EQ predicate on the "speed_wait_ms" field.
+func SpeedWaitMsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldSpeedWaitMs, v))
+}
+
+// SpeedWaitMsNEQ applies the NEQ predicate on the "speed_wait_ms" field.
+func SpeedWaitMsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldSpeedWaitMs, v))
+}
+
+// SpeedWaitMsIn applies the In predicate on the "speed_wait_ms" field.
+func SpeedWaitMsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldSpeedWaitMs, vs...))
+}
+
+// SpeedWaitMsNotIn applies the NotIn predicate on the "speed_wait_ms" field.
+func SpeedWaitMsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldSpeedWaitMs, vs...))
+}
+
+// SpeedWaitMsGT applies the GT predicate on the "speed_wait_ms" field.
+func SpeedWaitMsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldSpeedWaitMs, v))
+}
+
+// SpeedWaitMsGTE applies the GTE predicate on the "speed_wait_ms" field.
+func SpeedWaitMsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldSpeedWaitMs, v))
+}
+
+// SpeedWaitMsLT applies the LT predicate on the "speed_wait_ms" field.
+func SpeedWaitMsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldSpeedWaitMs, v))
+}
+
+// SpeedWaitMsLTE applies the LTE predicate on the "speed_wait_ms" field.
+func SpeedWaitMsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldSpeedWaitMs, v))
+}
+
+// SpeedRouteEQ applies the EQ predicate on the "speed_route" field.
+func SpeedRouteEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldSpeedRoute, v))
+}
+
+// SpeedRouteNEQ applies the NEQ predicate on the "speed_route" field.
+func SpeedRouteNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldSpeedRoute, v))
+}
+
+// SpeedRouteIn applies the In predicate on the "speed_route" field.
+func SpeedRouteIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldSpeedRoute, vs...))
+}
+
+// SpeedRouteNotIn applies the NotIn predicate on the "speed_route" field.
+func SpeedRouteNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldSpeedRoute, vs...))
+}
+
+// SpeedRouteGT applies the GT predicate on the "speed_route" field.
+func SpeedRouteGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldSpeedRoute, v))
+}
+
+// SpeedRouteGTE applies the GTE predicate on the "speed_route" field.
+func SpeedRouteGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldSpeedRoute, v))
+}
+
+// SpeedRouteLT applies the LT predicate on the "speed_route" field.
+func SpeedRouteLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldSpeedRoute, v))
+}
+
+// SpeedRouteLTE applies the LTE predicate on the "speed_route" field.
+func SpeedRouteLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldSpeedRoute, v))
+}
+
+// SpeedRouteContains applies the Contains predicate on the "speed_route" field.
+func SpeedRouteContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldSpeedRoute, v))
+}
+
+// SpeedRouteHasPrefix applies the HasPrefix predicate on the "speed_route" field.
+func SpeedRouteHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldSpeedRoute, v))
+}
+
+// SpeedRouteHasSuffix applies the HasSuffix predicate on the "speed_route" field.
+func SpeedRouteHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldSpeedRoute, v))
+}
+
+// SpeedRouteIsNil applies the IsNil predicate on the "speed_route" field.
+func SpeedRouteIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldSpeedRoute))
+}
+
+// SpeedRouteNotNil applies the NotNil predicate on the "speed_route" field.
+func SpeedRouteNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldSpeedRoute))
+}
+
+// SpeedRouteEqualFold applies the EqualFold predicate on the "speed_route" field.
+func SpeedRouteEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldSpeedRoute, v))
+}
+
+// SpeedRouteContainsFold applies the ContainsFold predicate on the "speed_route" field.
+func SpeedRouteContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldSpeedRoute, v))
 }
 
 // UserAgentEQ applies the EQ predicate on the "user_agent" field.

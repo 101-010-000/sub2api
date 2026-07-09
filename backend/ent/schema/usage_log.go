@@ -118,6 +118,16 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+		field.String("speed_state").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "text"}),
+		field.Int("speed_wait_ms").
+			Default(0),
+		field.String("speed_route").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "text"}),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

@@ -421,6 +421,48 @@ func (_c *UsageLogCreate) SetNillableFirstTokenMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetSpeedState sets the "speed_state" field.
+func (_c *UsageLogCreate) SetSpeedState(v string) *UsageLogCreate {
+	_c.mutation.SetSpeedState(v)
+	return _c
+}
+
+// SetNillableSpeedState sets the "speed_state" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSpeedState(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSpeedState(*v)
+	}
+	return _c
+}
+
+// SetSpeedWaitMs sets the "speed_wait_ms" field.
+func (_c *UsageLogCreate) SetSpeedWaitMs(v int) *UsageLogCreate {
+	_c.mutation.SetSpeedWaitMs(v)
+	return _c
+}
+
+// SetNillableSpeedWaitMs sets the "speed_wait_ms" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSpeedWaitMs(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetSpeedWaitMs(*v)
+	}
+	return _c
+}
+
+// SetSpeedRoute sets the "speed_route" field.
+func (_c *UsageLogCreate) SetSpeedRoute(v string) *UsageLogCreate {
+	_c.mutation.SetSpeedRoute(v)
+	return _c
+}
+
+// SetNillableSpeedRoute sets the "speed_route" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSpeedRoute(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSpeedRoute(*v)
+	}
+	return _c
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_c *UsageLogCreate) SetUserAgent(v string) *UsageLogCreate {
 	_c.mutation.SetUserAgent(v)
@@ -673,6 +715,10 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultStream
 		_c.mutation.SetStream(v)
 	}
+	if _, ok := _c.mutation.SpeedWaitMs(); !ok {
+		v := usagelog.DefaultSpeedWaitMs
+		_c.mutation.SetSpeedWaitMs(v)
+	}
 	if _, ok := _c.mutation.ImageCount(); !ok {
 		v := usagelog.DefaultImageCount
 		_c.mutation.SetImageCount(v)
@@ -783,6 +829,9 @@ func (_c *UsageLogCreate) check() error {
 	}
 	if _, ok := _c.mutation.Stream(); !ok {
 		return &ValidationError{Name: "stream", err: errors.New(`ent: missing required field "UsageLog.stream"`)}
+	}
+	if _, ok := _c.mutation.SpeedWaitMs(); !ok {
+		return &ValidationError{Name: "speed_wait_ms", err: errors.New(`ent: missing required field "UsageLog.speed_wait_ms"`)}
 	}
 	if v, ok := _c.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
@@ -962,6 +1011,18 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
 		_node.FirstTokenMs = &value
+	}
+	if value, ok := _c.mutation.SpeedState(); ok {
+		_spec.SetField(usagelog.FieldSpeedState, field.TypeString, value)
+		_node.SpeedState = &value
+	}
+	if value, ok := _c.mutation.SpeedWaitMs(); ok {
+		_spec.SetField(usagelog.FieldSpeedWaitMs, field.TypeInt, value)
+		_node.SpeedWaitMs = value
+	}
+	if value, ok := _c.mutation.SpeedRoute(); ok {
+		_spec.SetField(usagelog.FieldSpeedRoute, field.TypeString, value)
+		_node.SpeedRoute = &value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1683,6 +1744,60 @@ func (u *UsageLogUpsert) AddFirstTokenMs(v int) *UsageLogUpsert {
 // ClearFirstTokenMs clears the value of the "first_token_ms" field.
 func (u *UsageLogUpsert) ClearFirstTokenMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstTokenMs)
+	return u
+}
+
+// SetSpeedState sets the "speed_state" field.
+func (u *UsageLogUpsert) SetSpeedState(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSpeedState, v)
+	return u
+}
+
+// UpdateSpeedState sets the "speed_state" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSpeedState() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSpeedState)
+	return u
+}
+
+// ClearSpeedState clears the value of the "speed_state" field.
+func (u *UsageLogUpsert) ClearSpeedState() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSpeedState)
+	return u
+}
+
+// SetSpeedWaitMs sets the "speed_wait_ms" field.
+func (u *UsageLogUpsert) SetSpeedWaitMs(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldSpeedWaitMs, v)
+	return u
+}
+
+// UpdateSpeedWaitMs sets the "speed_wait_ms" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSpeedWaitMs() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSpeedWaitMs)
+	return u
+}
+
+// AddSpeedWaitMs adds v to the "speed_wait_ms" field.
+func (u *UsageLogUpsert) AddSpeedWaitMs(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldSpeedWaitMs, v)
+	return u
+}
+
+// SetSpeedRoute sets the "speed_route" field.
+func (u *UsageLogUpsert) SetSpeedRoute(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSpeedRoute, v)
+	return u
+}
+
+// UpdateSpeedRoute sets the "speed_route" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSpeedRoute() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSpeedRoute)
+	return u
+}
+
+// ClearSpeedRoute clears the value of the "speed_route" field.
+func (u *UsageLogUpsert) ClearSpeedRoute() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSpeedRoute)
 	return u
 }
 
@@ -2521,6 +2636,69 @@ func (u *UsageLogUpsertOne) UpdateFirstTokenMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstTokenMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetSpeedState sets the "speed_state" field.
+func (u *UsageLogUpsertOne) SetSpeedState(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSpeedState(v)
+	})
+}
+
+// UpdateSpeedState sets the "speed_state" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSpeedState() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSpeedState()
+	})
+}
+
+// ClearSpeedState clears the value of the "speed_state" field.
+func (u *UsageLogUpsertOne) ClearSpeedState() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSpeedState()
+	})
+}
+
+// SetSpeedWaitMs sets the "speed_wait_ms" field.
+func (u *UsageLogUpsertOne) SetSpeedWaitMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSpeedWaitMs(v)
+	})
+}
+
+// AddSpeedWaitMs adds v to the "speed_wait_ms" field.
+func (u *UsageLogUpsertOne) AddSpeedWaitMs(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddSpeedWaitMs(v)
+	})
+}
+
+// UpdateSpeedWaitMs sets the "speed_wait_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSpeedWaitMs() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSpeedWaitMs()
+	})
+}
+
+// SetSpeedRoute sets the "speed_route" field.
+func (u *UsageLogUpsertOne) SetSpeedRoute(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSpeedRoute(v)
+	})
+}
+
+// UpdateSpeedRoute sets the "speed_route" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSpeedRoute() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSpeedRoute()
+	})
+}
+
+// ClearSpeedRoute clears the value of the "speed_route" field.
+func (u *UsageLogUpsertOne) ClearSpeedRoute() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSpeedRoute()
 	})
 }
 
@@ -3551,6 +3729,69 @@ func (u *UsageLogUpsertBulk) UpdateFirstTokenMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstTokenMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetSpeedState sets the "speed_state" field.
+func (u *UsageLogUpsertBulk) SetSpeedState(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSpeedState(v)
+	})
+}
+
+// UpdateSpeedState sets the "speed_state" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSpeedState() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSpeedState()
+	})
+}
+
+// ClearSpeedState clears the value of the "speed_state" field.
+func (u *UsageLogUpsertBulk) ClearSpeedState() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSpeedState()
+	})
+}
+
+// SetSpeedWaitMs sets the "speed_wait_ms" field.
+func (u *UsageLogUpsertBulk) SetSpeedWaitMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSpeedWaitMs(v)
+	})
+}
+
+// AddSpeedWaitMs adds v to the "speed_wait_ms" field.
+func (u *UsageLogUpsertBulk) AddSpeedWaitMs(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddSpeedWaitMs(v)
+	})
+}
+
+// UpdateSpeedWaitMs sets the "speed_wait_ms" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSpeedWaitMs() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSpeedWaitMs()
+	})
+}
+
+// SetSpeedRoute sets the "speed_route" field.
+func (u *UsageLogUpsertBulk) SetSpeedRoute(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSpeedRoute(v)
+	})
+}
+
+// UpdateSpeedRoute sets the "speed_route" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSpeedRoute() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSpeedRoute()
+	})
+}
+
+// ClearSpeedRoute clears the value of the "speed_route" field.
+func (u *UsageLogUpsertBulk) ClearSpeedRoute() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSpeedRoute()
 	})
 }
 

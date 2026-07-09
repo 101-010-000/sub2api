@@ -41502,6 +41502,10 @@ type UsageLogMutation struct {
 	addduration_ms              *int
 	first_token_ms              *int
 	addfirst_token_ms           *int
+	speed_state                 *string
+	speed_wait_ms               *int
+	addspeed_wait_ms            *int
+	speed_route                 *string
 	user_agent                  *string
 	ip_address                  *string
 	image_count                 *int
@@ -43250,6 +43254,160 @@ func (m *UsageLogMutation) ResetFirstTokenMs() {
 	delete(m.clearedFields, usagelog.FieldFirstTokenMs)
 }
 
+// SetSpeedState sets the "speed_state" field.
+func (m *UsageLogMutation) SetSpeedState(s string) {
+	m.speed_state = &s
+}
+
+// SpeedState returns the value of the "speed_state" field in the mutation.
+func (m *UsageLogMutation) SpeedState() (r string, exists bool) {
+	v := m.speed_state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSpeedState returns the old "speed_state" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldSpeedState(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSpeedState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSpeedState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSpeedState: %w", err)
+	}
+	return oldValue.SpeedState, nil
+}
+
+// ClearSpeedState clears the value of the "speed_state" field.
+func (m *UsageLogMutation) ClearSpeedState() {
+	m.speed_state = nil
+	m.clearedFields[usagelog.FieldSpeedState] = struct{}{}
+}
+
+// SpeedStateCleared returns if the "speed_state" field was cleared in this mutation.
+func (m *UsageLogMutation) SpeedStateCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldSpeedState]
+	return ok
+}
+
+// ResetSpeedState resets all changes to the "speed_state" field.
+func (m *UsageLogMutation) ResetSpeedState() {
+	m.speed_state = nil
+	delete(m.clearedFields, usagelog.FieldSpeedState)
+}
+
+// SetSpeedWaitMs sets the "speed_wait_ms" field.
+func (m *UsageLogMutation) SetSpeedWaitMs(i int) {
+	m.speed_wait_ms = &i
+	m.addspeed_wait_ms = nil
+}
+
+// SpeedWaitMs returns the value of the "speed_wait_ms" field in the mutation.
+func (m *UsageLogMutation) SpeedWaitMs() (r int, exists bool) {
+	v := m.speed_wait_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSpeedWaitMs returns the old "speed_wait_ms" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldSpeedWaitMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSpeedWaitMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSpeedWaitMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSpeedWaitMs: %w", err)
+	}
+	return oldValue.SpeedWaitMs, nil
+}
+
+// AddSpeedWaitMs adds i to the "speed_wait_ms" field.
+func (m *UsageLogMutation) AddSpeedWaitMs(i int) {
+	if m.addspeed_wait_ms != nil {
+		*m.addspeed_wait_ms += i
+	} else {
+		m.addspeed_wait_ms = &i
+	}
+}
+
+// AddedSpeedWaitMs returns the value that was added to the "speed_wait_ms" field in this mutation.
+func (m *UsageLogMutation) AddedSpeedWaitMs() (r int, exists bool) {
+	v := m.addspeed_wait_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSpeedWaitMs resets all changes to the "speed_wait_ms" field.
+func (m *UsageLogMutation) ResetSpeedWaitMs() {
+	m.speed_wait_ms = nil
+	m.addspeed_wait_ms = nil
+}
+
+// SetSpeedRoute sets the "speed_route" field.
+func (m *UsageLogMutation) SetSpeedRoute(s string) {
+	m.speed_route = &s
+}
+
+// SpeedRoute returns the value of the "speed_route" field in the mutation.
+func (m *UsageLogMutation) SpeedRoute() (r string, exists bool) {
+	v := m.speed_route
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSpeedRoute returns the old "speed_route" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldSpeedRoute(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSpeedRoute is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSpeedRoute requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSpeedRoute: %w", err)
+	}
+	return oldValue.SpeedRoute, nil
+}
+
+// ClearSpeedRoute clears the value of the "speed_route" field.
+func (m *UsageLogMutation) ClearSpeedRoute() {
+	m.speed_route = nil
+	m.clearedFields[usagelog.FieldSpeedRoute] = struct{}{}
+}
+
+// SpeedRouteCleared returns if the "speed_route" field was cleared in this mutation.
+func (m *UsageLogMutation) SpeedRouteCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldSpeedRoute]
+	return ok
+}
+
+// ResetSpeedRoute resets all changes to the "speed_route" field.
+func (m *UsageLogMutation) ResetSpeedRoute() {
+	m.speed_route = nil
+	delete(m.clearedFields, usagelog.FieldSpeedRoute)
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (m *UsageLogMutation) SetUserAgent(s string) {
 	m.user_agent = &s
@@ -43890,7 +44048,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 41)
+	fields := make([]string, 0, 44)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -43983,6 +44141,15 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.first_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
+	}
+	if m.speed_state != nil {
+		fields = append(fields, usagelog.FieldSpeedState)
+	}
+	if m.speed_wait_ms != nil {
+		fields = append(fields, usagelog.FieldSpeedWaitMs)
+	}
+	if m.speed_route != nil {
+		fields = append(fields, usagelog.FieldSpeedRoute)
 	}
 	if m.user_agent != nil {
 		fields = append(fields, usagelog.FieldUserAgent)
@@ -44084,6 +44251,12 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.DurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.FirstTokenMs()
+	case usagelog.FieldSpeedState:
+		return m.SpeedState()
+	case usagelog.FieldSpeedWaitMs:
+		return m.SpeedWaitMs()
+	case usagelog.FieldSpeedRoute:
+		return m.SpeedRoute()
 	case usagelog.FieldUserAgent:
 		return m.UserAgent()
 	case usagelog.FieldIPAddress:
@@ -44175,6 +44348,12 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldDurationMs(ctx)
 	case usagelog.FieldFirstTokenMs:
 		return m.OldFirstTokenMs(ctx)
+	case usagelog.FieldSpeedState:
+		return m.OldSpeedState(ctx)
+	case usagelog.FieldSpeedWaitMs:
+		return m.OldSpeedWaitMs(ctx)
+	case usagelog.FieldSpeedRoute:
+		return m.OldSpeedRoute(ctx)
 	case usagelog.FieldUserAgent:
 		return m.OldUserAgent(ctx)
 	case usagelog.FieldIPAddress:
@@ -44421,6 +44600,27 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetFirstTokenMs(v)
 		return nil
+	case usagelog.FieldSpeedState:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSpeedState(v)
+		return nil
+	case usagelog.FieldSpeedWaitMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSpeedWaitMs(v)
+		return nil
+	case usagelog.FieldSpeedRoute:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSpeedRoute(v)
+		return nil
 	case usagelog.FieldUserAgent:
 		v, ok := value.(string)
 		if !ok {
@@ -44553,6 +44753,9 @@ func (m *UsageLogMutation) AddedFields() []string {
 	if m.addfirst_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
 	}
+	if m.addspeed_wait_ms != nil {
+		fields = append(fields, usagelog.FieldSpeedWaitMs)
+	}
 	if m.addimage_count != nil {
 		fields = append(fields, usagelog.FieldImageCount)
 	}
@@ -44600,6 +44803,8 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedDurationMs()
 	case usagelog.FieldFirstTokenMs:
 		return m.AddedFirstTokenMs()
+	case usagelog.FieldSpeedWaitMs:
+		return m.AddedSpeedWaitMs()
 	case usagelog.FieldImageCount:
 		return m.AddedImageCount()
 	}
@@ -44737,6 +44942,13 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddFirstTokenMs(v)
 		return nil
+	case usagelog.FieldSpeedWaitMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSpeedWaitMs(v)
+		return nil
 	case usagelog.FieldImageCount:
 		v, ok := value.(int)
 		if !ok {
@@ -44784,6 +44996,12 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(usagelog.FieldFirstTokenMs) {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
+	}
+	if m.FieldCleared(usagelog.FieldSpeedState) {
+		fields = append(fields, usagelog.FieldSpeedState)
+	}
+	if m.FieldCleared(usagelog.FieldSpeedRoute) {
+		fields = append(fields, usagelog.FieldSpeedRoute)
 	}
 	if m.FieldCleared(usagelog.FieldUserAgent) {
 		fields = append(fields, usagelog.FieldUserAgent)
@@ -44852,6 +45070,12 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ClearFirstTokenMs()
+		return nil
+	case usagelog.FieldSpeedState:
+		m.ClearSpeedState()
+		return nil
+	case usagelog.FieldSpeedRoute:
+		m.ClearSpeedRoute()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ClearUserAgent()
@@ -44974,6 +45198,15 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ResetFirstTokenMs()
+		return nil
+	case usagelog.FieldSpeedState:
+		m.ResetSpeedState()
+		return nil
+	case usagelog.FieldSpeedWaitMs:
+		m.ResetSpeedWaitMs()
+		return nil
+	case usagelog.FieldSpeedRoute:
+		m.ResetSpeedRoute()
 		return nil
 	case usagelog.FieldUserAgent:
 		m.ResetUserAgent()
