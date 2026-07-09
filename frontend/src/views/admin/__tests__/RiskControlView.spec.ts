@@ -11,6 +11,8 @@ const {
   updateConfig,
   getStatus,
   listLogs,
+  getRequestRiskConfig,
+  listRequestRiskEvents,
   getGroups,
   showError,
   showSuccess,
@@ -19,6 +21,8 @@ const {
   updateConfig: vi.fn(),
   getStatus: vi.fn(),
   listLogs: vi.fn(),
+  getRequestRiskConfig: vi.fn(),
+  listRequestRiskEvents: vi.fn(),
   getGroups: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -31,6 +35,9 @@ vi.mock('@/api/admin', () => ({
       updateConfig,
       getStatus,
       listLogs,
+      getRequestRiskConfig,
+      listRequestRiskEvents,
+      updateRequestRiskConfig: vi.fn(),
       testAPIKeys: vi.fn(),
       deleteFlaggedHash: vi.fn(),
       clearFlaggedHashes: vi.fn(),
@@ -200,6 +207,8 @@ describe('admin RiskControlView', () => {
     updateConfig.mockReset()
     getStatus.mockReset()
     listLogs.mockReset()
+    getRequestRiskConfig.mockReset()
+    listRequestRiskEvents.mockReset()
     getGroups.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
@@ -208,6 +217,19 @@ describe('admin RiskControlView', () => {
     getConfig.mockResolvedValue(baseConfig())
     getStatus.mockResolvedValue(runtimeStatus())
     listLogs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
+    getRequestRiskConfig.mockResolvedValue({
+      enabled: false,
+      mode: 'off',
+      windows_enhanced: true,
+      denied_timezones: ['Asia/Shanghai', 'Asia/Urumqi'],
+      chinese_high_threshold: 0.45,
+      event_retention_days: 7,
+      capture_raw_headers: true,
+      ua_ban_scope: 'api_key',
+      session_ban_ttl_seconds: 3600,
+      ua_ban_ttl_seconds: 3600,
+    })
+    listRequestRiskEvents.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10, pages: 1 })
     getGroups.mockResolvedValue([])
     updateConfig.mockImplementation(async (payload: UpdateContentModerationConfig) => ({
       ...baseConfig(),

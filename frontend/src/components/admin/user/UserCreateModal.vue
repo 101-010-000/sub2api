@@ -25,6 +25,13 @@
         <label class="input-label">{{ t('admin.users.username') }}</label>
         <input v-model="form.username" type="text" class="input" :placeholder="t('admin.users.enterUsername')" />
       </div>
+      <div>
+        <label class="input-label">{{ t('admin.users.form.roleLabel') }}</label>
+        <select v-model="form.role" class="input">
+          <option value="user">{{ t('admin.users.roles.user') }}</option>
+          <option value="admin">{{ t('admin.users.roles.admin') }}</option>
+        </select>
+      </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="input-label">{{ t('admin.users.columns.balance') }}</label>
@@ -94,7 +101,7 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 
-const form = reactive({ email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] as string[] })
+const form = reactive({ email: '', password: '', username: '', notes: '', role: 'user' as 'user' | 'admin', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] as string[] })
 const isSuperAdmin = computed(() => authStore.isSuperAdmin)
 
 const validationError = () => {
@@ -150,7 +157,7 @@ const { loading, submit } = useForm({
   },
 })
 
-watch(() => props.show, (v) => { if(v) Object.assign(form, { email: '', password: '', username: '', notes: '', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] }) })
+watch(() => props.show, (v) => { if(v) Object.assign(form, { email: '', password: '', username: '', notes: '', role: 'user', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] }) })
 
 const generateRandomPassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*'
