@@ -10,6 +10,10 @@ on:
         description: 'Tag to release (e.g., v1.0.0)'
         required: true
         type: string
+      ci_sha:
+        description: 'Tested source SHA. Leave empty to discover it from the tag commit or a VERSION-only parent commit.'
+        required: false
+        type: string
       simple_release:
         description: 'Simple release: only x86_64 GHCR image, skip other artifacts'
         required: false
@@ -19,32 +23,132 @@ on:
 # 环境变量：tag push 触发时读取 repository variable；workflow_dispatch 时只使用输入参数。
 # 这样自动发布显式传 simple_release=false 时，不会被 vars.SIMPLE_RELEASE 覆盖。
 env:
-  SIMPLE_RELEASE: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.simple_release == 'true') || (github.event_name != 'workflow_dispatch' && vars.SIMPLE_RELEASE == 'true') }}
+  SIMPLE_RELEASE: ${{ (github.event_name == 'workflow_dispatch' && inputs.simple_release == true) || (github.event_name != 'workflow_dispatch' && vars.SIMPLE_RELEASE == 'true') }}
 
 permissions:
   contents: write
   packages: write
+  actions: read
+
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
 
 jobs:
-  # Update VERSION file with tag version
-  update-version:
+  prepare:
+    name: Validate release tag and CI provenance
     runs-on: ubuntu-latest
+    outputs:
+      ci_sha: ${{ steps.release.outputs.ci_sha }}
+      tag: ${{ steps.release.outputs.tag }}
+      target_sha: ${{ steps.release.outputs.target_sha }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
 
-      - name: Update VERSION file
+      - name: Validate tag, release order, and successful CI
+        id: release
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_CI_SHA: ${{ inputs.ci_sha }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.tag }}
-            VERSION=${VERSION#v}
+          set -euo pipefail
+
+          has_successful_ci() {
+            local sha="$1"
+            local runs_json
+            runs_json="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/backend-ci.yml/runs" \
+              -f head_sha="$sha" \
+              -f status=completed \
+              -f per_page=100)"
+            jq -e --arg branch "$DEFAULT_BRANCH" '
+              [.workflow_runs[] |
+                select(.conclusion == "success" and
+                       .event == "push" and
+                       .head_branch == $branch)] |
+              length > 0
+            ' <<< "$runs_json" >/dev/null
+          }
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG_NAME="$INPUT_TAG"
           else
-            VERSION=${GITHUB_REF#refs/tags/v}
+            TAG_NAME="$REF_NAME"
           fi
+          if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "tag must be numeric semver: vX.Y.Z" >&2
+            exit 1
+          fi
+
+          git fetch --tags --force
+          if ! git rev-parse -q --verify "refs/tags/${TAG_NAME}^{commit}" >/dev/null; then
+            echo "tag ${TAG_NAME} does not exist" >&2
+            exit 1
+          fi
+
+          VERSION="${TAG_NAME#v}"
+          TARGET_SHA="$(git rev-parse "refs/tags/${TAG_NAME}^{commit}")"
+          LATEST_TAG="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if [ -n "$LATEST_TAG" ]; then
+            LATEST_VERSION="${LATEST_TAG#v}"
+            HIGHEST_VERSION="$(printf '%s\n%s\n' "$VERSION" "$LATEST_VERSION" | sort -V | tail -n 1)"
+            if [ "$VERSION" != "$LATEST_VERSION" ] && [ "$HIGHEST_VERSION" = "$LATEST_VERSION" ]; then
+              echo "refusing to publish older ${TAG_NAME}; latest release tag is ${LATEST_TAG}" >&2
+              exit 1
+            fi
+          fi
+
+          CI_SHA="$INPUT_CI_SHA"
+          if [ -n "$CI_SHA" ]; then
+            if ! [[ "$CI_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "ci_sha must be a full commit SHA" >&2
+              exit 1
+            fi
+            CI_SHA="$(git rev-parse "${CI_SHA}^{commit}")"
+          else
+            CI_SHA="$TARGET_SHA"
+            if ! has_successful_ci "$CI_SHA"; then
+              TAG_PARENTS="$(git show -s --format=%P "$TARGET_SHA")"
+              if [[ "$TAG_PARENTS" =~ ^[0-9a-fA-F]{40}$ ]] &&
+                 [ "$(git diff --name-only "$TAG_PARENTS" "$TARGET_SHA")" = "backend/cmd/server/VERSION" ] &&
+                 has_successful_ci "$TAG_PARENTS"; then
+                CI_SHA="$TAG_PARENTS"
+              else
+                echo "No successful CI push run found for tag ${TAG_NAME} or its VERSION-only parent" >&2
+                exit 1
+              fi
+            fi
+          fi
+
+          if [ "$TARGET_SHA" != "$CI_SHA" ]; then
+            TAG_PARENTS="$(git show -s --format=%P "$TARGET_SHA")"
+            if [ "$TAG_PARENTS" != "$CI_SHA" ] ||
+               [ "$(git diff --name-only "$CI_SHA" "$TARGET_SHA")" != "backend/cmd/server/VERSION" ]; then
+              echo "tag ${TAG_NAME} is not the tested SHA or a single VERSION-only child" >&2
+              exit 1
+            fi
+          fi
+          if ! has_successful_ci "$CI_SHA"; then
+            echo "No successful CI push run found for ${CI_SHA}" >&2
+            exit 1
+          fi
+
           echo "$VERSION" > backend/cmd/server/VERSION
-          echo "Updated VERSION file to: $VERSION"
+          echo "ci_sha=${CI_SHA}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "target_sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Validated ${TAG_NAME} from CI-tested source ${CI_SHA}"
 
       - name: Upload VERSION artifact
         uses: actions/upload-artifact@v7
@@ -54,12 +158,13 @@ jobs:
           retention-days: 1
 
   build-frontend:
+    needs: [prepare]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -89,14 +194,14 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [update-version, build-frontend]
+    needs: [prepare, build-frontend]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Download VERSION artifact
         uses: actions/download-artifact@v8
@@ -150,31 +255,38 @@ jobs:
           git fetch --tags --force
 
       - name: Get tag message
-        id: tag_message
+        env:
+          TAG_NAME: ${{ needs.prepare.outputs.tag }}
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG_NAME=${{ github.event.inputs.tag }}
-          else
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-          fi
+          set -euo pipefail
           echo "Processing tag: $TAG_NAME"
 
           # 获取完整的 tag message（跳过第一行标题）
-          TAG_MESSAGE=$(git tag -l --format='%(contents:body)' "$TAG_NAME")
+          TAG_MESSAGE="$(git tag -l --format='%(contents:body)' "$TAG_NAME")"
 
           # 调试输出
           echo "Tag message length: ${#TAG_MESSAGE}"
-          echo "Tag message preview:"
-          echo "$TAG_MESSAGE" | head -10
 
-          # 使用 EOF 分隔符处理多行内容
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAG_MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # GITHUB_ENV 的 multiline delimiter 必须不可预测，且不能出现在内容中。
+          while true; do
+            DELIMITER="TAG_MESSAGE_$(openssl rand -hex 16)"
+            if ! grep -Fqx -- "$DELIMITER" <<< "$TAG_MESSAGE"; then
+              break
+            fi
+          done
+          {
+            printf 'TAG_MESSAGE<<%s\n' "$DELIMITER"
+            printf '%s\n' "$TAG_MESSAGE"
+            printf '%s\n' "$DELIMITER"
+          } >> "$GITHUB_ENV"
 
       - name: Set lowercase owner for GHCR
         id: lowercase
-        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        env:
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: echo "owner=${REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
@@ -183,7 +295,6 @@ jobs:
           args: release --clean --skip=validate ${{ env.SIMPLE_RELEASE == 'true' && '--config=.goreleaser.simple.yaml' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
           GITHUB_REPO_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO_OWNER_LOWER: ${{ steps.lowercase.outputs.owner }}
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
@@ -209,6 +320,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag }}
         continue-on-error: true
         run: |
           # 检查必要的环境变量
@@ -217,21 +329,15 @@ jobs:
             exit 0
           fi
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG_NAME=${{ github.event.inputs.tag }}
-          else
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-          fi
-          VERSION=${TAG_NAME#v}
-          REPO="${{ github.repository }}"
+          VERSION="${TAG_NAME#v}"
+          REPO="$GITHUB_REPOSITORY"
           GHCR_IMAGE="ghcr.io/${REPO,,}"  # ${,,} converts to lowercase
 
           # 获取 tag message 内容并转义 Markdown 特殊字符
-          TAG_MESSAGE='${{ steps.tag_message.outputs.message }}'
-          TAG_MESSAGE=$(echo "$TAG_MESSAGE" | sed 's/\([_*`\[]\)/\\\1/g')
+          TAG_MESSAGE="$(printf '%s' "${TAG_MESSAGE:-}" | sed 's/\([_*`\[]\)/\\\1/g')"
 
           # 限制消息长度（Telegram 消息限制 4096 字符，预留空间给头尾固定内容）
-          if [ ${#TAG_MESSAGE} -gt 3500 ]; then
+          if [ "${#TAG_MESSAGE}" -gt 3500 ]; then
             TAG_MESSAGE="${TAG_MESSAGE:0:3500}..."
           fi
 
@@ -277,7 +383,7 @@ jobs:
               }')"
 
   sync-version-file:
-    needs: [release]
+    needs: [prepare, release]
     if: ${{ needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -287,18 +393,24 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
 
       - name: Sync VERSION file to released tag
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.tag }}
-            VERSION=${VERSION#v}
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
-          fi
+          set -euo pipefail
 
-          CURRENT_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION || true)
+          CURRENT_VERSION="$(tr -d '\r\n' < backend/cmd/server/VERSION || true)"
           if [ "$CURRENT_VERSION" = "$VERSION" ]; then
             echo "VERSION file already matches $VERSION"
             exit 0
+          fi
+          if [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            HIGHEST_VERSION="$(printf '%s\n%s\n' "$VERSION" "$CURRENT_VERSION" | sort -V | tail -n 1)"
+            if [ "$HIGHEST_VERSION" = "$CURRENT_VERSION" ]; then
+              echo "Skipping VERSION regression from ${CURRENT_VERSION} to ${VERSION}"
+              exit 0
+            fi
           fi
 
           echo "$VERSION" > backend/cmd/server/VERSION
@@ -307,4 +419,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/cmd/server/VERSION
           git commit -m "chore: sync VERSION to ${VERSION} [skip ci]"
-          git push origin HEAD:${{ github.event.repository.default_branch }}
+          git push origin "HEAD:${DEFAULT_BRANCH}"

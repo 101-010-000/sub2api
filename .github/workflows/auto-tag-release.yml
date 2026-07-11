@@ -1,7 +1,11 @@
 name: Auto Tag Release
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
@@ -16,7 +20,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: auto-tag-release-${{ github.ref }}
+  group: auto-tag-release-main
   cancel-in-progress: false
 
 jobs:
@@ -24,29 +28,134 @@ jobs:
     name: Bump VERSION and create release tag
     if: >-
       ${{ github.event_name == 'workflow_dispatch' ||
-          (!contains(github.event.head_commit.message, '[skip release]') &&
-           !contains(github.event.head_commit.message, '[skip ci]')) }}
+          (github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+           github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout default branch
+      - name: Resolve tested source SHA
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SHA: ${{ github.sha }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            SOURCE_SHA="$WORKFLOW_RUN_SHA"
+          else
+            SOURCE_SHA="$DISPATCH_SHA"
+          fi
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "invalid source SHA" >&2
+            exit 1
+          fi
+
+          echo "sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tested source
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.source.outputs.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify successful CI and release eligibility
+        id: gate
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          has_successful_ci() {
+            local sha="$1"
+            local runs_json
+            runs_json="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/backend-ci.yml/runs" \
+              -f head_sha="$sha" \
+              -f status=completed \
+              -f per_page=100)"
+            jq -e --arg branch "$DEFAULT_BRANCH" '
+              [.workflow_runs[] |
+                select(.conclusion == "success" and
+                       .event == "push" and
+                       .head_branch == $branch)] |
+              length > 0
+            ' <<< "$runs_json" >/dev/null
+          }
+
+          if ! has_successful_ci "$SOURCE_SHA"; then
+            echo "No successful CI push run found for ${SOURCE_SHA}" >&2
+            exit 1
+          fi
+
+          git fetch origin "${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" --tags --force
+          REMOTE_SHA="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
+          if [ "$REMOTE_SHA" != "$SOURCE_SHA" ]; then
+            echo "Skipping stale source ${SOURCE_SHA}; ${DEFAULT_BRANCH} is now ${REMOTE_SHA}"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=source is no longer the default-branch head" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            COMMIT_MESSAGE="$(git log -1 --format=%B "$SOURCE_SHA")"
+            if [[ "$COMMIT_MESSAGE" == *"[skip release]"* || "$COMMIT_MESSAGE" == *"[skip ci]"* ]]; then
+              echo "Skipping release because the tested commit contains a skip marker"
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              echo "reason=commit contains a skip marker" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            while IFS= read -r tag; do
+              [ -n "$tag" ] || continue
+              if ! TAG_SHA="$(git rev-parse "refs/tags/${tag}^{commit}" 2>/dev/null)"; then
+                continue
+              fi
+              if [ "$TAG_SHA" = "$SOURCE_SHA" ]; then
+                echo "Source ${SOURCE_SHA} is already released as ${tag}"
+                echo "should_release=false" >> "$GITHUB_OUTPUT"
+                echo "reason=source is already tagged" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+
+              TAG_PARENTS="$(git show -s --format=%P "$TAG_SHA")"
+              if [ "$TAG_PARENTS" = "$SOURCE_SHA" ] &&
+                 [ "$(git diff --name-only "$SOURCE_SHA" "$TAG_SHA")" = "backend/cmd/server/VERSION" ]; then
+                echo "Source ${SOURCE_SHA} is already released as ${tag}"
+                echo "should_release=false" >> "$GITHUB_OUTPUT"
+                echo "reason=source already has a VERSION-only release tag" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            done < <(git tag --list 'v*')
+          fi
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "reason=eligible" >> "$GITHUB_OUTPUT"
+
       - name: Configure Git
+        if: ${{ steps.gate.outputs.should_release == 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Determine release version
+        if: ${{ steps.gate.outputs.should_release == 'true' }}
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
 
-          INPUT_VERSION="${{ github.event.inputs.version || '' }}"
           if [ -n "$INPUT_VERSION" ]; then
             VERSION="${INPUT_VERSION#v}"
             if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -82,10 +191,13 @@ jobs:
           echo "Releasing v${VERSION}"
 
       - name: Commit VERSION bump
+        if: ${{ steps.gate.outputs.should_release == 'true' }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ steps.version.outputs.version }}"
           echo "$VERSION" > backend/cmd/server/VERSION
 
           if git diff --quiet -- backend/cmd/server/VERSION; then
@@ -93,31 +205,46 @@ jobs:
           else
             git add backend/cmd/server/VERSION
             git commit -m "chore: bump VERSION to ${VERSION} [skip ci]"
-            git push origin HEAD:${{ github.event.repository.default_branch }}
+            git push origin "HEAD:${DEFAULT_BRANCH}"
           fi
 
       - name: Create and push tag
+        if: ${{ steps.gate.outputs.should_release == 'true' }}
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ steps.version.outputs.tag }}"
           git tag -a "$TAG" \
             -m "Sub2API ${TAG}" \
-            -m "Automated release from ${GITHUB_SHA}."
+            -m "Automated release from ${SOURCE_SHA}."
           git push origin "$TAG"
 
       - name: Dispatch packaging workflow
+        if: ${{ steps.gate.outputs.should_release == 'true' }}
         env:
+          CI_SHA: ${{ steps.source.outputs.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ steps.version.outputs.tag }}"
           gh workflow run release.yml \
-            --ref "${{ github.event.repository.default_branch }}" \
+            --ref "$DEFAULT_BRANCH" \
             -f tag="$TAG" \
+            -f ci_sha="$CI_SHA" \
             -f simple_release=false
 
       - name: Summary
+        env:
+          REASON: ${{ steps.gate.outputs.reason }}
+          SHOULD_RELEASE: ${{ steps.gate.outputs.should_release }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          echo "Created ${{ steps.version.outputs.tag }} and dispatched release.yml to package binaries, checksums, and Docker images from this tag."
+          if [ "$SHOULD_RELEASE" = "true" ]; then
+            echo "Created ${TAG} and dispatched release.yml after verifying the source CI run."
+          else
+            echo "Release skipped: ${REASON}."
+          fi

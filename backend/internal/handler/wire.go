@@ -112,8 +112,8 @@ func ProvideAdminUserHandler(adminService service.AdminService, concurrencyServi
 	return h
 }
 
-func ProvideAdminSubscriptionHandler(subscriptionService *service.SubscriptionService, speedService *service.SpeedService) *admin.SubscriptionHandler {
-	h := admin.NewSubscriptionHandler(subscriptionService)
+func ProvideAdminSubscriptionHandler(subscriptionService *service.SubscriptionService, speedService *service.SpeedService, adminService service.AdminService) *admin.SubscriptionHandler {
+	h := admin.NewSubscriptionHandler(subscriptionService, adminService)
 	h.SetSpeedService(speedService)
 	return h
 }

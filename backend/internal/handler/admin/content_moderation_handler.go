@@ -13,11 +13,12 @@ import (
 )
 
 type ContentModerationHandler struct {
-	service *service.ContentModerationService
+	service      *service.ContentModerationService
+	adminService service.AdminService
 }
 
-func NewContentModerationHandler(svc *service.ContentModerationService) *ContentModerationHandler {
-	return &ContentModerationHandler{service: svc}
+func NewContentModerationHandler(svc *service.ContentModerationService, adminService service.AdminService) *ContentModerationHandler {
+	return &ContentModerationHandler{service: svc, adminService: adminService}
 }
 
 type contentModerationConfigRequest struct {
@@ -375,6 +376,9 @@ func (h *ContentModerationHandler) SetUserSuspicion(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 	result, err := h.service.SetUserManualSuspicious(c.Request.Context(), userID, req.Suspicious, req.Reason)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -421,6 +425,9 @@ func (h *ContentModerationHandler) SelfUnban(c *gin.Context) {
 		response.BadRequest(c, "Invalid user_id")
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 	result, err := h.service.SelfUnbanUser(c.Request.Context(), userID)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -433,6 +440,9 @@ func (h *ContentModerationHandler) UnbanUser(c *gin.Context) {
 	userID, err := strconv.ParseInt(strings.TrimSpace(c.Param("user_id")), 10, 64)
 	if err != nil || userID <= 0 {
 		response.BadRequest(c, "Invalid user_id")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 	result, err := h.service.UnbanUser(c.Request.Context(), userID)

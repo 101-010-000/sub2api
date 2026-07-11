@@ -168,7 +168,8 @@ func isSuperOnlyAdminPath(method, path string) bool {
 	if strings.HasPrefix(path, "/payment/providers") && method != http.MethodGet {
 		return true
 	}
-	if strings.HasPrefix(path, "/payment/orders/") && strings.HasSuffix(path, "/refund") {
+	if strings.HasPrefix(path, "/payment/orders/") &&
+		(strings.HasSuffix(path, "/refund") || strings.HasSuffix(path, "/refund/query")) {
 		return true
 	}
 	return false

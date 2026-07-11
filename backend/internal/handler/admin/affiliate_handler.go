@@ -70,6 +70,9 @@ func (h *AffiliateHandler) UpdateUserSettings(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 
 	if req.AffCode != nil {
 		if err := h.affiliateService.AdminUpdateUserAffCode(c.Request.Context(), userID, *req.AffCode); err != nil {
@@ -104,6 +107,9 @@ func (h *AffiliateHandler) ClearUserSettings(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
 	if err != nil || userID <= 0 {
 		response.BadRequest(c, "Invalid user_id")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 	if err := h.affiliateService.AdminSetUserRebateRate(c.Request.Context(), userID, nil); err != nil {
@@ -144,6 +150,9 @@ func (h *AffiliateHandler) BatchSetRate(c *gin.Context) {
 	}
 	if !req.Clear && req.AffRebateRatePercent == nil {
 		response.BadRequest(c, "aff_rebate_rate_percent is required unless clear=true")
+		return
+	}
+	if !requireManageableUsers(c, h.adminService, req.UserIDs) {
 		return
 	}
 	rate := req.AffRebateRatePercent

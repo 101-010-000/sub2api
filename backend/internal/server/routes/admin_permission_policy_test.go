@@ -121,6 +121,12 @@ func TestResolveAdminAccessRule(t *testing.T) {
 			superOnly: true,
 		},
 		{
+			name:      "payment_refund_query_is_super_only",
+			method:    http.MethodPost,
+			path:      "/api/v1/admin/payment/orders/:id/refund/query",
+			superOnly: true,
+		},
+		{
 			name:       "nested_scheduled_tests_route_requires_scheduled_tests_read",
 			method:     http.MethodGet,
 			path:       "/api/v1/admin/accounts/:id/scheduled-test-plans",

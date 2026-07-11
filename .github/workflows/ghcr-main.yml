@@ -1,29 +1,118 @@
 name: Publish Docker image to GHCR
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   packages: write
 
 concurrency:
-  group: ghcr-main-${{ github.ref }}
-  cancel-in-progress: true
+  group: ghcr-main
+  cancel-in-progress: false
 
 jobs:
   publish:
     name: Build and push GHCR image
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+           github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Resolve and verify tested source SHA
+        id: source
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DISPATCH_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            SOURCE_SHA="$WORKFLOW_RUN_SHA"
+          else
+            SOURCE_SHA="$DISPATCH_SHA"
+          fi
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "invalid source SHA" >&2
+            exit 1
+          fi
+
+          has_successful_ci() {
+            local sha="$1"
+            local runs_json
+            runs_json="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/backend-ci.yml/runs" \
+              -f head_sha="$sha" \
+              -f status=completed \
+              -f per_page=100)"
+            jq -e --arg branch "$DEFAULT_BRANCH" '
+              [.workflow_runs[] |
+                select(.conclusion == "success" and
+                       .event == "push" and
+                       .head_branch == $branch)] |
+              length > 0
+            ' <<< "$runs_json" >/dev/null
+          }
+
+          if ! has_successful_ci "$SOURCE_SHA"; then
+            echo "No successful CI push run found for ${SOURCE_SHA}" >&2
+            exit 1
+          fi
+
+          echo "sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SOURCE_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tested source
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.source.outputs.sha }}
+
+      - name: Verify source is current release content
+        id: gate
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin "${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" --force
+          REMOTE_SHA="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
+          if [ "$REMOTE_SHA" != "$SOURCE_SHA" ]; then
+            REMOTE_PARENTS="$(git show -s --format=%P "$REMOTE_SHA")"
+            CHANGED_FILES="$(git diff --name-only "$SOURCE_SHA" "$REMOTE_SHA")"
+            if [ "$REMOTE_PARENTS" != "$SOURCE_SHA" ] ||
+               [ "$CHANGED_FILES" != "backend/cmd/server/VERSION" ]; then
+              echo "Skipping stale source ${SOURCE_SHA}; ${DEFAULT_BRANCH} is now ${REMOTE_SHA}"
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "reason=source is no longer the current release content" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Default branch only adds the VERSION release commit ${REMOTE_SHA}; publishing tested parent ${SOURCE_SHA}"
+          fi
+
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "reason=eligible" >> "$GITHUB_OUTPUT"
 
       - name: Set image name
+        if: ${{ steps.gate.outputs.should_publish == 'true' }}
         id: image
         shell: bash
         run: |
@@ -31,14 +120,17 @@ jobs:
           echo "name=${IMAGE,,}" >> "$GITHUB_OUTPUT"
 
       - name: Set build date
+        if: ${{ steps.gate.outputs.should_publish == 'true' }}
         id: date
         shell: bash
         run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
+        if: ${{ steps.gate.outputs.should_publish == 'true' }}
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
+        if: ${{ steps.gate.outputs.should_publish == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -46,18 +138,20 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract Docker metadata
+        if: ${{ steps.gate.outputs.should_publish == 'true' }}
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=main
-            type=sha,prefix=sha-,format=short
+            type=raw,value=sha-${{ steps.source.outputs.short_sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
 
       - name: Build and push
+        if: ${{ steps.gate.outputs.should_publish == 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -67,7 +161,19 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=main-${{ github.run_number }}
-            COMMIT=${{ github.sha }}
+            COMMIT=${{ steps.source.outputs.sha }}
             DATE=${{ steps.date.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Summary
+        env:
+          REASON: ${{ steps.gate.outputs.reason }}
+          SHOULD_PUBLISH: ${{ steps.gate.outputs.should_publish }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          if [ "$SHOULD_PUBLISH" = "true" ]; then
+            echo "Published main and sha tags for CI-tested source ${SOURCE_SHA}."
+          else
+            echo "GHCR publish skipped: ${REASON}."
+          fi

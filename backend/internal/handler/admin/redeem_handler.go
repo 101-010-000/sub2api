@@ -176,6 +176,9 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, req.UserID); !ok {
+		return
+	}
 	req.Code = strings.TrimSpace(req.Code)
 	// 向后兼容：旧版调用方（如 Sub2ApiPay）不传 type 字段，默认当作 balance 充值处理。
 	// 请勿删除此默认值逻辑，否则会导致旧版调用方 400 报错。

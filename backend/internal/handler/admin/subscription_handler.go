@@ -29,18 +29,49 @@ func toResponsePagination(p *pagination.PaginationResult) *response.PaginationRe
 // SubscriptionHandler handles admin subscription management
 type SubscriptionHandler struct {
 	subscriptionService *service.SubscriptionService
+	adminService        service.AdminService
 	speedService        *service.SpeedService
 }
 
 // NewSubscriptionHandler creates a new admin subscription handler
-func NewSubscriptionHandler(subscriptionService *service.SubscriptionService) *SubscriptionHandler {
+func NewSubscriptionHandler(subscriptionService *service.SubscriptionService, adminService service.AdminService) *SubscriptionHandler {
 	return &SubscriptionHandler{
 		subscriptionService: subscriptionService,
+		adminService:        adminService,
 	}
 }
 
 func (h *SubscriptionHandler) SetSpeedService(speedService *service.SpeedService) {
 	h.speedService = speedService
+}
+
+func (h *SubscriptionHandler) requireManageableSubscription(c *gin.Context, subscriptionID int64, includeDeleted bool) (*service.UserSubscription, bool) {
+	if h.subscriptionService == nil {
+		response.InternalError(c, "subscription service not configured")
+		return nil, false
+	}
+
+	var (
+		subscription *service.UserSubscription
+		err          error
+	)
+	if includeDeleted {
+		subscription, err = h.subscriptionService.GetByIDIncludeDeleted(c.Request.Context(), subscriptionID)
+	} else {
+		subscription, err = h.subscriptionService.GetByID(c.Request.Context(), subscriptionID)
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return nil, false
+	}
+	if subscription == nil {
+		response.InternalError(c, "subscription service returned no subscription")
+		return nil, false
+	}
+	if _, ok := requireManageableUser(c, h.adminService, subscription.UserID); !ok {
+		return nil, false
+	}
+	return subscription, true
 }
 
 // AssignSubscriptionRequest represents assign subscription request
@@ -155,6 +186,9 @@ func (h *SubscriptionHandler) Assign(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, req.UserID); !ok {
+		return
+	}
 
 	// Get admin user ID from context
 	adminID := getAdminIDFromContext(c)
@@ -185,6 +219,9 @@ func (h *SubscriptionHandler) BulkAssign(c *gin.Context) {
 	var req BulkAssignSubscriptionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if !requireManageableUsers(c, h.adminService, req.UserIDs) {
 		return
 	}
 
@@ -218,6 +255,9 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
 	var req AdjustSubscriptionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if _, ok := h.requireManageableSubscription(c, subscriptionID, false); !ok {
 		return
 	}
 
@@ -261,6 +301,9 @@ func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
 		response.BadRequest(c, "At least one of 'daily', 'weekly', or 'monthly' must be true")
 		return
 	}
+	if _, ok := h.requireManageableSubscription(c, subscriptionID, false); !ok {
+		return
+	}
 	sub, err := h.subscriptionService.AdminResetQuota(c.Request.Context(), subscriptionID, req.Daily, req.Weekly, req.Monthly)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -283,6 +326,9 @@ func (h *SubscriptionHandler) Revoke(c *gin.Context) {
 		response.BadRequest(c, "Invalid subscription ID")
 		return
 	}
+	if _, ok := h.requireManageableSubscription(c, subscriptionID, false); !ok {
+		return
+	}
 
 	err = h.subscriptionService.RevokeSubscription(c.Request.Context(), subscriptionID)
 	if err != nil {
@@ -299,6 +345,9 @@ func (h *SubscriptionHandler) Restore(c *gin.Context) {
 	subscriptionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid subscription ID")
+		return
+	}
+	if _, ok := h.requireManageableSubscription(c, subscriptionID, true); !ok {
 		return
 	}
 
