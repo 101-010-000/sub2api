@@ -10,10 +10,13 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
+
+const redactedGroupAPIKey = "********"
 
 // GroupHandler handles admin group management
 type GroupHandler struct {
@@ -506,12 +509,47 @@ func (h *GroupHandler) GetGroupAPIKeys(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	userIDs := make([]int64, 0, len(keys))
+	for i := range keys {
+		userIDs = append(userIDs, keys[i].UserID)
+	}
+	if !requireManageableUsers(c, h.adminService, userIDs) {
+		return
+	}
 
 	outKeys := make([]dto.APIKey, 0, len(keys))
 	for i := range keys {
-		outKeys = append(outKeys, *dto.APIKeyFromService(&keys[i]))
+		out := dto.APIKeyFromService(&keys[i])
+		if !middleware.IsSuperAdminContext(c) {
+			out.Key = redactedGroupAPIKey
+		}
+		outKeys = append(outKeys, *out)
 	}
 	response.Paginated(c, outKeys, total, page, pageSize)
+}
+
+func (h *GroupHandler) requireManageableGroupOverrideUsers(
+	c *gin.Context,
+	groupID int64,
+	requestedUserIDs []int64,
+	includeRates bool,
+	includeRPM bool,
+) bool {
+	if middleware.IsSuperAdminContext(c) {
+		return true
+	}
+	entries, err := h.adminService.GetGroupRateMultipliers(c.Request.Context(), groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return false
+	}
+	userIDs := append([]int64(nil), requestedUserIDs...)
+	for _, entry := range entries {
+		if (includeRates && entry.RateMultiplier != nil) || (includeRPM && entry.RPMOverride != nil) {
+			userIDs = append(userIDs, entry.UserID)
+		}
+	}
+	return requireManageableUsers(c, h.adminService, userIDs)
 }
 
 // GetGroupRateMultipliers handles getting rate multipliers for users in a group
@@ -543,6 +581,9 @@ func (h *GroupHandler) ClearGroupRateMultipliers(c *gin.Context) {
 		response.BadRequest(c, "Invalid group ID")
 		return
 	}
+	if !h.requireManageableGroupOverrideUsers(c, groupID, nil, true, false) {
+		return
+	}
 
 	if err := h.adminService.ClearGroupRateMultipliers(c.Request.Context(), groupID); err != nil {
 		response.ErrorFrom(c, err)
@@ -569,6 +610,13 @@ func (h *GroupHandler) BatchSetGroupRateMultipliers(c *gin.Context) {
 	var req BatchSetGroupRateMultipliersRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	userIDs := make([]int64, 0, len(req.Entries))
+	for _, entry := range req.Entries {
+		userIDs = append(userIDs, entry.UserID)
+	}
+	if !h.requireManageableGroupOverrideUsers(c, groupID, userIDs, true, false) {
 		return
 	}
 
@@ -599,6 +647,13 @@ func (h *GroupHandler) BatchSetGroupRPMOverrides(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	userIDs := make([]int64, 0, len(req.Entries))
+	for _, entry := range req.Entries {
+		userIDs = append(userIDs, entry.UserID)
+	}
+	if !h.requireManageableGroupOverrideUsers(c, groupID, userIDs, false, true) {
+		return
+	}
 
 	if err := h.adminService.BatchSetGroupRPMOverrides(c.Request.Context(), groupID, req.Entries); err != nil {
 		response.ErrorFrom(c, err)
@@ -614,6 +669,9 @@ func (h *GroupHandler) ClearGroupRPMOverrides(c *gin.Context) {
 	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+	if !h.requireManageableGroupOverrideUsers(c, groupID, nil, false, true) {
 		return
 	}
 

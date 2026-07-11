@@ -751,7 +751,7 @@ func (s *adminServiceImpl) ClearGroupRateMultipliers(ctx context.Context, groupI
 	if s.userGroupRateRepo == nil {
 		return nil
 	}
-	return s.userGroupRateRepo.DeleteByGroupID(ctx, groupID)
+	return s.userGroupRateRepo.SyncGroupRateMultipliers(ctx, groupID, nil)
 }
 
 func (s *adminServiceImpl) BatchSetGroupRateMultipliers(ctx context.Context, groupID int64, entries []GroupRateMultiplierInput) error {
@@ -801,6 +801,10 @@ func (s *adminServiceImpl) BatchSetGroupRPMOverrides(ctx context.Context, groupI
 
 func (s *adminServiceImpl) UpdateGroupSortOrders(ctx context.Context, updates []GroupSortOrderUpdate) error {
 	return s.groupRepo.UpdateSortOrders(ctx, updates)
+}
+
+func (s *adminServiceImpl) GetAPIKey(ctx context.Context, keyID int64) (*APIKey, error) {
+	return s.apiKeyRepo.GetByID(ctx, keyID)
 }
 
 // AdminUpdateAPIKeyGroupID 管理员修改 API Key 分组绑定

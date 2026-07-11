@@ -156,7 +156,6 @@ func isSuperOnlyAdminPath(method, path string) bool {
 		return true
 	}
 	for _, p := range []string{
-		"/users/batch-concurrency",
 		"/accounts/data",
 		"/accounts/batch-update-credentials",
 		"/proxies/data",

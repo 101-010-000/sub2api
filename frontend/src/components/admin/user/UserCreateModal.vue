@@ -25,7 +25,7 @@
         <label class="input-label">{{ t('admin.users.username') }}</label>
         <input v-model="form.username" type="text" class="input" :placeholder="t('admin.users.enterUsername')" />
       </div>
-      <div>
+      <div v-if="isSuperAdmin">
         <label class="input-label">{{ t('admin.users.form.roleLabel') }}</label>
         <select v-model="form.role" class="input">
           <option value="user">{{ t('admin.users.roles.user') }}</option>
@@ -135,9 +135,9 @@ const { loading, submit } = useForm({
       appStore.showError(error)
       return
     }
-    const { balance: rawBalance, admin_permissions: rawPermissions, ...rest } = data
+    const { balance: rawBalance, role, admin_permissions: rawPermissions, ...rest } = data
     const balance = String(rawBalance).trim()
-    const payload: typeof rest & { balance?: number, admin_permissions?: string[] } = {
+    const payload: typeof rest & { balance?: number, role?: 'user' | 'admin', admin_permissions?: string[] } = {
       ...rest,
       email: rest.email.trim(),
       password: rest.password.trim(),
@@ -149,6 +149,7 @@ const { loading, submit } = useForm({
     payload.rpm_limit = Math.max(0, Math.floor(Number(payload.rpm_limit) || 0))
     payload.api_key_max_active_ips = Math.max(0, Math.floor(Number(payload.api_key_max_active_ips) || 0))
     if (isSuperAdmin.value) {
+      payload.role = role
       payload.admin_permissions = normalizeAdminPermissions(rawPermissions)
     }
     await adminAPI.users.create(payload)

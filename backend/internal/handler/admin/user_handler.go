@@ -245,6 +245,9 @@ func (h *UserHandler) BindAuthIdentity(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 
 	var req BindUserAuthIdentityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -284,9 +287,15 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	if req.AdminPermissions != nil && !middleware2.IsSuperAdminContext(c) {
-		response.Forbidden(c, "Only super admin can grant admin permissions")
-		return
+	if !middleware2.IsSuperAdminContext(c) {
+		if req.Role == service.RoleAdmin {
+			response.Forbidden(c, "Only super admin can create admin users")
+			return
+		}
+		if req.AdminPermissions != nil {
+			response.Forbidden(c, "Only super admin can grant admin permissions")
+			return
+		}
 	}
 
 	user, err := h.adminService.CreateUser(c.Request.Context(), &service.CreateUserInput{
@@ -326,8 +335,17 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	if req.AdminPermissions != nil && !middleware2.IsSuperAdminContext(c) {
-		response.Forbidden(c, "Only super admin can update admin permissions")
+	if !middleware2.IsSuperAdminContext(c) {
+		if req.Role != "" {
+			response.Forbidden(c, "Only super admin can update user roles")
+			return
+		}
+		if req.AdminPermissions != nil {
+			response.Forbidden(c, "Only super admin can update admin permissions")
+			return
+		}
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 
@@ -372,6 +390,9 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 
 	err = h.adminService.DeleteUser(c.Request.Context(), userID)
 	if err != nil {
@@ -388,6 +409,9 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 
@@ -419,6 +443,9 @@ func (h *UserHandler) GetUserAPIKeys(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 
@@ -514,6 +541,9 @@ func (h *UserHandler) ReplaceGroup(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 
 	var req ReplaceGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -601,6 +631,9 @@ func (h *UserHandler) BatchUpdateConcurrency(c *gin.Context) {
 		response.Success(c, gin.H{"affected": 0})
 		return
 	}
+	if !requireManageableUsers(c, h.adminService, userIDs) {
+		return
+	}
 
 	affected, err := h.adminService.BatchUpdateConcurrency(c.Request.Context(), userIDs, req.Concurrency, req.Mode)
 	if err != nil {
@@ -623,9 +656,7 @@ func (h *UserHandler) GetUserPlatformQuotas(c *gin.Context) {
 		response.Success(c, map[string]any{"platform_quotas": []any{}})
 		return
 	}
-	// 校验用户存在：与 PUT/POST 路径一致，不存在返回 404 而非空数组（避免 admin 界面误判用户存在）。
-	if _, err := h.adminService.GetUser(c.Request.Context(), userID); err != nil {
-		response.ErrorFrom(c, err)
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 	records, err := h.userPlatformQuotaRepo.ListByUser(c.Request.Context(), userID)
@@ -659,14 +690,16 @@ type PlatformQuotaInput struct {
 // UpdateUserPlatformQuotas PUT /admin/users/:id/platform-quotas
 // 全量替换该用户所有平台限额。
 func (h *UserHandler) UpdateUserPlatformQuotas(c *gin.Context) {
-	if h.userPlatformQuotaRepo == nil {
-		response.Error(c, 503, "platform quota service not available")
-		return
-	}
-
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
+	if h.userPlatformQuotaRepo == nil {
+		response.Error(c, 503, "platform quota service not available")
 		return
 	}
 
@@ -732,11 +765,6 @@ func (h *UserHandler) UpdateUserPlatformQuotas(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 校验用户是否存在，避免 FK 违反导致 500；用户不存在时返回 404。
-	if _, err := h.adminService.GetUser(ctx, userID); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
 	// 在 UpsertForUser 之前抓取 before snapshot 用于审计 before/after 对比。
 	// ListByUser 失败不阻断主操作（best-effort），仅记录降级 warn。
 	beforeRecords, beforeErr := h.userPlatformQuotaRepo.ListByUser(ctx, userID)
@@ -835,14 +863,16 @@ var allowedWindowsForQuotaReset = map[string]struct{}{
 // ResetUserPlatformQuotaWindow POST /admin/users/:id/platform-quotas/reset
 // 立即归零指定 (platform, window) 的用量并更新 window_start。
 func (h *UserHandler) ResetUserPlatformQuotaWindow(c *gin.Context) {
-	if h.userPlatformQuotaRepo == nil {
-		response.Error(c, 503, "platform quota service not available")
-		return
-	}
-
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
+	if h.userPlatformQuotaRepo == nil {
+		response.Error(c, 503, "platform quota service not available")
 		return
 	}
 
@@ -862,11 +892,6 @@ func (h *UserHandler) ResetUserPlatformQuotaWindow(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 校验用户是否存在，避免对不存在的用户执行操作返回误导性的 500。
-	if _, err := h.adminService.GetUser(ctx, userID); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
 	now := time.Now().UTC()
 	if err := h.userPlatformQuotaRepo.ResetExpiredWindow(ctx, userID, req.Platform, req.Window, now); err != nil {
 		if errors.Is(err, service.ErrUserPlatformQuotaNotFound) {
@@ -907,6 +932,9 @@ func (h *UserHandler) GetUserSpeed(c *gin.Context) {
 		response.BadRequest(c, "Invalid user id")
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 	if h.speedService == nil {
 		response.Success(c, gin.H{"speed": []any{}})
 		return
@@ -923,6 +951,9 @@ func (h *UserHandler) UpdateUserSpeed(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || userID <= 0 {
 		response.BadRequest(c, "Invalid user id")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
@@ -958,6 +989,9 @@ func (h *UserHandler) ResetUserSpeed(c *gin.Context) {
 		response.BadRequest(c, "Invalid user id")
 		return
 	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
+		return
+	}
 	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
 	if err != nil || groupID <= 0 {
 		response.BadRequest(c, "Invalid group id")
@@ -983,6 +1017,9 @@ func (h *UserHandler) ClearUserSpeedConfig(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || userID <= 0 {
 		response.BadRequest(c, "Invalid user id")
+		return
+	}
+	if _, ok := requireManageableUser(c, h.adminService, userID); !ok {
 		return
 	}
 	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)

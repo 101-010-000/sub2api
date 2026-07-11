@@ -37,6 +37,12 @@ func TestResolveAdminAccessRule(t *testing.T) {
 			permission: service.AdminPermissionUsersWrite,
 		},
 		{
+			name:       "user_batch_concurrency_requires_write",
+			method:     http.MethodPost,
+			path:       "/api/v1/admin/users/batch-concurrency",
+			permission: service.AdminPermissionUsersWrite,
+		},
+		{
 			name:       "delete_uses_module_write_permission",
 			method:     http.MethodDelete,
 			path:       "/api/v1/admin/users/:id",

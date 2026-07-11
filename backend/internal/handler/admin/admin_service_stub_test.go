@@ -13,6 +13,7 @@ type stubAdminService struct {
 	users                               []service.User
 	apiKeys                             []service.APIKey
 	groups                              []service.Group
+	groupRateEntries                    []service.UserGroupRateEntry
 	accounts                            []service.Account
 	accountSchedulerScoreFilterAccounts []service.Account
 	openAISchedulerScorePoolAccounts    []service.Account
@@ -24,6 +25,8 @@ type stubAdminService struct {
 	boundAuthIdentity                   *service.AdminBindAuthIdentityInput
 	boundAuthIdentityFor                int64
 	createdUser                         *service.CreateUserInput
+	updatedUser                         *service.UpdateUserInput
+	deletedUserIDs                      []int64
 	createdAccounts                     []*service.CreateAccountInput
 	createdProxies                      []*service.CreateProxyInput
 	updatedProxyIDs                     []int64
@@ -180,11 +183,13 @@ func (s *stubAdminService) CreateUser(ctx context.Context, input *service.Create
 }
 
 func (s *stubAdminService) UpdateUser(ctx context.Context, id int64, input *service.UpdateUserInput) (*service.User, error) {
+	s.updatedUser = input
 	user := service.User{ID: id, Email: "updated@example.com", Status: service.StatusActive}
 	return &user, nil
 }
 
 func (s *stubAdminService) DeleteUser(ctx context.Context, id int64) error {
+	s.deletedUserIDs = append(s.deletedUserIDs, id)
 	return nil
 }
 
@@ -199,6 +204,16 @@ func (s *stubAdminService) BatchUpdateConcurrency(ctx context.Context, userIDs [
 
 func (s *stubAdminService) GetUserAPIKeys(ctx context.Context, userID int64, page, pageSize int, sortBy, sortOrder string) ([]service.APIKey, int64, error) {
 	return s.apiKeys, int64(len(s.apiKeys)), nil
+}
+
+func (s *stubAdminService) GetAPIKey(ctx context.Context, keyID int64) (*service.APIKey, error) {
+	for i := range s.apiKeys {
+		if s.apiKeys[i].ID == keyID {
+			key := s.apiKeys[i]
+			return &key, nil
+		}
+	}
+	return nil, service.ErrAPIKeyNotFound
 }
 
 func (s *stubAdminService) GetUserUsageStats(ctx context.Context, userID int64, period string) (any, error) {
@@ -309,7 +324,7 @@ func (s *stubAdminService) GetGroupAPIKeys(ctx context.Context, groupID int64, p
 }
 
 func (s *stubAdminService) GetGroupRateMultipliers(_ context.Context, _ int64) ([]service.UserGroupRateEntry, error) {
-	return nil, nil
+	return s.groupRateEntries, nil
 }
 
 func (s *stubAdminService) ClearGroupRateMultipliers(_ context.Context, _ int64) error {

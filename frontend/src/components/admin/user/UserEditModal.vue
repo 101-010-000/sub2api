@@ -29,7 +29,7 @@
         <label class="input-label">{{ t('admin.users.username') }}</label>
         <input v-model="form.username" type="text" class="input" />
       </div>
-      <div>
+      <div v-if="isSuperAdmin">
         <label class="input-label">{{ t('admin.users.form.roleLabel') }}</label>
         <select v-model="form.role" class="input">
           <option value="user">{{ t('admin.users.roles.user') }}</option>
@@ -141,8 +141,19 @@ const handleUpdateUser = async () => {
   }
   submitting.value = true
   try {
-    const data: any = { email: form.email, username: form.username, notes: form.notes, role: form.role, concurrency: form.concurrency, rpm_limit: form.rpm_limit, api_key_max_active_ips: Math.floor(form.api_key_max_active_ips || 0), api_key_max_active_ips_visible: form.api_key_max_active_ips_visible }
-    if (isSuperAdmin.value) data.admin_permissions = normalizeAdminPermissions(form.admin_permissions)
+    const data: any = {
+      email: form.email,
+      username: form.username,
+      notes: form.notes,
+      concurrency: form.concurrency,
+      rpm_limit: form.rpm_limit,
+      api_key_max_active_ips: Math.floor(form.api_key_max_active_ips || 0),
+      api_key_max_active_ips_visible: form.api_key_max_active_ips_visible,
+    }
+    if (isSuperAdmin.value) {
+      data.role = form.role
+      data.admin_permissions = normalizeAdminPermissions(form.admin_permissions)
+    }
     if (form.password.trim()) data.password = form.password.trim()
     await adminAPI.users.update(props.user.id, data)
     if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(props.user.id, form.customAttributes)

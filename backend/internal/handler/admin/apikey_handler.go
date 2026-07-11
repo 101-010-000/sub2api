@@ -15,7 +15,6 @@ import (
 // AdminAPIKeyHandler handles admin API key management
 type AdminAPIKeyHandler struct {
 	adminService         service.AdminService
-	apiKeyService        *service.APIKeyService
 	apiKeyRuntimeService *service.APIKeyRuntimeService
 }
 
@@ -26,9 +25,8 @@ func NewAdminAPIKeyHandler(adminService service.AdminService) *AdminAPIKeyHandle
 	}
 }
 
-func ProvideAdminAPIKeyHandler(adminService service.AdminService, apiKeyService *service.APIKeyService, apiKeyRuntimeService *service.APIKeyRuntimeService) *AdminAPIKeyHandler {
+func ProvideAdminAPIKeyHandler(adminService service.AdminService, apiKeyRuntimeService *service.APIKeyRuntimeService) *AdminAPIKeyHandler {
 	h := NewAdminAPIKeyHandler(adminService)
-	h.apiKeyService = apiKeyService
 	h.apiKeyRuntimeService = apiKeyRuntimeService
 	return h
 }
@@ -52,6 +50,9 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 	keyID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid API key ID")
+		return
+	}
+	if _, ok := requireManageableAPIKey(c, h.adminService, keyID); !ok {
 		return
 	}
 
@@ -110,12 +111,12 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 }
 
 func (h *AdminAPIKeyHandler) GetRuntime(c *gin.Context) {
-	if h.apiKeyRuntimeService == nil {
-		response.InternalError(c, "API key runtime service is not configured")
-		return
-	}
 	key, ok := h.getAPIKey(c)
 	if !ok {
+		return
+	}
+	if h.apiKeyRuntimeService == nil {
+		response.InternalError(c, "API key runtime service is not configured")
 		return
 	}
 	status, err := h.apiKeyRuntimeService.GetStatus(c.Request.Context(), key)
@@ -127,12 +128,12 @@ func (h *AdminAPIKeyHandler) GetRuntime(c *gin.Context) {
 }
 
 func (h *AdminAPIKeyHandler) RemoveRuntimeIP(c *gin.Context) {
-	if h.apiKeyRuntimeService == nil {
-		response.InternalError(c, "API key runtime service is not configured")
-		return
-	}
 	key, ok := h.getAPIKey(c)
 	if !ok {
+		return
+	}
+	if h.apiKeyRuntimeService == nil {
+		response.InternalError(c, "API key runtime service is not configured")
 		return
 	}
 	var req adminRemoveActiveIPRequest
@@ -152,12 +153,12 @@ func (h *AdminAPIKeyHandler) RemoveRuntimeIP(c *gin.Context) {
 }
 
 func (h *AdminAPIKeyHandler) ClearRuntimeIPs(c *gin.Context) {
-	if h.apiKeyRuntimeService == nil {
-		response.InternalError(c, "API key runtime service is not configured")
-		return
-	}
 	key, ok := h.getAPIKey(c)
 	if !ok {
+		return
+	}
+	if h.apiKeyRuntimeService == nil {
+		response.InternalError(c, "API key runtime service is not configured")
 		return
 	}
 	if err := h.apiKeyRuntimeService.ClearActiveIPs(c.Request.Context(), key); err != nil {
@@ -168,19 +169,10 @@ func (h *AdminAPIKeyHandler) ClearRuntimeIPs(c *gin.Context) {
 }
 
 func (h *AdminAPIKeyHandler) getAPIKey(c *gin.Context) (*service.APIKey, bool) {
-	if h.apiKeyService == nil {
-		response.InternalError(c, "API key service is not configured")
-		return nil, false
-	}
 	keyID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid API key ID")
 		return nil, false
 	}
-	key, err := h.apiKeyService.GetByID(c.Request.Context(), keyID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return nil, false
-	}
-	return key, true
+	return requireManageableAPIKey(c, h.adminService, keyID)
 }

@@ -99,11 +99,13 @@ describe('UserCreateModal', () => {
     await fillRequiredFields(wrapper)
 
     expect(wrapper.text()).not.toContain('后台权限')
+    expect(wrapper.find('select').exists()).toBe(false)
     await wrapper.get('#create-user-form').trigger('submit.prevent')
     await flushPromises()
 
     expect(createUser).toHaveBeenCalledTimes(1)
     expect(createUser.mock.calls[0][0]).not.toHaveProperty('admin_permissions')
+    expect(createUser.mock.calls[0][0]).not.toHaveProperty('role')
   })
 
   it('表单校验失败时不提交创建请求', async () => {

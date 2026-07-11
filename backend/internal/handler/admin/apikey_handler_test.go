@@ -11,6 +11,7 @@ import (
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,43 @@ func TestAdminAPIKeyHandler_UpdateGroup_InvalidID(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "Invalid API key ID")
+}
+
+func TestAdminAPIKeyHandlerDelegatedAdminCannotManagePrivilegedOwnerKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	adminSvc := newStubAdminService()
+	adminSvc.users[0].Role = service.RoleAdmin
+	h := NewAdminAPIKeyHandler(adminSvc)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAdminPermissions), []string{service.AdminPermissionUsersWrite})
+		c.Next()
+	})
+	router.PUT("/api/v1/admin/api-keys/:id", h.UpdateGroup)
+	router.GET("/api/v1/admin/api-keys/:id/runtime", h.GetRuntime)
+	router.POST("/api/v1/admin/api-keys/:id/runtime/ips/remove", h.RemoveRuntimeIP)
+	router.POST("/api/v1/admin/api-keys/:id/runtime/ips/clear", h.ClearRuntimeIPs)
+
+	tests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPut, path: "/api/v1/admin/api-keys/10", body: `{"group_id":2}`},
+		{method: http.MethodGet, path: "/api/v1/admin/api-keys/10/runtime"},
+		{method: http.MethodPost, path: "/api/v1/admin/api-keys/10/runtime/ips/remove", body: `{"ip":"127.0.0.1"}`},
+		{method: http.MethodPost, path: "/api/v1/admin/api-keys/10/runtime/ips/clear"},
+	}
+
+	for _, tt := range tests {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+		if tt.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, "%s %s", tt.method, tt.path)
+	}
 }
 
 func TestAdminAPIKeyHandler_UpdateGroup_InvalidJSON(t *testing.T) {
