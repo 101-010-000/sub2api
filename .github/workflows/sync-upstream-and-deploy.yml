@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      deploy_current_main:
+        description: Deploy the current fork main without fetching or merging newer upstream commits
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -52,9 +57,17 @@ jobs:
         id: source
         env:
           FORCE_DEPLOY: ${{ inputs.force_deploy || 'false' }}
+          DEPLOY_CURRENT_MAIN: ${{ inputs.deploy_current_main || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [ "$DEPLOY_CURRENT_MAIN" = 'true' ]; then
+            echo 'has_update=false' >> "$GITHUB_OUTPUT"
+            echo 'should_release=true' >> "$GITHUB_OUTPUT"
+            echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
           git fetch --no-tags upstream "${DEFAULT_BRANCH}"
