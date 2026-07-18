@@ -44,18 +44,15 @@ export interface AdminBoundAuthIdentity {
   channel?: AdminBoundAuthIdentityChannel | null
 }
 
-export interface CreateUserRequest {
-  email: string
-  password: string
-  username?: string
-  notes?: string
-  balance?: number
+export interface BatchUpdateUserLimitsRequest {
+  user_ids: number[]
+  all?: boolean
   concurrency?: number
   rpm_limit?: number
-  api_key_max_active_ips?: number
-  api_key_max_active_ips_visible?: boolean
-  allowed_groups?: number[] | null
-  admin_permissions?: string[]
+}
+
+export interface BatchUpdateUserLimitsResponse {
+  affected: number
 }
 
 /**
@@ -186,6 +183,17 @@ export async function updateBalance(
  */
 export async function updateConcurrency(id: number, concurrency: number): Promise<AdminUser> {
   return update(id, { concurrency })
+}
+
+/** Overwrite concurrency and/or RPM limits for multiple users in one request. */
+export async function batchUpdateLimits(
+  request: BatchUpdateUserLimitsRequest
+): Promise<BatchUpdateUserLimitsResponse> {
+  const { data } = await apiClient.post<BatchUpdateUserLimitsResponse>(
+    '/admin/users/batch-limits',
+    request
+  )
+  return data
 }
 
 /**
@@ -389,6 +397,7 @@ export const usersAPI = {
   delete: deleteUser,
   updateBalance,
   updateConcurrency,
+  batchUpdateLimits,
   toggleStatus,
   getUserApiKeys,
   getUserUsageStats,
