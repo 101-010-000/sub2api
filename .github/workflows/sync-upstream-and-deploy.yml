@@ -335,6 +335,12 @@ jobs:
           mv "$db_backup_tmp" "$db_backup_path"
           trap - EXIT
 
+          free_after_backup_kb="$(df -Pk "$deploy_path" | awk 'NR == 2 {print $4}')"
+          if [ -z "$free_after_backup_kb" ] || [ "$free_after_backup_kb" -lt 8388608 ]; then
+            echo "Database backup succeeded, but less than 8 GiB remains; refusing to restart the service. Backup: $db_backup_path" >&2
+            exit 1
+          fi
+
           cp --preserve=mode,ownership,timestamps sub2api "$backup_path"
           echo "Created rollback backups: binary=$backup_path database=$db_backup_path"
 
