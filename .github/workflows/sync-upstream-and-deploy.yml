@@ -11,6 +11,11 @@ on:
         required: false
         default: false
         type: boolean
+      dry_run:
+        description: Build, test, and run production preflight without transferring or restarting anything
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -175,8 +180,69 @@ jobs:
           [43.130.1.35]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPHKaMazQeZq6MVWYR5Lkm7YIQ1cTtTNIi5hkkrln14+
           EOF
 
-      - name: Transfer tested binary
+      - name: Preflight production without changing services
         if: steps.source.outputs.should_release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+
+          ssh "${ssh_options[@]}" "$target" bash -s -- "$DEPLOY_PATH" <<'REMOTE'
+          set -euo pipefail
+
+          deploy_path="$1"
+          if [ "$deploy_path" != '/opt/sub2api' ]; then
+            echo 'Refusing to inspect outside /opt/sub2api.' >&2
+            exit 1
+          fi
+          if ! systemctl is-active --quiet sub2api.service; then
+            echo 'sub2api.service is not active.' >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8080/health >/dev/null
+
+          free_kb="$(df -Pk "$deploy_path" | awk 'NR == 2 {print $4}')"
+          if [ -z "$free_kb" ] || [ "$free_kb" -lt 2097152 ]; then
+            echo 'Less than 2 GiB is free on the deployment filesystem.' >&2
+            exit 1
+          fi
+
+          find_sub2api_postgres() {
+            local container db_user candidate_count=0
+            while IFS= read -r container; do
+              [ -n "$container" ] || continue
+              db_user="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" | awk -F= '$1 == "POSTGRES_USER" {print $2; exit}')"
+              db_user="${db_user:-postgres}"
+              if docker exec "$container" psql -U "$db_user" -d sub2api -Atqc 'SELECT 1' 2>/dev/null | grep -qx 1; then
+                candidate_count=$((candidate_count + 1))
+                SUB2API_POSTGRES_CONTAINER="$container"
+                SUB2API_POSTGRES_USER="$db_user"
+              fi
+            done < <(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /postgres/ {print $1}')
+            if [ "$candidate_count" -ne 1 ]; then
+              echo "Expected exactly one PostgreSQL container with the sub2api database; found $candidate_count." >&2
+              return 1
+            fi
+          }
+
+          command -v docker >/dev/null
+          find_sub2api_postgres
+          db_size="$(docker exec "$SUB2API_POSTGRES_CONTAINER" psql -U "$SUB2API_POSTGRES_USER" -d sub2api -Atqc "SELECT pg_database_size('sub2api')")"
+          long_transactions="$(docker exec "$SUB2API_POSTGRES_CONTAINER" psql -U "$SUB2API_POSTGRES_USER" -d sub2api -Atqc "SELECT count(*) FROM pg_stat_activity WHERE datname = 'sub2api' AND xact_start IS NOT NULL AND now() - xact_start > interval '5 minutes'")"
+          blocked_sessions="$(docker exec "$SUB2API_POSTGRES_CONTAINER" psql -U "$SUB2API_POSTGRES_USER" -d sub2api -Atqc "SELECT count(*) FROM pg_stat_activity WHERE datname = 'sub2api' AND wait_event_type = 'Lock'")"
+          latest_migration="$(docker exec "$SUB2API_POSTGRES_CONTAINER" psql -U "$SUB2API_POSTGRES_USER" -d sub2api -Atqc "SELECT COALESCE(max(filename), '') FROM schema_migrations")"
+
+          if [ "$long_transactions" -ne 0 ] || [ "$blocked_sessions" -ne 0 ]; then
+            echo "Database is busy: long_transactions=$long_transactions blocked_sessions=$blocked_sessions" >&2
+            exit 1
+          fi
+
+          echo "preflight_ok service=active health=ok free_kb=$free_kb db_size_bytes=$db_size latest_migration=$latest_migration"
+          REMOTE
+
+      - name: Transfer tested binary
+        if: steps.source.outputs.should_release == 'true' && inputs.dry_run != true
         shell: bash
         run: |
           set -euo pipefail
@@ -186,7 +252,7 @@ jobs:
           scp "${ssh_options[@]}" "$RUNNER_TEMP/sub2api" "$target:$DEPLOY_PATH/sub2api.next"
 
       - name: Deploy and roll back on failed health check
-        if: steps.source.outputs.should_release == 'true'
+        if: steps.source.outputs.should_release == 'true' && inputs.dry_run != true
         shell: bash
         run: |
           set -euo pipefail
@@ -223,10 +289,40 @@ jobs:
             exit 1
           fi
 
+          find_sub2api_postgres() {
+            local container db_user candidate_count=0
+            while IFS= read -r container; do
+              [ -n "$container" ] || continue
+              db_user="$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" | awk -F= '$1 == "POSTGRES_USER" {print $2; exit}')"
+              db_user="${db_user:-postgres}"
+              if docker exec "$container" psql -U "$db_user" -d sub2api -Atqc 'SELECT 1' 2>/dev/null | grep -qx 1; then
+                candidate_count=$((candidate_count + 1))
+                SUB2API_POSTGRES_CONTAINER="$container"
+                SUB2API_POSTGRES_USER="$db_user"
+              fi
+            done < <(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($0) ~ /postgres/ {print $1}')
+            if [ "$candidate_count" -ne 1 ]; then
+              echo "Expected exactly one PostgreSQL container with the sub2api database; found $candidate_count." >&2
+              return 1
+            fi
+          }
+
           timestamp="$(date -u +%Y%m%d%H%M%S)"
           backup_path="$deploy_path/backups/sub2api.auto-$timestamp"
+          db_backup_path="$deploy_path/backups/sub2api-db.auto-$timestamp.dump"
           install -d -m 700 "$deploy_path/backups"
+          find_sub2api_postgres
+
+          db_backup_tmp="${db_backup_path}.tmp"
+          trap 'rm -f "$db_backup_tmp"' EXIT
+          docker exec "$SUB2API_POSTGRES_CONTAINER" pg_dump -U "$SUB2API_POSTGRES_USER" -d sub2api -Fc > "$db_backup_tmp"
+          docker exec -i "$SUB2API_POSTGRES_CONTAINER" pg_restore -l < "$db_backup_tmp" >/dev/null
+          chmod 600 "$db_backup_tmp"
+          mv "$db_backup_tmp" "$db_backup_path"
+          trap - EXIT
+
           cp --preserve=mode,ownership,timestamps sub2api "$backup_path"
+          echo "Created rollback backups: binary=$backup_path database=$db_backup_path"
 
           rollback() {
             echo 'New release failed its health check; restoring the previous binary.' >&2
@@ -235,12 +331,12 @@ jobs:
             systemctl start sub2api.service
             for attempt in $(seq 1 12); do
               if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8080/health >/dev/null; then
-                echo 'Previous binary is healthy again. Database migrations are intentionally not rolled back.' >&2
+                echo "Previous binary is healthy again. Database backup is available at $db_backup_path; migrations are intentionally not auto-restored." >&2
                 return 0
               fi
               sleep 5
             done
-            echo 'Rollback binary did not pass its health check. Database migrations are intentionally not rolled back.' >&2
+            echo "Rollback binary did not pass its health check. Database backup is available at $db_backup_path and requires a controlled restore." >&2
             return 1
           }
 
