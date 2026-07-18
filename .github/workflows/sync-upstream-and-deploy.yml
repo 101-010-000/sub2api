@@ -177,6 +177,7 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           cat > ~/.ssh/known_hosts <<'EOF'
+          43.130.1.35 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPHKaMazQeZq6MVWYR5Lkm7YIQ1cTtTNIi5hkkrln14+
           [43.130.1.35]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPHKaMazQeZq6MVWYR5Lkm7YIQ1cTtTNIi5hkkrln14+
           EOF
 
