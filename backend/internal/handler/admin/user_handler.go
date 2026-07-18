@@ -13,7 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/handler/quotaview"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
-	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -31,7 +31,8 @@ type UserHandler struct {
 	concurrencyService    *service.ConcurrencyService
 	userPlatformQuotaRepo service.UserPlatformQuotaRepository // T13 admin quota view
 	billingCache          service.BillingCache                // T17/T18 缓存失效（PUT/POST 路径）
-	totpService           *service.TotpService                // 角色提升为管理员的 step-up 门控
+	speedService          *service.SpeedService
+	totpService           *service.TotpService // 角色提升为管理员的 step-up 门控
 	userService           *service.UserService
 	settingService        *service.SettingService // step-up 功能开关
 }
@@ -296,19 +297,19 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 	if !middleware2.IsSuperAdminContext(c) {
-		if req.Role == service.RoleAdmin {
-			response.Forbidden(c, "Only super admin can create admin users")
-			return
-		}
 		if req.AdminPermissions != nil {
 			response.Forbidden(c, "Only super admin can grant admin permissions")
+			return
+		}
+		if req.Role == service.RoleAdmin {
+			response.Forbidden(c, "Only super admin can create admin users")
 			return
 		}
 	}
 
 	// 创建管理员账号属权限敏感操作：需最近完成 step-up 2FA 验证。
 	if req.Role == service.RoleAdmin {
-		if !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
+		if !middleware2.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
 			return
 		}
 	}
@@ -351,12 +352,12 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 	if !middleware2.IsSuperAdminContext(c) {
-		if req.Role != "" {
-			response.Forbidden(c, "Only super admin can update user roles")
-			return
-		}
 		if req.AdminPermissions != nil {
 			response.Forbidden(c, "Only super admin can update admin permissions")
+			return
+		}
+		if req.Role == service.RoleAdmin {
+			response.Forbidden(c, "Only super admin can assign the admin role")
 			return
 		}
 	}
@@ -380,7 +381,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 			return
 		}
 		if target.Role != service.RoleAdmin {
-			if !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
+			if !middleware2.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
 				return
 			}
 		}

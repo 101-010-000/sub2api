@@ -291,6 +291,11 @@ import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const canReadBackup = computed(() => authStore.hasAdminPermission('admin.backup.read'))
+const canWriteBackup = computed(() => authStore.hasAdminPermission('admin.backup.write'))
+const canDownloadBackup = computed(() => authStore.isSuperAdmin)
+const canRestoreBackup = computed(() => authStore.isSuperAdmin)
 const backupStepUp = useStepUp()
 
 // 敏感操作被 2FA 门控拦截时的统一提示。

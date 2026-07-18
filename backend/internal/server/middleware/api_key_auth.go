@@ -35,7 +35,7 @@ func NewAPIKeyAuthMiddlewareWithRuntime(apiKeyService *service.APIKeyService, su
 // /v1/usage、/v1/sub2api/billing 端点与异步生图任务查询只需鉴权，不需要计费执行。
 // usage 允许过期/配额耗尽的 Key 查询自身用量，billing 用于读取当前 Key 的倍率配置，
 // 异步生图查询允许已耗尽额度的 Key 拉取自身任务结果。
-func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, apiKeyRuntimeService *service.APIKeyRuntimeService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ── 1. 提取 API Key ──────────────────────────────────────────
 
@@ -171,7 +171,10 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// Async image task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
-		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		skipBilling := shouldSkipAPIKeyBilling(c.Request.URL.Path) || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		if service.IsContentModerationInternalAuditAPIKey(apiKey) {
+			skipBilling = true
+		}
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -294,6 +297,40 @@ func isAsyncImageTaskRead(method, path string) bool {
 		return false
 	}
 	return strings.HasPrefix(path, "/v1/images/tasks/") || strings.HasPrefix(path, "/images/tasks/")
+}
+
+func shouldSkipAPIKeyBilling(path string) bool {
+	switch strings.TrimSpace(path) {
+	case "/v1/usage",
+		"/v1/models",
+		"/v1beta/models",
+		"/antigravity/models",
+		"/antigravity/v1/models",
+		"/antigravity/v1beta/models":
+		return true
+	default:
+		return false
+	}
+}
+
+func wrapAPIKeyRuntimeSlotRelease(ctx context.Context, slot *service.APIKeySlot) func() {
+	if slot == nil || !slot.Acquired() {
+		return nil
+	}
+	var once sync.Once
+	var stop func() bool
+	release := func() {
+		once.Do(func() {
+			if stop != nil {
+				_ = stop()
+			}
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = slot.Release(bgCtx)
+		})
+	}
+	stop = context.AfterFunc(ctx, release)
+	return release
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key

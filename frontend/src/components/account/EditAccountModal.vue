@@ -2763,6 +2763,8 @@ const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
 const autoPause7dDisabled = ref(false)
+const openAIQuotaNotifyEnabled = ref(false)
+const openAIQuotaNotifyRules = ref<OpenAIQuotaNotifyRule[]>([])
 const upstreamBillingAutoProbeEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
 const allowOverages = ref(false) // For antigravity accounts: enable AI Credits overages
@@ -3245,6 +3247,16 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	autoPause7dThreshold.value = typeof extra?.auto_pause_7d_threshold === 'number' ? extra.auto_pause_7d_threshold * 100 : null
 	autoPause5hDisabled.value = extra?.auto_pause_5h_disabled === true
 	autoPause7dDisabled.value = extra?.auto_pause_7d_disabled === true
+	openAIQuotaNotifyEnabled.value = extra?.openai_quota_notify_enabled === true
+	openAIQuotaNotifyRules.value = Array.isArray(extra?.openai_quota_notify_rules)
+		? extra.openai_quota_notify_rules
+			.map((rule) => rule as Partial<OpenAIQuotaNotifyRule>)
+			.filter((rule) => (rule.window === '5h' || rule.window === '7d') && Number.isInteger(rule.remaining_percent))
+			.map((rule) => ({
+				window: rule.window as '5h' | '7d',
+				remaining_percent: Number(rule.remaining_percent),
+			}))
+		: []
 	upstreamBillingAutoProbeEnabled.value = extra?.upstream_billing_probe_enabled === true
 
   // Load OpenAI passthrough toggle (OpenAI OAuth/SetupToken/API Key)

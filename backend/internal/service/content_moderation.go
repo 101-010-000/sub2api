@@ -980,37 +980,49 @@ type ContentModerationHashCache interface {
 }
 
 type ContentModerationService struct {
-	settingRepo              SettingRepository
-	repo                     ContentModerationRepository
-	hashCache                ContentModerationHashCache
-	groupRepo                GroupRepository
-	userRepo                 UserRepository
-	authCacheInvalidator     APIKeyAuthCacheInvalidator
-	emailService             *EmailService
-	httpClient               *http.Client
-	asyncQueue               chan contentModerationTask
-	workerCount              int
-	apiKeyCursor             atomic.Uint64
-	asyncActive              atomic.Int64
-	asyncEnqueued            atomic.Int64
-	asyncDropped             atomic.Int64
-	asyncProcessed           atomic.Int64
-	asyncErrors              atomic.Int64
-	preBlockActive           atomic.Int64
-	preBlockChecked          atomic.Int64
-	preBlockAllowed          atomic.Int64
-	preBlockBlocked          atomic.Int64
-	preBlockErrors           atomic.Int64
-	preBlockLatencyTotalMS   atomic.Int64
-	lastCleanupUnix          atomic.Int64
-	lastCleanupDeletedHit    atomic.Int64
-	lastCleanupDeletedNonHit atomic.Int64
-	runtimeSnapshot          atomic.Pointer[contentModerationRuntimeSnapshot]
-	runtimeRefreshMu         sync.Mutex
-	runtimeCacheTTL          time.Duration
-	runtimeRefreshRetryAt    atomic.Int64
-	keyHealthMu              sync.Mutex
-	keyHealth                map[string]*contentModerationKeyHealth
+	settingRepo               SettingRepository
+	repo                      ContentModerationRepository
+	hashCache                 ContentModerationHashCache
+	groupRepo                 GroupRepository
+	userRepo                  UserRepository
+	apiKeyRepo                APIKeyRepository
+	authCacheInvalidator      APIKeyAuthCacheInvalidator
+	emailService              *EmailService
+	feishuNotificationService *FeishuNotificationService
+	encryptor                 SecretEncryptor
+	cfg                       *config.Config
+	httpClient                *http.Client
+	asyncQueue                chan contentModerationTask
+	workerCount               int
+	apiKeyCursor              atomic.Uint64
+	asyncActive               atomic.Int64
+	asyncEnqueued             atomic.Int64
+	asyncDropped              atomic.Int64
+	asyncProcessed            atomic.Int64
+	asyncErrors               atomic.Int64
+	preBlockActive            atomic.Int64
+	preBlockChecked           atomic.Int64
+	preBlockAllowed           atomic.Int64
+	preBlockBlocked           atomic.Int64
+	preBlockErrors            atomic.Int64
+	preBlockLatencyTotalMS    atomic.Int64
+	lastCleanupUnix           atomic.Int64
+	lastCleanupDeletedHit     atomic.Int64
+	lastCleanupDeletedNonHit  atomic.Int64
+	lastCleanupDeletedContext atomic.Int64
+	contextDrops              atomic.Int64
+	lastBackgroundReviewUnix  atomic.Int64
+	contextErrorMu            sync.Mutex
+	contextCaptureError       string
+	lastContextErrorAt        time.Time
+	runtimeSnapshot           atomic.Pointer[contentModerationRuntimeSnapshot]
+	runtimeRefreshMu          sync.Mutex
+	runtimeCacheTTL           time.Duration
+	runtimeRefreshRetryAt     atomic.Int64
+	keyHealthMu               sync.Mutex
+	keyHealth                 map[string]*contentModerationKeyHealth
+	auditModelHealthMu        sync.Mutex
+	auditModelHealth          map[string]*contentModerationAuditModelHealth
 }
 
 type contentModerationRuntimeSnapshot struct {
@@ -1091,6 +1103,7 @@ func NewContentModerationService(
 		userRepo:             userRepo,
 		authCacheInvalidator: authCacheInvalidator,
 		emailService:         emailService,
+		encryptor:            encryptor,
 		httpClient:           servertiming.InstrumentClient(nil),
 		workerCount:          maxContentModerationWorkerCount,
 		asyncQueue:           make(chan contentModerationTask, maxContentModerationQueueSize),
@@ -1525,33 +1538,35 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	auditModels := cfg.enabledAuditModels()
 	keywordBlockingHit := cfg.KeywordBlockingMode != ContentModerationKeywordModeAPIOnly && keywordHitRequiresBlocking(keywordHits)
 	if cfg.Mode == ContentModerationModePreBlock {
-		if cfg.KeywordBlockingMode != ContentModerationKeywordModeAPIOnly && len(cfg.BlockedKeywords) > 0 {
-			if keyword, hit := runtimeSnapshot.matchBlockedKeyword(content.Text); hit {
-				s.recordPreBlockSyncMetric(0, ContentModerationActionKeywordBlock)
-				slog.Info("content_moderation.keyword_block",
-					"user_id", input.UserID,
-					"api_key_id", input.APIKeyID,
-					"group_id", contentModerationLogGroupID(input.GroupID),
-					"endpoint", input.Endpoint,
-					"protocol", input.Protocol,
-					"keyword_blocking_mode", cfg.KeywordBlockingMode,
-					"keyword", keyword)
-				scores := map[string]float64{contentModerationKeywordCategory: 1.0}
-				log := s.buildLog(input, cfg, ContentModerationActionKeywordBlock, true, contentModerationKeywordCategory, 1.0, scores, content.ExcerptText(), nil, nil, "")
-				log.MatchedKeyword = keyword
-				s.enqueueRecord(input, cfg, log, hashText, false, true)
-				return &ContentModerationDecision{
-					Allowed:         false,
-					Blocked:         true,
-					Flagged:         true,
-					Message:         cfg.BlockMessage,
-					StatusCode:      cfg.BlockStatus,
-					HighestCategory: contentModerationKeywordCategory,
-					HighestScore:    1.0,
-					CategoryScores:  scores,
-					Action:          ContentModerationActionKeywordBlock,
-				}, nil
-			}
+		if keywordBlockingHit && len(auditModels) == 0 {
+			s.recordPreBlockSyncMetric(0, ContentModerationActionKeywordBlock)
+			slog.Info("content_moderation.keyword_block",
+				"user_id", input.UserID,
+				"api_key_id", input.APIKeyID,
+				"group_id", contentModerationLogGroupID(input.GroupID),
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"keyword_blocking_mode", cfg.KeywordBlockingMode,
+				"keyword_hits", len(keywordHits))
+			scores := map[string]float64{contentModerationKeywordCategory: 1.0}
+			log := s.buildLog(input, cfg, ContentModerationActionKeywordBlock, true, contentModerationKeywordCategory, 1.0, scores, content.ExcerptText(), nil, nil, "", keywordHits, nil)
+			log.MatchedKeyword = firstContentModerationMatchedKeyword(keywordHits)
+			s.decorateModerationLog(log, riskSnapshot, contextID, ContentModerationRiskEventSourceSync, ContentModerationReviewStageRealtime)
+			s.enqueueRecord(input, cfg, log, hashText, false, true)
+			return s.decorateBlockedDecision(cfg, input, &ContentModerationDecision{
+				Allowed:         false,
+				Blocked:         true,
+				Flagged:         true,
+				Message:         cfg.BlockMessage,
+				StatusCode:      cfg.BlockStatus,
+				HighestCategory: contentModerationKeywordCategory,
+				HighestScore:    1.0,
+				CategoryScores:  scores,
+				Action:          ContentModerationActionKeywordBlock,
+				KeywordHits:     keywordHits,
+				ContextID:       contextID,
+				RiskSnapshot:    riskSnapshot,
+			}), nil
 		}
 		if cfg.KeywordBlockingMode == ContentModerationKeywordModeKeywordOnly {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
@@ -2193,8 +2208,10 @@ func (s *ContentModerationService) UnbanUser(ctx context.Context, userID int64) 
 	if s.authCacheInvalidator != nil {
 		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
 	}
-	if cfg, err := s.loadConfig(ctx); err == nil {
-		s.recordUserRiskEvent(ctx, cfg, userID, ContentModerationRiskEventUnban, 0, ContentModerationRiskEventSourceManualAdmin, ContentModerationReviewStageRealtime, "manual unban", nil, nil, nil)
+	if s.settingRepo != nil {
+		if cfg, err := s.loadConfig(ctx); err == nil {
+			s.recordUserRiskEvent(ctx, cfg, userID, ContentModerationRiskEventUnban, 0, ContentModerationRiskEventSourceManualAdmin, ContentModerationReviewStageRealtime, "manual unban", nil, nil, nil)
+		}
 	}
 	return &ContentModerationUnbanUserResult{
 		UserID: userID,
@@ -2622,16 +2639,6 @@ func (s *ContentModerationService) replaceRuntimeConfig(cfg *ContentModerationCo
 		configDigest:       configDigest,
 		loadedAt:           time.Now(),
 	})
-}
-
-func (s *contentModerationRuntimeSnapshot) matchBlockedKeyword(text string) (string, bool) {
-	if s == nil || s.config == nil {
-		return "", false
-	}
-	if s.keywordMatcher != nil {
-		return s.keywordMatcher.Match(text)
-	}
-	return matchBlockedKeyword(text, s.config.BlockedKeywords)
 }
 
 func (s *ContentModerationService) isRiskControlEnabled(ctx context.Context) bool {

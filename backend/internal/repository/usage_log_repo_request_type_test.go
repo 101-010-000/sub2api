@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -254,6 +255,12 @@ func TestPrepareUsageLogInsert_ArgCountMatchesTypes(t *testing.T) {
 	})
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
+}
+
+func TestUsageLogSelectColumnsMatchInsertShape(t *testing.T) {
+	columns := strings.Split(usageLogSelectColumns, ", ")
+	require.Len(t, columns, len(usageLogInsertArgTypes)+1)
+	require.Equal(t, []string{"speed_state", "speed_wait_ms", "speed_route", "created_at"}, columns[len(columns)-4:])
 }
 
 func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
