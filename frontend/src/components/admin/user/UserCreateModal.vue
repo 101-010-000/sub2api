@@ -87,9 +87,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'; import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import { normalizeAdminPermissions } from '@/utils/adminPermissions'
+import AdminPermissionsField from '@/components/admin/user/AdminPermissionsField.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
@@ -98,6 +101,7 @@ import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits(['close', 'success']); const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 
 const form = reactive({ email: '', password: '', username: '', notes: '', role: 'user' as 'user' | 'admin', balance: '', concurrency: 1, rpm_limit: 0, api_key_max_active_ips: 0, api_key_max_active_ips_visible: false, admin_permissions: [] as string[] })
 const isSuperAdmin = computed(() => authStore.isSuperAdmin)
@@ -129,19 +133,27 @@ const stepUp = useStepUp()
 const loading = ref(false)
 
 const submit = async () => {
-  if (loading.value) return
-  loading.value = true
-  try {
-    const { balance: rawBalance, ...rest } = { ...form }
+	if (loading.value) return
+	const error = validationError()
+	if (error) {
+		appStore.showError(error)
+		return
+	}
+	loading.value = true
+	try {
+		const { balance: rawBalance, admin_permissions: rawPermissions, ...rest } = { ...form }
     const balance = String(rawBalance).trim()
     const payload: typeof rest & { balance?: number, role?: 'user' | 'admin', admin_permissions?: string[] } = {
       ...rest,
       email: rest.email.trim(),
       password: rest.password.trim(),
     }
-    if (balance !== '') {
-      payload.balance = Number(balance)
-    }
+		if (balance !== '') {
+			payload.balance = Number(balance)
+		}
+		if (isSuperAdmin.value) {
+			payload.admin_permissions = normalizeAdminPermissions(rawPermissions)
+		}
     // 创建管理员属敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 验证并重试
     await stepUp.run(() => adminAPI.users.create(payload))
     appStore.showSuccess(t('admin.users.userCreated'))

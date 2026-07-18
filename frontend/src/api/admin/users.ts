@@ -55,6 +55,21 @@ export interface BatchUpdateUserLimitsResponse {
   affected: number
 }
 
+export interface CreateUserRequest {
+  email: string
+  password: string
+  username?: string
+  notes?: string
+  role?: 'admin' | 'user'
+  admin_permissions?: string[]
+  balance?: number
+  concurrency?: number
+  rpm_limit?: number
+  api_key_max_active_ips?: number
+  api_key_max_active_ips_visible?: boolean
+  allowed_groups?: number[] | null
+}
+
 /**
  * List all users with pagination
  * @param page - Page number (default: 1)

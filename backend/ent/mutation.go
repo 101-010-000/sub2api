@@ -42199,6 +42199,10 @@ type UsageLogMutation struct {
 	addduration_ms               *int
 	first_token_ms               *int
 	addfirst_token_ms            *int
+	speed_state                  *string
+	speed_wait_ms                *int
+	addspeed_wait_ms             *int
+	speed_route                  *string
 	user_agent                   *string
 	ip_address                   *string
 	image_count                  *int
@@ -44957,7 +44961,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 45)
+	fields := make([]string, 0, 48)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}

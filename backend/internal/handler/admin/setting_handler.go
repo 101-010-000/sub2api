@@ -51,16 +51,17 @@ func firstNonEmpty(values ...string) string {
 
 // SettingHandler 系统设置处理器
 type SettingHandler struct {
-	settingService           *service.SettingService
-	emailService             *service.EmailService
-	turnstileService         *service.TurnstileService
-	opsService               *service.OpsService
-	paymentConfigService     *service.PaymentConfigService
-	paymentService           *service.PaymentService
-	userAttributeService     *service.UserAttributeService
-	notificationEmailService *service.NotificationEmailService
-	totpService              *service.TotpService
-	userService              *service.UserService
+	settingService            *service.SettingService
+	emailService              *service.EmailService
+	turnstileService          *service.TurnstileService
+	opsService                *service.OpsService
+	paymentConfigService      *service.PaymentConfigService
+	paymentService            *service.PaymentService
+	userAttributeService      *service.UserAttributeService
+	notificationEmailService  *service.NotificationEmailService
+	feishuNotificationService *service.FeishuNotificationService
+	totpService               *service.TotpService
+	userService               *service.UserService
 }
 
 // NewSettingHandler 创建系统设置处理器
@@ -80,6 +81,35 @@ func NewSettingHandler(settingService *service.SettingService, emailService *ser
 // the constructor signature used by existing unit tests.
 func (h *SettingHandler) SetNotificationEmailService(notificationEmailService *service.NotificationEmailService) {
 	h.notificationEmailService = notificationEmailService
+}
+
+func (h *SettingHandler) SetFeishuNotificationService(feishuNotificationService *service.FeishuNotificationService) {
+	h.feishuNotificationService = feishuNotificationService
+}
+
+type feishuNotificationTestRequest struct {
+	UserID int64 `json:"user_id"`
+}
+
+func (h *SettingHandler) TestFeishuNotification(c *gin.Context) {
+	if h.feishuNotificationService == nil {
+		response.InternalError(c, "feishu notification service is not configured")
+		return
+	}
+	var req feishuNotificationTestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.UserID <= 0 {
+		response.BadRequest(c, "user_id is required")
+		return
+	}
+	if err := h.feishuNotificationService.SendTest(c.Request.Context(), req.UserID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"sent": true})
 }
 
 // SetStepUpDeps attaches the services backing the step-up switch preconditions

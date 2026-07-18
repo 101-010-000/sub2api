@@ -432,7 +432,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		id                        int64
 		userID                    int64
 		apiKeyID                  int64
-		accountID                 int64
+		accountID                 sql.NullInt64
 		requestID                 sql.NullString
 		model                     string
 		requestedModel            sql.NullString
@@ -485,6 +485,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		billingTier               sql.NullString
 		billingMode               sql.NullString
 		accountStatsCost          sql.NullFloat64
+		speedState                sql.NullString
+		speedWaitMs               int
+		speedRoute                sql.NullString
 		createdAt                 time.Time
 	)
 
@@ -557,7 +560,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		ID:                        id,
 		UserID:                    userID,
 		APIKeyID:                  apiKeyID,
-		AccountID:                 accountID,
+		AccountID:                 nullInt64Value(accountID),
 		Model:                     model,
 		RequestedModel:            coalesceTrimmedString(requestedModel, model),
 		InputTokens:               inputTokens,
@@ -584,6 +587,7 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		VideoCount:                videoCount,
 		CacheTTLOverridden:        cacheTTLOverridden,
 		LongContextBillingApplied: longContextBillingApplied,
+		SpeedWaitMs:               speedWaitMs,
 		CreatedAt:                 createdAt,
 	}
 	// 先回填 legacy 字段，再基于 legacy + request_type 计算最终请求类型，保证历史数据兼容。

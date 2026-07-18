@@ -7653,6 +7653,7 @@ import {
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
+const authStore = useAuthStore();
 // 关闭 step-up 开关是敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 码重试
 const settingsStepUp = useStepUp();
 const adminSettingsStore = useAdminSettingsStore();
