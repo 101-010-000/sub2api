@@ -194,13 +194,31 @@ jobs:
           [43.130.1.35]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPHKaMazQeZq6MVWYR5Lkm7YIQ1cTtTNIi5hkkrln14+
           EOF
 
+          target="${DEPLOY_USER}@${DEPLOY_HOST}"
+          for attempt in $(seq 1 12); do
+            if ssh -p "$DEPLOY_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ControlMaster=yes \
+              -o ControlPath=~/.ssh/sub2api-%C \
+              -o ControlPersist=20m \
+              -o ServerAliveInterval=10 \
+              -o ServerAliveCountMax=3 \
+              -MNf "$target"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Unable to establish a persistent SSH control connection.' >&2
+          exit 1
+
       - name: Preflight production without changing services
         if: steps.source.outputs.should_release == 'true'
         shell: bash
         run: |
           set -euo pipefail
           target="${DEPLOY_USER}@${DEPLOY_HOST}"
-          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPath=~/.ssh/sub2api-%C -o ControlPersist=20m)
 
           ssh "${ssh_options[@]}" "$target" bash -s -- "$DEPLOY_PATH" <<'REMOTE'
           set -euo pipefail
@@ -261,9 +279,16 @@ jobs:
         run: |
           set -euo pipefail
           target="${DEPLOY_USER}@${DEPLOY_HOST}"
-          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPath=~/.ssh/sub2api-%C -o ControlPersist=20m)
 
-          scp "${ssh_options[@]}" "$RUNNER_TEMP/sub2api" "$target:$DEPLOY_PATH/sub2api.next"
+          for attempt in $(seq 1 5); do
+            if scp "${ssh_options[@]}" "$RUNNER_TEMP/sub2api" "$target:$DEPLOY_PATH/sub2api.next"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Failed to transfer the tested binary after five attempts.' >&2
+          exit 1
 
       - name: Deploy and roll back on failed health check
         if: steps.source.outputs.should_release == 'true' && inputs.dry_run != true
@@ -271,7 +296,7 @@ jobs:
         run: |
           set -euo pipefail
           target="${DEPLOY_USER}@${DEPLOY_HOST}"
-          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPath=~/.ssh/sub2api-%C -o ControlPersist=20m)
 
           ssh "${ssh_options[@]}" "$target" bash -s -- \
             "$DEPLOY_PATH" \
