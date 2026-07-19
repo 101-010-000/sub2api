@@ -279,10 +279,10 @@ jobs:
         run: |
           set -euo pipefail
           target="${DEPLOY_USER}@${DEPLOY_HOST}"
-          ssh_options=(-p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPath=~/.ssh/sub2api-%C -o ControlPersist=20m)
+          scp_options=(-P "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPath=~/.ssh/sub2api-%C -o ControlPersist=20m)
 
           for attempt in $(seq 1 5); do
-            if scp "${ssh_options[@]}" "$RUNNER_TEMP/sub2api" "$target:$DEPLOY_PATH/sub2api.next"; then
+            if scp "${scp_options[@]}" "$RUNNER_TEMP/sub2api" "$target:$DEPLOY_PATH/sub2api.next"; then
               exit 0
             fi
             sleep 5
