@@ -834,7 +834,7 @@
                     </span>
                   </div>
 
-                  <div class="grid grid-cols-2 gap-4">
+                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <!-- Action -->
                     <div>
                       <label
@@ -1653,6 +1653,66 @@
                   </p>
                 </div>
                 <Toggle v-model="form.api_key_acl_trust_forwarded_ip" />
+              </div>
+
+              <div
+                v-if="form.api_key_acl_trust_forwarded_ip"
+                class="border-t border-gray-100 pt-4 dark:border-dark-700"
+              >
+                <label
+                  for="forwarded-client-ip-headers"
+                  class="font-medium text-gray-900 dark:text-white"
+                >
+                  {{ t("admin.settings.apiKeyAcl.forwardedClientIpHeaders") }}
+                </label>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.apiKeyAcl.forwardedClientIpHeadersHint") }}
+                </p>
+                <div
+                  class="mt-3 rounded-lg border border-gray-300 bg-white p-2 dark:border-dark-500 dark:bg-dark-700"
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span
+                      v-for="header in form.forwarded_client_ip_headers"
+                      :key="header"
+                      data-testid="forwarded-client-ip-header-tag"
+                      class="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs font-mono text-gray-700 dark:bg-dark-600 dark:text-gray-200"
+                    >
+                      <span>{{ header }}</span>
+                      <button
+                        type="button"
+                        class="rounded-full text-gray-500 hover:bg-gray-200 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-dark-500 dark:hover:text-white"
+                        :aria-label="t('admin.settings.apiKeyAcl.removeForwardedClientIpHeader', { header })"
+                        @click="removeForwardedClientIpHeader(header)"
+                      >
+                        <Icon
+                          name="x"
+                          size="xs"
+                          class="h-3.5 w-3.5"
+                          :stroke-width="2"
+                        />
+                      </button>
+                    </span>
+                    <div
+                      class="flex min-w-[220px] flex-1 items-center gap-1 rounded border border-transparent px-2 py-1 focus-within:border-primary-300 dark:focus-within:border-primary-700"
+                    >
+                      <input
+                        id="forwarded-client-ip-headers"
+                        v-model="forwardedClientIpHeaderDraft"
+                        data-testid="forwarded-client-ip-headers-input"
+                        type="text"
+                        class="w-full bg-transparent text-sm font-mono text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
+                        :placeholder="t('admin.settings.apiKeyAcl.forwardedClientIpHeadersPlaceholder')"
+                        @keydown="handleForwardedClientIpHeaderKeydown"
+                        @blur="commitForwardedClientIpHeaderDraft"
+                        @paste="handleForwardedClientIpHeaderPaste"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.apiKeyAcl.forwardedClientIpHeadersRiskHint") }}
+                </p>
               </div>
             </div>
           </div>
@@ -4108,6 +4168,340 @@
             </div>
           </div>
 
+          <!-- Codex Settings -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.gatewayForwarding.codexHardeningTitle") }}
+              </h2>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+                    {{ t("admin.settings.gatewayForwarding.codexClientRestrictionTitle") }}
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.codexHardeningDesc") }}
+                  </p>
+                </div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{ t("admin.settings.gatewayForwarding.minCodexVersion") }}
+                    </label>
+                    <input
+                      v-model="form.min_codex_version"
+                      type="text"
+                      class="input w-full font-mono text-sm"
+                      :placeholder="
+                        t(
+                          'admin.settings.gatewayForwarding.minCodexVersionPlaceholder',
+                        )
+                      "
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{ t("admin.settings.gatewayForwarding.maxCodexVersion") }}
+                    </label>
+                    <input
+                      v-model="form.max_codex_version"
+                      type="text"
+                      class="input w-full font-mono text-sm"
+                      :placeholder="
+                        t(
+                          'admin.settings.gatewayForwarding.maxCodexVersionPlaceholder',
+                        )
+                      "
+                    />
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.codexVersionHint") }}
+                </p>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.gatewayForwarding.codexFingerprintSignals") }}
+                  </label>
+                  <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.codexFingerprintSignalsDesc") }}
+                  </p>
+                  <div
+                    v-for="(row, i) in codexFingerprintRows"
+                    :key="`codex-fp-${i}`"
+                    class="mb-2 flex items-center gap-2"
+                  >
+                    <select v-model="row.type" class="input w-32 text-sm">
+                      <option value="header_exact">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderExact") }}</option>
+                      <option value="header_prefix">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderPrefix") }}</option>
+                      <option value="body_path">{{ t("admin.settings.gatewayForwarding.codexFpTypeBodyPath") }}</option>
+                    </select>
+                    <input
+                      v-model="row.match"
+                      type="text"
+                      class="input flex-1 font-mono text-sm"
+                      :placeholder="t('admin.settings.gatewayForwarding.codexFpMatchPlaceholder')"
+                    />
+                    <label class="flex shrink-0 items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                      <input v-model="row.required" type="checkbox" />
+                      {{ t("admin.settings.gatewayForwarding.codexFpRequired") }}
+                    </label>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
+                      @click="removeCodexFingerprintRow(i)"
+                    >
+                      {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
+                    </button>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="addCodexFingerprintRow">
+                    {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
+                  </button>
+                  <p
+                    v-if="codexFingerprintNoRequired"
+                    class="mt-2 text-xs text-amber-600 dark:text-amber-500"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexFingerprintNoRequiredWarn") }}
+                  </p>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <div class="pr-4">
+                    <label
+                      class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{
+                        t("admin.settings.gatewayForwarding.codexAllowAppServer")
+                      }}
+                    </label>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{
+                        t(
+                          "admin.settings.gatewayForwarding.codexAllowAppServerDesc",
+                        )
+                      }}
+                    </p>
+                  </div>
+                  <Toggle
+                    v-model="form.codex_cli_only_allow_app_server_clients"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexBlacklist") }}
+                  </label>
+                  <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.codexBlacklistDesc") }}
+                  </p>
+                  <div
+                    v-for="(row, i) in codexBlacklistRows"
+                    :key="`codex-bl-${i}`"
+                    class="mb-2 flex gap-2"
+                  >
+                    <input
+                      v-model="row.originator"
+                      type="text"
+                      class="input w-1/3 font-mono text-sm"
+                      :placeholder="
+                        t(
+                          'admin.settings.gatewayForwarding.codexOriginatorPlaceholder',
+                        )
+                      "
+                    />
+                    <input
+                      v-model="row.uaContains"
+                      type="text"
+                      class="input flex-1 font-mono text-sm"
+                      :placeholder="
+                        t(
+                          'admin.settings.gatewayForwarding.codexUaContainsPlaceholder',
+                        )
+                      "
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
+                      @click="removeCodexBlacklistRow(i)"
+                    >
+                      {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    @click="addCodexBlacklistRow"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
+                  </button>
+                </div>
+
+                <div>
+                  <label
+                    class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexWhitelist") }}
+                  </label>
+                  <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.codexWhitelistDesc") }}
+                  </p>
+                  <div
+                    v-for="(row, i) in codexWhitelistRows"
+                    :key="`codex-wl-${i}`"
+                    class="mb-2 flex gap-2"
+                  >
+                    <input
+                      v-model="row.originator"
+                      type="text"
+                      class="input w-1/3 font-mono text-sm"
+                      :placeholder="
+                        t(
+                          'admin.settings.gatewayForwarding.codexOriginatorPlaceholder',
+                        )
+                      "
+                    />
+                    <input
+                      v-model="row.uaContains"
+                      type="text"
+                      class="input flex-1 font-mono text-sm"
+                      :placeholder="
+                        t(
+                          'admin.settings.gatewayForwarding.codexUaContainsPlaceholder',
+                        )
+                      "
+                    />
+                    <label
+                      class="flex shrink-0 items-center gap-1 text-xs text-gray-600 dark:text-gray-400"
+                      :title="
+                        t(
+                          'admin.settings.gatewayForwarding.codexWhitelistSkipFingerprintTooltip',
+                        )
+                      "
+                    >
+                      <input
+                        v-model="row.skipEngineFingerprint"
+                        type="checkbox"
+                      />
+                      {{
+                        t(
+                          'admin.settings.gatewayForwarding.codexWhitelistSkipFingerprint',
+                        )
+                      }}
+                    </label>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm shrink-0 text-red-600 hover:text-red-700 dark:text-red-400"
+                      @click="removeCodexWhitelistRow(i)"
+                    >
+                      {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    @click="addCodexWhitelistRow"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
+                  </button>
+                </div>
+            </div>
+          </div>
+
+          <!-- Upstream Billing Probe Settings -->
+          <div class="card" data-testid="upstream-billing-probe-settings">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.upstreamBillingProbe.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.upstreamBillingProbe.description") }}
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div
+                v-if="upstreamBillingProbeLoading"
+                class="flex items-center gap-2 text-gray-500"
+              >
+                <div
+                  class="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-600"
+                ></div>
+                {{ t("common.loading") }}
+              </div>
+
+              <template v-else>
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.upstreamBillingProbe.enabled") }}
+                    </label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.upstreamBillingProbe.enabledHint") }}
+                    </p>
+                  </div>
+                  <Toggle
+                    v-model="upstreamBillingProbeForm.enabled"
+                    :aria-label="t('admin.settings.upstreamBillingProbe.enabled')"
+                    data-testid="upstream-billing-probe-enabled"
+                  />
+                </div>
+
+                <div
+                  v-if="upstreamBillingProbeForm.enabled"
+                  class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                >
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    for="upstream-billing-probe-interval"
+                  >
+                    {{ t("admin.settings.upstreamBillingProbe.intervalMinutes") }}
+                  </label>
+                  <input
+                    id="upstream-billing-probe-interval"
+                    v-model.number="upstreamBillingProbeForm.interval_minutes"
+                    type="number"
+                    min="5"
+                    max="1440"
+                    class="input w-32"
+                    data-testid="upstream-billing-probe-interval"
+                    @keydown.enter.prevent="saveUpstreamBillingProbeSettings"
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.upstreamBillingProbe.intervalHint") }}
+                  </p>
+                </div>
+
+                <div
+                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                >
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    :disabled="upstreamBillingProbeSaving"
+                    data-testid="upstream-billing-probe-save"
+                    @click="saveUpstreamBillingProbeSettings"
+                  >
+                    {{
+                      upstreamBillingProbeSaving
+                        ? t("common.saving")
+                        : t("common.save")
+                    }}
+                  </button>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <!-- Gateway Scheduling Settings -->
           <div class="card">
             <div
@@ -6293,7 +6687,7 @@
                   </button>
                 </div>
 
-                <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-700">
+                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-700">
                   <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
                     <thead class="bg-gray-50 dark:bg-dark-800">
                       <tr>
@@ -6613,7 +7007,7 @@
               </div>
               <template v-if="form.payment_enabled">
                 <!-- Row 1: Product name -->
-                <div class="grid grid-cols-3 gap-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div>
                     <label class="input-label">{{
                       t("admin.settings.payment.productNamePrefix")
@@ -7032,7 +7426,7 @@
                   </p>
                 </div>
                 <!-- Row 5: Help image + text -->
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label class="input-label">{{
                       t("admin.settings.payment.helpImage")
@@ -7650,6 +8044,12 @@ import {
   normalizeRegistrationEmailSuffixDomains,
   parseRegistrationEmailSuffixWhitelistInput,
 } from "@/utils/registrationEmailPolicy";
+import {
+  parseFingerprintSignalsToRows,
+  serializeFingerprintRowsToJSON,
+  defaultFingerprintSignalRows,
+  type FingerprintSignalRow,
+} from "./codexFingerprintSignals";
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
@@ -7788,6 +8188,7 @@ const smtpPasswordManuallyEdited = ref(false);
 const testEmailAddress = ref("");
 const registrationEmailSuffixWhitelistTags = ref<string[]>([]);
 const registrationEmailSuffixWhitelistDraft = ref("");
+const forwardedClientIpHeaderDraft = ref("");
 const tablePageSizeOptionsInput = ref("10, 20, 50, 100");
 
 // Admin API Key 状态
@@ -7797,6 +8198,14 @@ const adminApiKeyMasked = ref("");
 const adminApiKeyOperating = ref(false);
 const newAdminApiKey = ref("");
 const subscriptionGroups = ref<AdminGroup[]>([]);
+
+// Upstream billing probe state
+const upstreamBillingProbeLoading = ref(true);
+const upstreamBillingProbeSaving = ref(false);
+const upstreamBillingProbeForm = reactive({
+  enabled: true,
+  interval_minutes: 30,
+});
 
 // Overload Cooldown (529) 状态
 const overloadCooldownLoading = ref(true);
@@ -8421,7 +8830,8 @@ const form = reactive<SettingsForm>({
   turnstile_site_key: "",
   turnstile_secret_key: "",
   turnstile_secret_key_configured: false,
-  api_key_acl_trust_forwarded_ip: false,
+  api_key_acl_trust_forwarded_ip: true,
+  forwarded_client_ip_headers: [],
   // LinuxDo Connect OAuth 登录
   linuxdo_connect_enabled: false,
   linuxdo_connect_client_id: "",
@@ -9028,6 +9438,143 @@ function handleRegistrationEmailSuffixWhitelistPaste(event: ClipboardEvent) {
   }
 }
 
+const forwardedClientIpHeaderSeparatorKeys = new Set([
+  " ",
+  ",",
+  "，",
+  "Enter",
+  "Tab",
+]);
+const forwardedClientIpHeaderTokenPattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const maxForwardedClientIpHeaders = 16;
+
+type ForwardedClientIpHeaderResult = "added" | "duplicate" | "invalid" | "full";
+
+function normalizeForwardedClientIpHeader(raw: string): string {
+  const header = raw.trim();
+  if (!forwardedClientIpHeaderTokenPattern.test(header)) {
+    return "";
+  }
+
+  return header
+    .toLowerCase()
+    .split("-")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join("-");
+}
+
+function normalizeForwardedClientIpHeaders(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const headers: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "string") {
+      continue;
+    }
+    const header = normalizeForwardedClientIpHeader(raw);
+    const key = header.toLowerCase();
+    if (!header || seen.has(key) || headers.length >= maxForwardedClientIpHeaders) {
+      continue;
+    }
+    seen.add(key);
+    headers.push(header);
+  }
+  return headers;
+}
+
+function removeForwardedClientIpHeader(header: string) {
+  form.forwarded_client_ip_headers = form.forwarded_client_ip_headers.filter(
+    (item) => item !== header,
+  );
+}
+
+function addForwardedClientIpHeader(raw: string): ForwardedClientIpHeaderResult {
+  const header = normalizeForwardedClientIpHeader(raw);
+  if (!header) {
+    return "invalid";
+  }
+  if (
+    form.forwarded_client_ip_headers.some(
+      (item) => item.toLowerCase() === header.toLowerCase(),
+    )
+  ) {
+    return "duplicate";
+  }
+  if (form.forwarded_client_ip_headers.length >= maxForwardedClientIpHeaders) {
+    return "full";
+  }
+  form.forwarded_client_ip_headers = [
+    ...form.forwarded_client_ip_headers,
+    header,
+  ];
+  return "added";
+}
+
+function showForwardedClientIpHeaderError(result: ForwardedClientIpHeaderResult) {
+  if (result === "invalid") {
+    appStore.showError(t("admin.settings.apiKeyAcl.forwardedClientIpHeaderInvalid"));
+  } else if (result === "full") {
+    appStore.showError(
+      t("admin.settings.apiKeyAcl.forwardedClientIpHeadersLimit", {
+        max: maxForwardedClientIpHeaders,
+      }),
+    );
+  }
+}
+
+function commitForwardedClientIpHeaderDraft() {
+  const draft = forwardedClientIpHeaderDraft.value;
+  if (!draft) {
+    return;
+  }
+  const result = addForwardedClientIpHeader(draft);
+  showForwardedClientIpHeaderError(result);
+  forwardedClientIpHeaderDraft.value = "";
+}
+
+function handleForwardedClientIpHeaderKeydown(event: KeyboardEvent) {
+  if (event.isComposing) {
+    return;
+  }
+  if (forwardedClientIpHeaderSeparatorKeys.has(event.key)) {
+    event.preventDefault();
+    commitForwardedClientIpHeaderDraft();
+    return;
+  }
+  if (
+    event.key === "Backspace" &&
+    !forwardedClientIpHeaderDraft.value &&
+    form.forwarded_client_ip_headers.length > 0
+  ) {
+    form.forwarded_client_ip_headers.pop();
+  }
+}
+
+function handleForwardedClientIpHeaderPaste(event: ClipboardEvent) {
+  const text = event.clipboardData?.getData("text") || "";
+  if (!text.trim()) {
+    return;
+  }
+  event.preventDefault();
+
+  let error: ForwardedClientIpHeaderResult | undefined;
+  for (const token of text.split(/[,，;\r\n]+/)) {
+    if (!token.trim()) {
+      continue;
+    }
+    const result = addForwardedClientIpHeader(token);
+    if (result === "invalid" || result === "full") {
+      error = result;
+    }
+  }
+  if (error) {
+    showForwardedClientIpHeaderError(error);
+  }
+}
+
 // Quota notify email helpers
 const addQuotaNotifyEmail = () => {
   if (!form.account_quota_notify_emails) {
@@ -9313,6 +9860,93 @@ function parseTablePageSizeOptionsInput(raw: string): number[] | null {
   return deduped;
 }
 
+interface CodexClientRow {
+  originator: string;
+  uaContains: string;
+  skipEngineFingerprint?: boolean;
+}
+
+const codexBlacklistRows = ref<CodexClientRow[]>([]);
+const codexWhitelistRows = ref<CodexClientRow[]>([]);
+const codexFingerprintRows = ref<FingerprintSignalRow[]>([]);
+const codexFingerprintNoRequired = computed(
+  () => !codexFingerprintRows.value.some((row) => row.required),
+);
+
+function addCodexFingerprintRow(): void {
+  codexFingerprintRows.value.push({
+    type: "header_exact",
+    match: "",
+    required: false,
+  });
+}
+
+function removeCodexFingerprintRow(index: number): void {
+  codexFingerprintRows.value.splice(index, 1);
+}
+
+function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
+  if (!raw?.trim()) return [];
+  try {
+    const entries = JSON.parse(raw);
+    if (!Array.isArray(entries)) return [];
+    return entries.map((entry) => ({
+      originator: typeof entry?.originator === "string" ? entry.originator : "",
+      uaContains: Array.isArray(entry?.ua_contains)
+        ? entry.ua_contains
+            .filter((value: unknown) => typeof value === "string")
+            .join(", ")
+        : "",
+      skipEngineFingerprint: entry?.skip_engine_fingerprint === true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function serializeCodexRowsToJSON(rows: CodexClientRow[]): string {
+  const entries = rows
+    .map((row) => {
+      const entry: {
+        originator: string;
+        ua_contains: string[];
+        skip_engine_fingerprint?: boolean;
+      } = {
+        originator: row.originator.trim(),
+        ua_contains: row.uaContains
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      };
+      if (row.skipEngineFingerprint) {
+        entry.skip_engine_fingerprint = true;
+      }
+      return entry;
+    })
+    .filter((entry) => entry.originator || entry.ua_contains.length > 0);
+  return entries.length > 0 ? JSON.stringify(entries) : "";
+}
+
+function addCodexBlacklistRow(): void {
+  codexBlacklistRows.value.push({ originator: "", uaContains: "" });
+}
+
+function removeCodexBlacklistRow(index: number): void {
+  codexBlacklistRows.value.splice(index, 1);
+}
+
+function addCodexWhitelistRow(): void {
+  codexWhitelistRows.value.push({
+    originator: "",
+    uaContains: "",
+    skipEngineFingerprint: false,
+  });
+}
+
+function removeCodexWhitelistRow(index: number): void {
+  codexWhitelistRows.value.splice(index, 1);
+}
+
 async function loadSettings() {
   loading.value = true;
   loadFailed.value = false;
@@ -9335,6 +9969,17 @@ async function loadSettings() {
       form.claude_oauth_system_prompt,
     );
     syncClaudeOAuthSystemPromptBlocksFormField();
+    codexBlacklistRows.value = parseCodexEntriesToRows(
+      form.codex_cli_only_blacklist,
+    );
+    codexWhitelistRows.value = parseCodexEntriesToRows(
+      form.codex_cli_only_whitelist,
+    );
+    codexFingerprintRows.value = form.codex_cli_only_engine_fingerprint_signals
+      ? parseFingerprintSignalsToRows(
+          form.codex_cli_only_engine_fingerprint_signals,
+        )
+      : defaultFingerprintSignalRows();
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_updated_at =
@@ -9358,6 +10003,10 @@ async function loadSettings() {
       normalizeRegistrationEmailSuffixDomains(
         settings.registration_email_suffix_whitelist,
       );
+    form.forwarded_client_ip_headers = normalizeForwardedClientIpHeaders(
+      settings.forwarded_client_ip_headers,
+    );
+    forwardedClientIpHeaderDraft.value = "";
     tablePageSizeOptionsInput.value = formatTablePageSizeOptions(
       Array.isArray(settings.table_page_size_options)
         ? settings.table_page_size_options
@@ -9625,6 +10274,9 @@ async function saveSettings() {
     form.login_agreement_mode =
       form.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_documents = normalizedLoginAgreementDocuments;
+    form.forwarded_client_ip_headers = normalizeForwardedClientIpHeaders(
+      form.forwarded_client_ip_headers,
+    );
 
     const normalizedDefaultSubscriptions = normalizeDefaultSubscriptionSettings(
       form.default_subscriptions,
@@ -9758,6 +10410,7 @@ async function saveSettings() {
       turnstile_site_key: form.turnstile_site_key,
       turnstile_secret_key: form.turnstile_secret_key || undefined,
       api_key_acl_trust_forwarded_ip: form.api_key_acl_trust_forwarded_ip,
+      forwarded_client_ip_headers: form.forwarded_client_ip_headers,
       linuxdo_connect_enabled: form.linuxdo_connect_enabled,
       linuxdo_connect_client_id: form.linuxdo_connect_client_id,
       linuxdo_connect_client_secret:
@@ -9884,10 +10537,25 @@ async function saveSettings() {
       enable_anthropic_cache_ttl_1h_injection:
         form.enable_anthropic_cache_ttl_1h_injection,
       rewrite_message_cache_control: form.rewrite_message_cache_control,
+      enable_client_dateline_normalization:
+        form.enable_client_dateline_normalization,
       antigravity_user_agent_version:
         form.antigravity_user_agent_version?.trim() || "",
       openai_codex_user_agent:
         form.openai_codex_user_agent?.trim() || "",
+      min_codex_version: form.min_codex_version?.trim() || "",
+      max_codex_version: form.max_codex_version?.trim() || "",
+      codex_cli_only_allow_app_server_clients:
+        form.codex_cli_only_allow_app_server_clients,
+      codex_cli_only_engine_fingerprint_signals: serializeFingerprintRowsToJSON(
+        codexFingerprintRows.value,
+      ),
+      codex_cli_only_blacklist: serializeCodexRowsToJSON(
+        codexBlacklistRows.value,
+      ),
+      codex_cli_only_whitelist: serializeCodexRowsToJSON(
+        codexWhitelistRows.value,
+      ),
       openai_allow_claude_code_codex_plugin: form.openai_allow_claude_code_codex_plugin,
       // Payment configuration
       payment_enabled: form.payment_enabled,
@@ -10027,6 +10695,10 @@ async function saveSettings() {
       normalizeRegistrationEmailSuffixDomains(
         updated.registration_email_suffix_whitelist,
       );
+    form.forwarded_client_ip_headers = normalizeForwardedClientIpHeaders(
+      updated.forwarded_client_ip_headers,
+    );
+    forwardedClientIpHeaderDraft.value = "";
     tablePageSizeOptionsInput.value = formatTablePageSizeOptions(
       Array.isArray(updated.table_page_size_options)
         ? updated.table_page_size_options
@@ -10265,6 +10937,40 @@ function copyNewKey() {
     .catch(() => {
       appStore.showError(t("common.copyFailed"));
     });
+}
+
+async function loadUpstreamBillingProbeSettings() {
+  upstreamBillingProbeLoading.value = true;
+  try {
+    Object.assign(
+      upstreamBillingProbeForm,
+      await adminAPI.accounts.getUpstreamBillingProbeSettings(),
+    );
+  } catch (_error: unknown) {
+    // Keep defaults when this optional setting cannot be loaded.
+  } finally {
+    upstreamBillingProbeLoading.value = false;
+  }
+}
+
+async function saveUpstreamBillingProbeSettings() {
+  upstreamBillingProbeSaving.value = true;
+  try {
+    const updated = await adminAPI.accounts.updateUpstreamBillingProbeSettings({
+      ...upstreamBillingProbeForm,
+    });
+    Object.assign(upstreamBillingProbeForm, updated);
+    appStore.showSuccess(t("admin.settings.upstreamBillingProbe.saved"));
+  } catch (error: unknown) {
+    appStore.showError(
+      extractApiErrorMessage(
+        error,
+        t("admin.settings.upstreamBillingProbe.saveFailed"),
+      ),
+    );
+  } finally {
+    upstreamBillingProbeSaving.value = false;
+  }
 }
 
 // Overload Cooldown 方法
@@ -10990,6 +11696,7 @@ onMounted(async () => {
   if (canReadSettings.value) {
     loadSettings();
     loadSubscriptionGroups();
+    loadUpstreamBillingProbeSettings();
     if (canManageAdminApiKey.value) {
       loadAdminApiKey();
     } else {

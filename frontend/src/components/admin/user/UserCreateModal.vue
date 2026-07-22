@@ -141,7 +141,12 @@ const submit = async () => {
 	}
 	loading.value = true
 	try {
-		const { balance: rawBalance, admin_permissions: rawPermissions, ...rest } = { ...form }
+		const {
+      balance: rawBalance,
+      role: selectedRole,
+      admin_permissions: rawPermissions,
+      ...rest
+    } = { ...form }
     const balance = String(rawBalance).trim()
     const payload: typeof rest & { balance?: number, role?: 'user' | 'admin', admin_permissions?: string[] } = {
       ...rest,
@@ -152,6 +157,7 @@ const submit = async () => {
 			payload.balance = Number(balance)
 		}
 		if (isSuperAdmin.value) {
+			payload.role = selectedRole
 			payload.admin_permissions = normalizeAdminPermissions(rawPermissions)
 		}
     // 创建管理员属敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 验证并重试

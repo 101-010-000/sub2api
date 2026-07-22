@@ -18,6 +18,8 @@ const {
   getRectifierSettings,
   getBetaPolicySettings,
   testFeishuNotification,
+  getUpstreamBillingProbeSettings,
+  updateUpstreamBillingProbeSettings,
   getGroups,
   listProxies,
   getProviders,
@@ -42,6 +44,11 @@ const {
   getRectifierSettings: vi.fn(),
   getBetaPolicySettings: vi.fn(),
   testFeishuNotification: vi.fn(),
+  getUpstreamBillingProbeSettings: vi.fn().mockResolvedValue({
+    enabled: true,
+    interval_minutes: 30,
+  }),
+  updateUpstreamBillingProbeSettings: vi.fn().mockImplementation(async (payload) => payload),
   getGroups: vi.fn(),
   listProxies: vi.fn(),
   getProviders: vi.fn(),
@@ -72,6 +79,10 @@ vi.mock("@/api", () => ({
       getRectifierSettings,
       getBetaPolicySettings,
       testFeishuNotification,
+    },
+    accounts: {
+      getUpstreamBillingProbeSettings,
+      updateUpstreamBillingProbeSettings,
     },
     groups: {
       getAll: getGroups,
@@ -194,6 +205,14 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.openaiExperimentalScheduler.upstreamCostWeight": "计费倍率",
     "admin.settings.openaiExperimentalScheduler.previousResponseWeight": "previous_response 粘性",
     "admin.settings.openaiExperimentalScheduler.sessionStickyWeight": "session_hash 粘性",
+    "admin.settings.upstreamBillingProbe.title": "上游倍率自动探测",
+    "admin.settings.upstreamBillingProbe.description": "定期获取 OpenAI API Key 所连接上游 Sub2API 站点声明的计费倍率。",
+    "admin.settings.upstreamBillingProbe.enabled": "启用全局自动探测",
+    "admin.settings.upstreamBillingProbe.enabledHint": "开启后，仅对账号自身已启用自动检测的账号执行定时探测。",
+    "admin.settings.upstreamBillingProbe.intervalMinutes": "探测周期（分钟）",
+    "admin.settings.upstreamBillingProbe.intervalHint": "范围 5–1440 分钟。",
+    "admin.settings.upstreamBillingProbe.saved": "上游倍率自动探测设置已保存",
+    "admin.settings.upstreamBillingProbe.saveFailed": "保存上游倍率自动探测设置失败",
     "admin.settings.site.uploadImage": "上传图片",
     "admin.settings.site.remove": "移除",
     "admin.settings.site.logoUrlPlaceholder": "https://example.com/logo.png",
@@ -364,6 +383,8 @@ const baseSettingsResponse = {
   turnstile_enabled: false,
   turnstile_site_key: "",
   turnstile_secret_key_configured: false,
+  api_key_acl_trust_forwarded_ip: true,
+  forwarded_client_ip_headers: [],
   linuxdo_connect_enabled: false,
   linuxdo_connect_client_id: "",
   linuxdo_connect_client_secret_configured: false,
@@ -533,6 +554,16 @@ async function openSecurityTab(wrapper: ReturnType<typeof mountView>) {
   await flushPromises();
 }
 
+async function openGatewayTab(wrapper: ReturnType<typeof mountView>) {
+  const gatewayTabButton = wrapper
+    .findAll("button")
+    .find((node) => node.text().includes("admin.settings.tabs.gateway"));
+
+  expect(gatewayTabButton).toBeDefined();
+  await gatewayTabButton?.trigger("click");
+  await flushPromises();
+}
+
 async function openUsersTab(wrapper: ReturnType<typeof mountView>) {
   const usersTabButton = wrapper
     .findAll("button")
@@ -558,6 +589,8 @@ describe("admin SettingsView payment visible method controls", () => {
     getRectifierSettings.mockReset();
     getBetaPolicySettings.mockReset();
     testFeishuNotification.mockReset();
+    getUpstreamBillingProbeSettings.mockReset();
+    updateUpstreamBillingProbeSettings.mockReset();
     getGroups.mockReset();
     listProxies.mockReset();
     getProviders.mockReset();
@@ -617,6 +650,11 @@ describe("admin SettingsView payment visible method controls", () => {
       rules: [],
     });
     testFeishuNotification.mockResolvedValue({ sent: true });
+    getUpstreamBillingProbeSettings.mockResolvedValue({
+      enabled: true,
+      interval_minutes: 30,
+    });
+    updateUpstreamBillingProbeSettings.mockImplementation(async (payload) => payload);
     getGroups.mockResolvedValue([]);
     listProxies.mockResolvedValue({
       items: [],
@@ -657,6 +695,64 @@ describe("admin SettingsView payment visible method controls", () => {
       "data:image/png;base64,downloaded",
     );
     expect(showSuccess).toHaveBeenCalledWith("Logo 已下载，请保存设置后生效。");
+  });
+
+  it("loads, edits, validates, and saves forwarded client-IP headers", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      api_key_acl_trust_forwarded_ip: false,
+      forwarded_client_ip_headers: ["cf-connecting-ip", "X-Real-IP"],
+    });
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openSecurityTab(wrapper);
+
+    const card = wrapper
+      .findAll(".card")
+      .find((node) => node.text().includes("admin.settings.apiKeyAcl.title"));
+    expect(card).toBeDefined();
+    const toggle = card!.get('input[type="checkbox"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+    expect(card!.find('[data-testid="forwarded-client-ip-headers-input"]').exists()).toBe(false);
+
+    await toggle.setValue(true);
+    expect(card!.findAll('[data-testid="forwarded-client-ip-header-tag"]')).toHaveLength(2);
+    expect(card!.text()).toContain("Cf-Connecting-Ip");
+    expect(card!.text()).toContain("X-Real-Ip");
+    showError.mockClear();
+
+    const input = card!.get('[data-testid="forwarded-client-ip-headers-input"]');
+    await input.setValue("x-client-ip");
+    await input.trigger("keydown", { key: "Enter" });
+    await input.setValue("X-CLIENT-IP");
+    await input.trigger("keydown", { key: "Enter" });
+    await input.setValue("invalid header");
+    await input.trigger("keydown", { key: "Enter" });
+    expect(showError).toHaveBeenCalledTimes(1);
+    expect(card!.findAll('[data-testid="forwarded-client-ip-header-tag"]')).toHaveLength(3);
+
+    const realIpTag = card!
+      .findAll('[data-testid="forwarded-client-ip-header-tag"]')
+      .find((tag) => tag.text().includes("X-Real-Ip"));
+    expect(realIpTag).toBeDefined();
+    await realIpTag!.get("button").trigger("click");
+    expect(card!.text()).not.toContain("X-Real-Ip");
+
+    await toggle.setValue(false);
+    expect(card!.find('[data-testid="forwarded-client-ip-headers-input"]').exists()).toBe(false);
+    await toggle.setValue(true);
+    expect(card!.text()).toContain("X-Client-Ip");
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        api_key_acl_trust_forwarded_ip: true,
+        forwarded_client_ip_headers: ["Cf-Connecting-Ip", "X-Client-Ip"],
+      }),
+    );
   });
 
   it("links payment guidance to README sections instead of removed payment docs", async () => {
@@ -889,6 +985,38 @@ describe("admin SettingsView payment visible method controls", () => {
       "默认关闭。开启后仅影响本网关在 OpenAI 账号间的实验性调度选择逻辑",
     );
     expect(wrapper.text()).not.toContain("OpenAI 高级调度器");
+  });
+
+  it("loads and saves upstream billing probe settings from the gateway tab", async () => {
+    getUpstreamBillingProbeSettings.mockResolvedValueOnce({
+      enabled: false,
+      interval_minutes: 45,
+    });
+
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openGatewayTab(wrapper);
+
+    const card = wrapper.get('[data-testid="upstream-billing-probe-settings"]');
+    expect(card.isVisible()).toBe(true);
+    expect(card.text()).toContain("上游倍率自动探测");
+    expect(
+      (card.get('[data-testid="upstream-billing-probe-enabled"]').element as HTMLInputElement)
+        .checked,
+    ).toBe(false);
+    expect(card.find('[data-testid="upstream-billing-probe-interval"]').exists()).toBe(false);
+
+    await card.get('[data-testid="upstream-billing-probe-enabled"]').setValue(true);
+    await card.get('[data-testid="upstream-billing-probe-interval"]').setValue(60);
+    await card.get('[data-testid="upstream-billing-probe-save"]').trigger("click");
+    await flushPromises();
+
+    expect(updateUpstreamBillingProbeSettings).toHaveBeenCalledWith({
+      enabled: true,
+      interval_minutes: 60,
+    });
+    expect(showSuccess).toHaveBeenCalledWith("上游倍率自动探测设置已保存");
   });
 
   it("places and explains rate controls for both scheduling modes", async () => {

@@ -142,6 +142,10 @@ type Group struct {
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
 	RPMLimit int `json:"rpm_limit"`
+	// MaxReasoningEffort OpenAI/Codex 请求的推理强度上限，空字符串表示不限制。
+	MaxReasoningEffort string `json:"max_reasoning_effort"`
+	// ReasoningEffortMappings OpenAI/Codex 推理强度精确映射。
+	ReasoningEffortMappings []domain.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 
 	// 优速通配置字段。当前 fork 保留公开契约，兼容实现默认返回关闭/零值。
 	SpeedConfigEnabled         bool    `json:"speed_config_enabled"`
